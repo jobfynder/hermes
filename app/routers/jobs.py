@@ -1,8 +1,12 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
+from datetime import datetime, timezone
+from uuid import uuid4
 import re
 
 router = APIRouter()
+
+HERMES_VERSION = "0.2.0"
 
 
 class JobParseRequest(BaseModel):
@@ -27,6 +31,25 @@ KNOWN_SKILLS = [
     "SQL",
     "MongoDB",
 ]
+
+
+def build_response(intent: str, confidence: float, route: str, data: dict):
+    return {
+        "success": True,
+        "request": {
+            "id": str(uuid4()),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        },
+        "analysis": {
+            "intent": intent,
+            "confidence": confidence,
+            "route": route,
+        },
+        "data": data,
+        "metadata": {
+            "version": HERMES_VERSION,
+        },
+    }
 
 
 def extract_title(text: str) -> str:
@@ -100,7 +123,11 @@ def parse_job_text(text: str):
 
 @router.post("/v1/jobs/parse")
 def parse_job(request: JobParseRequest):
-    return {
-        "success": True,
-        "data": parse_job_text(request.text),
-    }
+    return build_response(
+        intent="JOB",
+        confidence=1.0,
+        route="job_parser",
+        data={
+            "job": parse_job_text(request.text),
+        },
+    )
