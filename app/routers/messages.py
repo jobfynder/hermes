@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from app.services.intent_service import detect_intent
 from app.routers.jobs import parse_job_text
+from app.services.consultant_service import parse_consultant_text
 
 router = APIRouter()
 
@@ -43,6 +44,11 @@ def understand_message(request: MessageUnderstandRequest):
     if result["intent"] == "JOB":
         data = {
             "job": parse_job_text(request.text),
+        }
+
+    if result["intent"] == "RESUME":
+        data = {
+            "consultant": parse_consultant_text(request.text),
         }
 
     return build_response(
