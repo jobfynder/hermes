@@ -1,12 +1,9 @@
 services:
-
   hermes-api:
-
     build: .
-
     container_name: hermes-api
-
     restart: unless-stopped
-
     ports:
       - "8000:8000"
+    volumes:
+      - /opt/jobfynder-docs:/jobfynder-docs
