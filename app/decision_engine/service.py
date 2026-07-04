@@ -4,7 +4,23 @@ from app.action_engine.models import (
     ActionStatus,
     ActionType,
 )
-from app.decision_engine.models import DecisionItem
+from app.decision_engine.models import (
+    DecisionItem,
+    DecisionPriority,
+    DecisionStatus,
+    DecisionType,
+)
+
+
+def detect_decision(text: str) -> DecisionItem:
+    return DecisionItem(
+        id="AUTO-001",
+        title=text.strip(),
+        decision_type=DecisionType.task,
+        priority=DecisionPriority.medium,
+        status=DecisionStatus.detected,
+        source="conversation",
+    )
 
 
 def decision_to_action(decision: DecisionItem) -> ActionItem:
