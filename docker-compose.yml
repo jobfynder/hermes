@@ -3,7 +3,12 @@ services:
     build: .
     container_name: hermes-api
     restart: unless-stopped
+
     ports:
       - "8000:8000"
+
     volumes:
       - /opt/jobfynder-docs:/jobfynder-docs
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
