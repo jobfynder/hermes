@@ -4,6 +4,7 @@ from app.action_engine.models import (
     ActionStatus,
     ActionType,
 )
+from app.action_engine.service import create_action
 from app.decision_engine.models import (
     DecisionItem,
     DecisionPriority,
@@ -34,3 +35,9 @@ def decision_to_action(decision: DecisionItem) -> ActionItem:
         owner="Hermes",
         notes=decision.notes,
     )
+
+
+def process_decision(text: str) -> ActionItem:
+    decision = detect_decision(text)
+    action = decision_to_action(decision)
+    return create_action(action)
