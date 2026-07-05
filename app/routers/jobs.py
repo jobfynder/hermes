@@ -1,6 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.config import HERMES_VERSION
+from app.security.rbac import require_permission
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -123,7 +124,7 @@ def parse_job_text(text: str):
 
 
 @router.post("/v1/jobs/parse")
-def parse_job(request: JobParseRequest):
+def parse_job(request: JobParseRequest, user: dict = Depends(require_permission("jobs:parse"))):
     return build_response(
         intent="JOB",
         confidence=1.0,

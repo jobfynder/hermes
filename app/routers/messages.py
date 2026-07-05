@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.config import HERMES_VERSION
 from pydantic import BaseModel
@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.services.intent_service import detect_intent
+from app.security.rbac import require_permission
 from app.routers.jobs import parse_job_text
 from app.services.consultant_service import parse_consultant_text
 
@@ -37,7 +38,7 @@ def build_response(intent: str, confidence: float, route: str, data: dict | None
 
 
 @router.post("/v1/messages/understand")
-def understand_message(request: MessageUnderstandRequest):
+def understand_message(request: MessageUnderstandRequest, user: dict = Depends(require_permission("messages:understand"))):
     result = detect_intent(request.text)
 
     data = None

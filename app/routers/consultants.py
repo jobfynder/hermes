@@ -1,6 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.config import HERMES_VERSION
+from app.security.rbac import require_permission
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -35,7 +36,7 @@ def build_response(intent: str, confidence: float, route: str, data: dict):
 
 
 @router.post("/v1/consultants/parse")
-def parse_consultant(request: ConsultantParseRequest):
+def parse_consultant(request: ConsultantParseRequest, user: dict = Depends(require_permission("consultants:parse"))):
     return build_response(
         intent="RESUME",
         confidence=1.0,
