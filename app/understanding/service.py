@@ -1,3 +1,4 @@
+from app.config import HERMES_CLOUD_EXTRACTION_FALLBACK_ENABLED, HERMES_LLM_FALLBACK_ENABLED
 from app.understanding.compression.token_budget import compress_to_token_budget
 from app.understanding.extractors.plain_text import extract_plain_text
 from app.understanding.fallback_policy import decide_fallback
@@ -25,8 +26,8 @@ def build_understanding_result(
     fallback = decide_fallback(
         extracted=extracted,
         quality=quality,
-        cloud_fallback_enabled=False,
-        llm_fallback_enabled=False,
+        cloud_fallback_enabled=HERMES_CLOUD_EXTRACTION_FALLBACK_ENABLED,
+        llm_fallback_enabled=HERMES_LLM_FALLBACK_ENABLED,
     )
 
     return UnderstandingResult(
