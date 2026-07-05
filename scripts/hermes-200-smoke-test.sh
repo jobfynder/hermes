@@ -102,4 +102,25 @@ print({
 PY
 
 echo ""
+echo "=== skills taxonomy endpoint ==="
+curl -sS "$BASE_URL/understanding/taxonomy/skills" -o "$TMP_DIR/taxonomy.json"
+
+python3 - "$TMP_DIR/taxonomy.json" <<'PYTAXONOMY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+
+assert data["version"] == "jobfynder_skills_v1", data
+assert len(data["skills"]) >= 30, data
+assert any(skill["name"] == "Python" for skill in data["skills"]), data["skills"]
+
+print({
+    "taxonomy_endpoint": "ok",
+    "version": data["version"],
+    "skill_count": len(data["skills"]),
+})
+PYTAXONOMY
+
+echo ""
 echo "HERMES-200 smoke test passed"
