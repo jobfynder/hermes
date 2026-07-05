@@ -102,6 +102,35 @@ print({
 PY
 
 echo ""
+echo "=== resume contact extraction ==="
+curl -sS -X POST "$BASE_URL/understanding/parse-text" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Senior Python Developer\nEmail: alex.kumar@example.com\nPhone: 214-555-7890\nLinkedIn: linkedin.com/in/alex-kumar\nWork Authorization: H1B\nSkills: Python, FastAPI, PostgreSQL, Docker, AWS, Kafka\n8 years experience.","document_kind":"resume"}' \
+  -o "$TMP_DIR/contact.json"
+
+python3 - "$TMP_DIR/contact.json" <<'PYCONTACT'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+structured = data["structured_data"]
+
+assert structured["email"] == "alex.kumar@example.com", structured
+assert structured["phone"] == "214-555-7890", structured
+assert structured["linkedin_url"] == "https://linkedin.com/in/alex-kumar", structured
+assert structured["work_authorization"] == "H1B", structured
+assert structured["years_experience"] == 8, structured
+
+print({
+    "contact_extraction": "ok",
+    "email": structured["email"],
+    "phone": structured["phone"],
+    "linkedin_url": structured["linkedin_url"],
+    "work_authorization": structured["work_authorization"],
+})
+PYCONTACT
+
+echo ""
 echo "=== skills taxonomy endpoint ==="
 curl -sS "$BASE_URL/understanding/taxonomy/skills" -o "$TMP_DIR/taxonomy.json"
 
