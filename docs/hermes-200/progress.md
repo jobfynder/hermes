@@ -292,3 +292,106 @@ Latest confirmed commit:
 5. Add parser fallback policy engine.
 6. Add optional Unstructured.io fallback only after local quality checks.
 7. Keep current local token compression as baseline before Headroom integration.
+
+---
+
+## Additional Completed Milestones
+
+### 11. Editable Skills Taxonomy
+
+Implemented:
+
+- `app/understanding/taxonomy/skills.json`
+- `app/understanding/taxonomy/loader.py`
+- Skill aliases
+- Taxonomy versioning
+- Short-alias false-positive protection
+
+Validated:
+
+- `nodejs` does not incorrectly trigger `JavaScript`
+- Exact `js` alias still triggers `JavaScript`
+- Smoke test still passes
+
+Commit:
+
+- `7e8020a feat(hermes-200): move skills into editable taxonomy`
+
+---
+
+### 12. Parser Fallback Policy Engine
+
+Implemented:
+
+- `app/understanding/fallback_policy.py`
+- Fallback decision model
+- Safe default action handling
+- Manual review decision when cloud/LLM fallbacks are disabled
+- API response now includes `fallback`
+
+Default behavior:
+
+- Good extraction: `fallback.action = none`
+- Weak extraction: `fallback.action = manual_review`
+
+Commit:
+
+- `80ea559 feat(hermes-200): add parser fallback policy engine`
+
+---
+
+### 13. Configurable Fallback Flags
+
+Implemented:
+
+- `HERMES_CLOUD_EXTRACTION_FALLBACK_ENABLED`
+- `HERMES_LLM_FALLBACK_ENABLED`
+- Both disabled by default
+- `.env.example` documentation
+
+Commits:
+
+- `f525f50 feat(hermes-200): add configurable fallback flags`
+- `12b8d4d docs(hermes-200): document fallback config flags`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `12b8d4d docs(hermes-200): document fallback config flags`
+
+Current behavior:
+
+1. Parse text or uploaded file.
+2. Extract locally first.
+3. Score quality.
+4. Compress into LLM-safe context.
+5. Parse skills and years locally.
+6. Use structured schemas.
+7. Decide fallback action without calling cloud/LLM by default.
+8. Return all results through API.
+
+---
+
+## Updated Next Recommended Steps
+
+1. Add resume-specific extraction fields:
+   - current title
+   - email
+   - phone
+   - location
+   - work authorization
+   - LinkedIn
+2. Add job-description-specific extraction fields:
+   - job title
+   - location
+   - employment type
+   - work authorization
+   - rate/salary
+   - required skills vs preferred skills
+3. Add parser output validation.
+4. Add optional Unstructured.io fallback wrapper, still disabled by default.
+5. Add parser confidence thresholds per document type.
+6. Add `/understanding/taxonomy/skills` read endpoint for debugging.
