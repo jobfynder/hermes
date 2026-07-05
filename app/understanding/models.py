@@ -26,6 +26,7 @@ class ParseQuality(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0)
     needs_fallback: bool = False
     reasons: list[str] = Field(default_factory=list)
+    metrics: dict[str, Any] = Field(default_factory=dict)
 
 
 class UnderstandingResult(BaseModel):
