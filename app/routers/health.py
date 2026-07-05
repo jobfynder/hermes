@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 
+from app.config import HERMES_ENV, HERMES_SERVICE_NAME, HERMES_VERSION
+
 router = APIRouter()
 
 
@@ -7,6 +9,7 @@ router = APIRouter()
 def health():
     return {
         "status": "healthy",
-        "service": "Hermes",
-        "version": "0.1.0"
+        "service": HERMES_SERVICE_NAME,
+        "version": HERMES_VERSION,
+        "environment": HERMES_ENV,
     }

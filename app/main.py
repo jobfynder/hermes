@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 
+from app.config import HERMES_SERVICE_NAME, HERMES_VERSION
+
 from app.routers.health import router as health_router
 from app.routers.jobs import router as jobs_router
 from app.routers.messages import router as messages_router
@@ -11,8 +13,8 @@ from app.routers.actions import router as actions_router
 from app.routers.workspace import router as workspace_router
 
 app = FastAPI(
-    title="Hermes",
-    version="0.2.3",
+    title=HERMES_SERVICE_NAME,
+    version=HERMES_VERSION,
 )
 
 app.include_router(health_router)
