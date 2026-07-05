@@ -11,6 +11,7 @@ from app.routers.mission_control import router as mission_control_router
 from app.routers.session_brief import router as session_brief_router
 from app.routers.actions import router as actions_router
 from app.routers.workspace import router as workspace_router
+from app.routers.security import router as security_router
 
 app = FastAPI(
     title=HERMES_SERVICE_NAME,
@@ -26,3 +27,4 @@ app.include_router(mission_control_router)
 app.include_router(session_brief_router)
 app.include_router(actions_router)
 app.include_router(workspace_router)
+app.include_router(security_router)

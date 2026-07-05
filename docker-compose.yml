@@ -9,6 +9,11 @@ services:
 
     volumes:
       - /opt/jobfynder-docs:/jobfynder-docs
+      - /opt/hermes-runtime:/hermes-runtime:ro
+
+    environment:
+      - HERMES_RBAC_ENFORCEMENT=disabled
+      - HERMES_ACCESS_CONTROL_FILE=/hermes-runtime/access-control/users.json
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
