@@ -7,3 +7,4 @@ python-docx
 langdetect
 rapidfuzz
 tiktoken
+python-multipart

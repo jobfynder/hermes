@@ -1,18 +1,16 @@
 from app.understanding.compression.token_budget import compress_to_token_budget
 from app.understanding.extractors.plain_text import extract_plain_text
-from app.understanding.models import RawDocument, UnderstandingResult
+from app.understanding.models import DocumentKind, ExtractedText, RawDocument, UnderstandingResult
 from app.understanding.quality.scoring import score_extraction_quality
 
 
 DEFAULT_LLM_CONTEXT_TOKENS = 1200
 
 
-def understand_document(document: RawDocument) -> UnderstandingResult:
-    extracted = extract_plain_text(
-        content=document.content,
-        filename=document.filename,
-        content_type=document.content_type,
-    )
+def build_understanding_result(
+    extracted: ExtractedText,
+    document_kind: DocumentKind = "unknown",
+) -> UnderstandingResult:
     quality = score_extraction_quality(extracted)
     compressed = compress_to_token_budget(
         extracted.text,
@@ -20,7 +18,7 @@ def understand_document(document: RawDocument) -> UnderstandingResult:
     )
 
     return UnderstandingResult(
-        document_kind=document.document_kind,
+        document_kind=document_kind,
         extracted_text=extracted,
         quality=quality,
         llm_context={
@@ -32,4 +30,17 @@ def understand_document(document: RawDocument) -> UnderstandingResult:
             "strategy": compressed.strategy,
         },
         structured_data={},
+    )
+
+
+def understand_document(document: RawDocument) -> UnderstandingResult:
+    extracted = extract_plain_text(
+        content=document.content,
+        filename=document.filename,
+        content_type=document.content_type,
+    )
+
+    return build_understanding_result(
+        extracted=extracted,
+        document_kind=document.document_kind,
     )
