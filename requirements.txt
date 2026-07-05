@@ -1,3 +1,9 @@
 fastapi
 uvicorn[standard]
 pydantic
+markitdown
+pdfplumber
+python-docx
+langdetect
+rapidfuzz
+tiktoken
