@@ -2,6 +2,12 @@ import re
 from typing import Any
 
 from app.understanding.models import DocumentKind, ExtractedText
+from app.understanding.parsers.contact import (
+    extract_email,
+    extract_linkedin_url,
+    extract_phone,
+    extract_work_authorization,
+)
 from app.understanding.parsers.skills import extract_skills
 from app.understanding.structured import (
     GenericStructuredData,
@@ -73,6 +79,10 @@ def parse_basic_structured_data(
             skills=skills,
             years_experience=years_experience,
             current_title=probable_title,
+            email=extract_email(text),
+            phone=extract_phone(text),
+            linkedin_url=extract_linkedin_url(text),
+            work_authorization=extract_work_authorization(text),
             parser=parser,
         ).model_dump()
 
@@ -81,6 +91,7 @@ def parse_basic_structured_data(
             skills=skills,
             years_experience=years_experience,
             job_title=probable_title,
+            work_authorization=extract_work_authorization(text),
             parser=parser,
         ).model_dump()
 

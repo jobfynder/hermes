@@ -20,6 +20,9 @@ class ResumeStructuredData(BaseModel):
     skills: list[ParsedSkill] = Field(default_factory=list)
     years_experience: int | None = None
     current_title: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    linkedin_url: str | None = None
     location: str | None = None
     work_authorization: str | None = None
     parser: ParserMetadata
