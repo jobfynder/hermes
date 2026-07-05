@@ -6,6 +6,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 from app.understanding.extractors.local_file import extract_local_file
 from app.understanding.models import DocumentKind, RawDocument, UnderstandingResult
 from app.understanding.service import build_understanding_result, understand_document
+from app.understanding.taxonomy.loader import load_skills_taxonomy
 
 router = APIRouter(prefix="/understanding", tags=["Understanding"])
 
@@ -37,3 +38,8 @@ async def parse_file(
         )
     finally:
         temp_path.unlink(missing_ok=True)
+
+
+@router.get("/taxonomy/skills")
+def get_skills_taxonomy():
+    return load_skills_taxonomy()
