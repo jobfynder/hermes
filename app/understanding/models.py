@@ -33,5 +33,6 @@ class UnderstandingResult(BaseModel):
     document_kind: DocumentKind
     extracted_text: ExtractedText
     quality: ParseQuality
+    fallback: dict[str, Any] = Field(default_factory=dict)
     llm_context: dict[str, Any] = Field(default_factory=dict)
     structured_data: dict[str, Any] = Field(default_factory=dict)

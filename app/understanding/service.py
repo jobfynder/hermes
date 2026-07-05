@@ -1,5 +1,6 @@
 from app.understanding.compression.token_budget import compress_to_token_budget
 from app.understanding.extractors.plain_text import extract_plain_text
+from app.understanding.fallback_policy import decide_fallback
 from app.understanding.models import DocumentKind, ExtractedText, RawDocument, UnderstandingResult
 from app.understanding.parsers.basic import parse_basic_structured_data
 from app.understanding.quality.scoring import score_extraction_quality
@@ -21,11 +22,18 @@ def build_understanding_result(
         extracted=extracted,
         document_kind=document_kind,
     )
+    fallback = decide_fallback(
+        extracted=extracted,
+        quality=quality,
+        cloud_fallback_enabled=False,
+        llm_fallback_enabled=False,
+    )
 
     return UnderstandingResult(
         document_kind=document_kind,
         extracted_text=extracted,
         quality=quality,
+        fallback=fallback.model_dump(),
         llm_context={
             "text": compressed.text,
             "original_token_count": compressed.original_token_count,
