@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE_URL="${HERMES_BASE_URL:-http://127.0.0.1:8000}"
+TMP_DIR="$(mktemp -d)"
+
+cleanup() {
+  rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
+
+echo "=== HERMES-200 SMOKE TEST ==="
+echo "BASE_URL=$BASE_URL"
+
+echo ""
+echo "=== health ==="
+curl -sS "$BASE_URL/health" -o "$TMP_DIR/health.json"
+python3 - "$TMP_DIR/health.json" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+assert data["status"] == "healthy", data
+print({"health": "ok", "version": data.get("version")})
+PY
+
+echo ""
+echo "=== parse-text good resume ==="
+curl -sS -X POST "$BASE_URL/understanding/parse-text" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Senior Python Developer with FastAPI, PostgreSQL, Docker, AWS, Kafka and 8 years experience.","document_kind":"resume"}' \
+  -o "$TMP_DIR/good.json"
+
+python3 - "$TMP_DIR/good.json" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+skills = {item["name"] for item in data["structured_data"]["skills"]}
+
+assert data["quality"]["confidence"] >= 0.7, data["quality"]
+assert data["quality"]["needs_fallback"] is False, data["quality"]
+assert data["structured_data"]["years_experience"] == 8, data["structured_data"]
+assert {"Python", "FastAPI", "PostgreSQL", "Docker", "AWS", "Kafka"}.issubset(skills), skills
+assert data["llm_context"]["original_token_count"] > 0, data["llm_context"]
+
+print({
+    "parse_text_good": "ok",
+    "skills": sorted(skills),
+    "years_experience": data["structured_data"]["years_experience"],
+})
+PY
+
+echo ""
+echo "=== parse-text weak fallback ==="
+curl -sS -X POST "$BASE_URL/understanding/parse-text" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"12345","document_kind":"unknown"}' \
+  -o "$TMP_DIR/weak.json"
+
+python3 - "$TMP_DIR/weak.json" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+
+assert data["quality"]["needs_fallback"] is True, data["quality"]
+assert "no_alpha_text" in data["quality"]["reasons"], data["quality"]
+
+print({
+    "parse_text_weak": "ok",
+    "confidence": data["quality"]["confidence"],
+    "reasons": data["quality"]["reasons"],
+})
+PY
+
+echo ""
+echo "=== parse-file txt upload ==="
+echo "Java developer with Spring Boot, AWS, PostgreSQL, Kafka, Docker and 10 years experience." > "$TMP_DIR/sample.txt"
+
+curl -sS -X POST "$BASE_URL/understanding/parse-file" \
+  -F "document_kind=job_description" \
+  -F "file=@$TMP_DIR/sample.txt;type=text/plain" \
+  -o "$TMP_DIR/file.json"
+
+python3 - "$TMP_DIR/file.json" <<'PY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+skills = {item["name"] for item in data["structured_data"]["skills"]}
+
+assert data["extracted_text"]["source"] == "plain_text", data["extracted_text"]
+assert data["structured_data"]["years_experience"] == 10, data["structured_data"]
+assert {"Java", "Spring Boot", "AWS", "PostgreSQL", "Kafka", "Docker"}.issubset(skills), skills
+
+print({
+    "parse_file_txt": "ok",
+    "source": data["extracted_text"]["source"],
+    "skills": sorted(skills),
+})
+PY
+
+echo ""
+echo "HERMES-200 smoke test passed"
