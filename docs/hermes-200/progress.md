@@ -225,3 +225,70 @@ Pending:
 6. Add Headroom or keep current compression as baseline until Headroom integration is confirmed.
 7. Add parser result validation.
 8. Add parser output versioning.
+
+---
+
+## Additional Completed Milestones
+
+### 9. Structured Parsing Schemas
+
+Implemented:
+
+- `ParsedSkill`
+- `ParserMetadata`
+- `ResumeStructuredData`
+- `JobDescriptionStructuredData`
+- `GenericStructuredData`
+
+Commit:
+
+- `f2c19d8 feat(hermes-200): add structured parsing schemas`
+
+---
+
+### 10. Schema-Aware Basic Parser
+
+Implemented:
+
+- Resume-specific structured output
+- Job-description-specific structured output
+- Generic message/unknown structured output
+- Basic title extraction
+- Schema version metadata
+
+Commit:
+
+- `a80165a feat(hermes-200): wire structured schemas into basic parser`
+
+---
+
+## Latest Validation
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- Health endpoint passed
+- Good resume parse passed
+- Weak text fallback passed
+- Text file upload parse passed
+- Skills extraction passed
+- Years-of-experience extraction passed
+
+Latest confirmed commit:
+
+- `a80165a feat(hermes-200): wire structured schemas into basic parser`
+
+---
+
+## Updated Next Recommended Steps
+
+1. Move skill taxonomy into a separate editable source file.
+2. Add synonyms and aliases for skills.
+3. Add resume-specific field extraction.
+4. Add job-description-specific field extraction.
+5. Add parser fallback policy engine.
+6. Add optional Unstructured.io fallback only after local quality checks.
+7. Keep current local token compression as baseline before Headroom integration.
