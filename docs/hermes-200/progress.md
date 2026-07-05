@@ -440,3 +440,49 @@ Result:
 - Weak fallback passed
 - Parse-file text upload passed
 - Taxonomy endpoint passed
+
+---
+
+## Additional Completed Milestones
+
+### 15. Resume Contact Field Extraction
+
+Implemented:
+
+- Email extraction
+- Phone extraction
+- LinkedIn URL extraction
+- Work authorization extraction
+- Resume schema updated with contact fields
+
+Validated:
+
+- Contact extraction API test passed
+- Smoke test now validates resume contact extraction
+
+Commits:
+
+- `220361f feat(hermes-200): add resume contact field extraction`
+- `165b89a test(hermes-200): include resume contact extraction in smoke test`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `165b89a test(hermes-200): include resume contact extraction in smoke test`
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- HERMES-200 smoke test passed
+- Health endpoint passed
+- Parse-text passed
+- Weak fallback passed
+- Parse-file text upload passed
+- Resume contact extraction passed
+- Taxonomy endpoint passed
