@@ -1,6 +1,6 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-from app.security.rbac import get_rbac_status
+from app.security.rbac import get_rbac_status, require_permission
 
 router = APIRouter(
     prefix="/security",
@@ -9,5 +9,5 @@ router = APIRouter(
 
 
 @router.get("/rbac/status")
-def rbac_status():
+def rbac_status(user: dict = Depends(require_permission("security:read"))):
     return get_rbac_status()
