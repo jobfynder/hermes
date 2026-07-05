@@ -1,4 +1,6 @@
 from fastapi import APIRouter
+
+from app.config import HERMES_VERSION
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -7,7 +9,6 @@ from app.services.consultant_service import parse_consultant_text
 
 router = APIRouter()
 
-HERMES_VERSION = "0.2.0"
 
 
 class ConsultantParseRequest(BaseModel):

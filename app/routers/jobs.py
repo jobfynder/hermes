@@ -1,4 +1,6 @@
 from fastapi import APIRouter
+
+from app.config import HERMES_VERSION
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -6,7 +8,6 @@ import re
 
 router = APIRouter()
 
-HERMES_VERSION = "0.2.0"
 
 
 class JobParseRequest(BaseModel):
