@@ -395,3 +395,48 @@ Current behavior:
 4. Add optional Unstructured.io fallback wrapper, still disabled by default.
 5. Add parser confidence thresholds per document type.
 6. Add `/understanding/taxonomy/skills` read endpoint for debugging.
+
+---
+
+## Additional Completed Milestones
+
+### 14. Skills Taxonomy Debug Endpoint
+
+Implemented:
+
+- `GET /understanding/taxonomy/skills`
+- Returns taxonomy version
+- Returns editable skills list
+- Useful for debugging parser/taxonomy behavior
+
+Validated:
+
+- Endpoint returns `jobfynder_skills_v1`
+- Endpoint returns 33 skills
+- Smoke test now validates taxonomy endpoint
+
+Commits:
+
+- `8dcf427 feat(hermes-200): add skills taxonomy debug endpoint`
+- `99f0e39 test(hermes-200): include taxonomy endpoint in smoke test`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `99f0e39 test(hermes-200): include taxonomy endpoint in smoke test`
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- HERMES-200 smoke test passed
+- Health endpoint passed
+- Parse-text passed
+- Weak fallback passed
+- Parse-file text upload passed
+- Taxonomy endpoint passed
