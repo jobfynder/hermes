@@ -12,7 +12,7 @@ services:
       - /opt/hermes-runtime:/hermes-runtime:ro
 
     environment:
-      - HERMES_RBAC_ENFORCEMENT=disabled
+      - HERMES_RBAC_ENFORCEMENT=enabled
       - HERMES_ACCESS_CONTROL_FILE=/hermes-runtime/access-control/users.json
 
     extra_hosts:
