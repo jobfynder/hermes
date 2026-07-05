@@ -1,6 +1,7 @@
 from app.understanding.compression.token_budget import compress_to_token_budget
 from app.understanding.extractors.plain_text import extract_plain_text
 from app.understanding.models import DocumentKind, ExtractedText, RawDocument, UnderstandingResult
+from app.understanding.parsers.basic import parse_basic_structured_data
 from app.understanding.quality.scoring import score_extraction_quality
 
 
@@ -16,6 +17,10 @@ def build_understanding_result(
         extracted.text,
         max_tokens=DEFAULT_LLM_CONTEXT_TOKENS,
     )
+    structured_data = parse_basic_structured_data(
+        extracted=extracted,
+        document_kind=document_kind,
+    )
 
     return UnderstandingResult(
         document_kind=document_kind,
@@ -29,7 +34,7 @@ def build_understanding_result(
             "compression_applied": compressed.compression_applied,
             "strategy": compressed.strategy,
         },
-        structured_data={},
+        structured_data=structured_data,
     )
 
 
