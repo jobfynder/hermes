@@ -756,3 +756,59 @@ Result:
 - Required/preferred JD skills passed
 - Resume contact extraction passed
 - Skills taxonomy endpoint passed
+
+---
+
+## Additional Completed Milestones
+
+### 21. Document-Type Quality Thresholds
+
+Implemented:
+
+- `app/understanding/quality/thresholds.py`
+- Document-kind-specific fallback thresholds
+- Threshold metadata included in quality metrics
+
+Current thresholds:
+
+- Resume: `0.70`
+- Job Description: `0.70`
+- Message: `0.60`
+- Unknown: `0.70`
+
+Validated:
+
+- Resume quality threshold appears in API response
+- Smoke test now validates threshold metadata
+
+Commits:
+
+- `27dd9aa feat(hermes-200): add document quality thresholds`
+- `104f868 test(hermes-200): include quality thresholds in smoke test`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `104f868 test(hermes-200): include quality thresholds in smoke test`
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- HERMES-200 smoke test passed
+- Health endpoint passed
+- Parser result version metadata passed
+- Document quality threshold passed
+- Parse-text resume passed
+- Weak fallback passed
+- Parser validation passed
+- Parse-file text upload passed
+- Job description field extraction passed
+- Required/preferred JD skills passed
+- Resume contact extraction passed
+- Skills taxonomy endpoint passed
