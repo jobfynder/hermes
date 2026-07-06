@@ -135,6 +135,33 @@ print({
 PYJDFIELDS
 
 echo ""
+echo "=== job description required/preferred skills ==="
+curl -sS -X POST "$BASE_URL/understanding/parse-text" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Need Java backend developer with 10 years experience.\nRequired Skills: Java, Spring Boot, PostgreSQL, Kafka\nPreferred Skills: AWS, Docker\nLocation: Dallas, TX\nEmployment Type: Contract\nWork Authorization: H1B\nRate: $65-75/hr","document_kind":"job_description"}' \
+  -o "$TMP_DIR/jd_required_preferred.json"
+
+python3 - "$TMP_DIR/jd_required_preferred.json" <<'PYJDREQPREF'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+structured = data["structured_data"]
+
+required = {item["name"] for item in structured["required_skills"]}
+preferred = {item["name"] for item in structured["preferred_skills"]}
+
+assert {"Java", "Spring Boot", "PostgreSQL", "Kafka"}.issubset(required), structured
+assert {"AWS", "Docker"}.issubset(preferred), structured
+
+print({
+    "jd_required_preferred_skills": "ok",
+    "required_skills": sorted(required),
+    "preferred_skills": sorted(preferred),
+})
+PYJDREQPREF
+
+echo ""
 echo "=== resume contact extraction ==="
 curl -sS -X POST "$BASE_URL/understanding/parse-text" \
   -H "Content-Type: application/json" \
