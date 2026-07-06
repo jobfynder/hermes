@@ -31,6 +31,9 @@ class ParseQuality(BaseModel):
 
 class UnderstandingResult(BaseModel):
     document_kind: DocumentKind
+    result_version: str = "hermes_understanding_result_v1"
+    parser_version: str = "basic_local_parser_v1"
+    schema_version: str = "hermes_understanding_v1"
     extracted_text: ExtractedText
     quality: ParseQuality
     validation: dict[str, Any] = Field(default_factory=dict)
