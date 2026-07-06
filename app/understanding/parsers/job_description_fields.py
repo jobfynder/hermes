@@ -79,3 +79,76 @@ def extract_rate_or_salary(text: str) -> str | None:
     match = INLINE_RATE_PATTERN.search(clean_text)
 
     return clean_field(match.group(1)) if match else None
+
+
+def extract_labeled_section(
+    text: str,
+    labels: list[str],
+    stop_labels: list[str],
+) -> str | None:
+    clean_text = text or ""
+
+    label_pattern = "|".join(re.escape(label) for label in labels)
+    stop_pattern = "|".join(re.escape(label) for label in stop_labels)
+
+    pattern = (
+        rf"(?:{label_pattern})\s*[:\-]\s*"
+        rf"(.*?)(?=\n\s*(?:{stop_pattern})\s*[:\-]|$)"
+    )
+
+    match = re.search(pattern, clean_text, flags=re.IGNORECASE | re.DOTALL)
+
+    if not match:
+        return None
+
+    return clean_field(match.group(1))
+
+
+def extract_required_skills_text(text: str) -> str | None:
+    return extract_labeled_section(
+        text=text,
+        labels=[
+            "Required Skills",
+            "Must Have Skills",
+            "Must-Have Skills",
+            "Required Qualifications",
+            "Requirements",
+        ],
+        stop_labels=[
+            "Preferred Skills",
+            "Nice to Have",
+            "Good to Have",
+            "Preferred Qualifications",
+            "Responsibilities",
+            "Location",
+            "Employment Type",
+            "Work Authorization",
+            "Rate",
+            "Salary",
+        ],
+    )
+
+
+def extract_preferred_skills_text(text: str) -> str | None:
+    return extract_labeled_section(
+        text=text,
+        labels=[
+            "Preferred Skills",
+            "Nice to Have",
+            "Good to Have",
+            "Preferred Qualifications",
+        ],
+        stop_labels=[
+            "Required Skills",
+            "Must Have Skills",
+            "Must-Have Skills",
+            "Required Qualifications",
+            "Requirements",
+            "Responsibilities",
+            "Location",
+            "Employment Type",
+            "Work Authorization",
+            "Rate",
+            "Salary",
+        ],
+    )

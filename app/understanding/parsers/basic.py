@@ -5,7 +5,9 @@ from app.understanding.models import DocumentKind, ExtractedText
 from app.understanding.parsers.job_description_fields import (
     extract_employment_type,
     extract_location,
+    extract_preferred_skills_text,
     extract_rate_or_salary,
+    extract_required_skills_text,
 )
 from app.understanding.parsers.contact import (
     extract_email,
@@ -92,8 +94,13 @@ def parse_basic_structured_data(
         ).model_dump()
 
     if document_kind == "job_description":
+        required_skills_text = extract_required_skills_text(text)
+        preferred_skills_text = extract_preferred_skills_text(text)
+
         return JobDescriptionStructuredData(
             skills=skills,
+            required_skills=extract_skills(required_skills_text) if required_skills_text else skills,
+            preferred_skills=extract_skills(preferred_skills_text) if preferred_skills_text else [],
             years_experience=years_experience,
             job_title=probable_title,
             location=extract_location(text),

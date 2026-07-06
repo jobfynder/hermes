@@ -31,6 +31,8 @@ class ResumeStructuredData(BaseModel):
 class JobDescriptionStructuredData(BaseModel):
     document_kind: Literal["job_description"] = "job_description"
     skills: list[ParsedSkill] = Field(default_factory=list)
+    required_skills: list[ParsedSkill] = Field(default_factory=list)
+    preferred_skills: list[ParsedSkill] = Field(default_factory=list)
     years_experience: int | None = None
     job_title: str | None = None
     location: str | None = None
