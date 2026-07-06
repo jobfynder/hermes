@@ -3,6 +3,17 @@ from __future__ import annotations
 from typing import Any
 
 from app.matching.models import MatchScoreBreakdown, ResumeToJobMatchRequest, ResumeToJobMatchResult
+from app.matching.policy import (
+    LOCATION_WEIGHT,
+    PREFERRED_SKILL_WEIGHT,
+    REQUIRED_SKILL_WEIGHT,
+    REVIEW_MIN_REQUIRED_SKILL_SCORE,
+    REVIEW_SCORE_THRESHOLD,
+    SUBMIT_MIN_YEARS_SCORE,
+    SUBMIT_SCORE_THRESHOLD,
+    WORK_AUTHORIZATION_WEIGHT,
+    YEARS_EXPERIENCE_WEIGHT,
+)
 
 
 def _skill_name(value: Any) -> str:
@@ -111,11 +122,11 @@ def evaluate_resume_to_job(request: ResumeToJobMatchRequest) -> ResumeToJobMatch
     location_score = _location_score(request.resume.location, request.job.location)
 
     match_score = round((
-        required_skill_score * 0.55 +
-        preferred_skill_score * 0.15 +
-        years_score * 0.15 +
-        work_auth_score * 0.10 +
-        location_score * 0.05
+        required_skill_score * REQUIRED_SKILL_WEIGHT +
+        preferred_skill_score * PREFERRED_SKILL_WEIGHT +
+        years_score * YEARS_EXPERIENCE_WEIGHT +
+        work_auth_score * WORK_AUTHORIZATION_WEIGHT +
+        location_score * LOCATION_WEIGHT
     ), 2)
 
     reasons: list[str] = []
@@ -141,10 +152,10 @@ def evaluate_resume_to_job(request: ResumeToJobMatchRequest) -> ResumeToJobMatch
     if location_score < 100:
         risks.append("Location is not an exact match")
 
-    if match_score >= 80 and not missing_required and years_score >= 80 and work_auth_score > 0:
+    if match_score >= SUBMIT_SCORE_THRESHOLD and not missing_required and years_score >= SUBMIT_MIN_YEARS_SCORE and work_auth_score > 0:
         decision = "submit"
         recommendation = "Submit candidate. Core requirements are covered."
-    elif match_score >= 60 and required_skill_score >= 60 and work_auth_score > 0:
+    elif match_score >= REVIEW_SCORE_THRESHOLD and required_skill_score >= REVIEW_MIN_REQUIRED_SKILL_SCORE and work_auth_score > 0:
         decision = "review"
         recommendation = "Review manually before submission."
     else:

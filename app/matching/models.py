@@ -4,6 +4,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.matching.policy import MATCHER_VERSION
+
 
 MatchDecision = Literal["submit", "review", "reject"]
 
@@ -47,7 +49,7 @@ class ResumeToJobMatchResult(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     recommendation: str
-    matcher_version: str = "basic_local_matcher_v1"
+    matcher_version: str = MATCHER_VERSION
 
 class ResumeToJobFromUnderstandingRequest(BaseModel):
     resume_result: dict[str, Any]
