@@ -66,11 +66,13 @@ data = json.load(open(sys.argv[1]))
 
 assert data["quality"]["needs_fallback"] is True, data["quality"]
 assert "no_alpha_text" in data["quality"]["reasons"], data["quality"]
+assert "extraction_quality_requires_fallback" in data["validation"]["warnings"], data["validation"]
 
 print({
     "parse_text_weak": "ok",
     "confidence": data["quality"]["confidence"],
     "reasons": data["quality"]["reasons"],
+    "validation_warnings": data["validation"]["warnings"],
 })
 PY
 
