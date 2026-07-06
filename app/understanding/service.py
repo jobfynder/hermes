@@ -5,6 +5,7 @@ from app.understanding.fallback_policy import decide_fallback
 from app.understanding.models import DocumentKind, ExtractedText, RawDocument, UnderstandingResult
 from app.understanding.parsers.basic import parse_basic_structured_data
 from app.understanding.quality.scoring import score_extraction_quality
+from app.understanding.quality.thresholds import apply_document_quality_threshold
 from app.understanding.validation import validate_structured_output
 
 
@@ -15,7 +16,10 @@ def build_understanding_result(
     extracted: ExtractedText,
     document_kind: DocumentKind = "unknown",
 ) -> UnderstandingResult:
-    quality = score_extraction_quality(extracted)
+    quality = apply_document_quality_threshold(
+        document_kind=document_kind,
+        quality=score_extraction_quality(extracted),
+    )
     compressed = compress_to_token_budget(
         extracted.text,
         max_tokens=DEFAULT_LLM_CONTEXT_TOKENS,
