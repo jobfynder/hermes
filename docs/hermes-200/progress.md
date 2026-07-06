@@ -701,3 +701,58 @@ Result:
 - Required/preferred JD skills passed
 - Resume contact extraction passed
 - Skills taxonomy endpoint passed
+
+---
+
+## Additional Completed Milestones
+
+### 20. Parser Result Version Metadata
+
+Implemented:
+
+- `result_version`
+- `parser_version`
+- `schema_version`
+- Version metadata included in every Understanding API response
+
+Current values:
+
+- `result_version = hermes_understanding_result_v1`
+- `parser_version = basic_local_parser_v1`
+- `schema_version = hermes_understanding_v1`
+
+Validated:
+
+- Parse-text API returns version metadata
+- Smoke test now validates version metadata
+
+Commits:
+
+- `2b58a20 feat(hermes-200): add parser result version metadata`
+- `a4e5702 test(hermes-200): include parser version metadata in smoke test`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `a4e5702 test(hermes-200): include parser version metadata in smoke test`
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- HERMES-200 smoke test passed
+- Health endpoint passed
+- Parser result version metadata passed
+- Parse-text resume passed
+- Weak fallback passed
+- Parser validation passed
+- Parse-file text upload passed
+- Job description field extraction passed
+- Required/preferred JD skills passed
+- Resume contact extraction passed
+- Skills taxonomy endpoint passed
