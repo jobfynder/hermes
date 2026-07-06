@@ -586,3 +586,60 @@ Result:
 - Job description field extraction passed
 - Resume contact extraction passed
 - Skills taxonomy endpoint passed
+
+---
+
+## Additional Completed Milestones
+
+### 18. Safe Unstructured.io Fallback Placeholder
+
+Implemented:
+
+- `app/understanding/extractors/unstructured_extractor.py`
+- `HERMES_UNSTRUCTURED_ENABLED`
+- `HERMES_UNSTRUCTURED_API_KEY`
+- `HERMES_UNSTRUCTURED_API_URL`
+- `.env.example` documentation
+- Safe disabled behavior
+
+Default behavior:
+
+- Unstructured.io is disabled by default
+- No cloud call happens without explicit config
+- Missing config raises safe local error
+- Existing parser flow remains local-first
+
+Validated:
+
+- Unstructured placeholder import passed
+- Disabled fallback behavior passed
+- HERMES-200 smoke test passed
+
+Commit:
+
+- `fe73acc feat(hermes-200): add safe unstructured fallback placeholder`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `fe73acc feat(hermes-200): add safe unstructured fallback placeholder`
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- HERMES-200 smoke test passed
+- Health endpoint passed
+- Parse-text resume passed
+- Weak fallback passed
+- Parser validation passed
+- Parse-file text upload passed
+- Job description field extraction passed
+- Resume contact extraction passed
+- Skills taxonomy endpoint passed
+- Unstructured.io placeholder is present but disabled by default
