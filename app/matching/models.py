@@ -48,3 +48,7 @@ class ResumeToJobMatchResult(BaseModel):
     risks: list[str] = Field(default_factory=list)
     recommendation: str
     matcher_version: str = "basic_local_matcher_v1"
+
+class ResumeToJobFromUnderstandingRequest(BaseModel):
+    resume_result: dict[str, Any]
+    job_result: dict[str, Any]
