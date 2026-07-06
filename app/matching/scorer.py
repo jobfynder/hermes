@@ -122,16 +122,16 @@ def evaluate_resume_to_job(request: ResumeToJobMatchRequest) -> ResumeToJobMatch
     risks: list[str] = []
 
     if matched_required:
-        reasons.append(f"Matched required skills: {chr(44).join(matched_required)}")
+        reasons.append(f"Matched required skills: {', '.join(matched_required)}")
     if not missing_required:
         reasons.append("All required skills are covered")
     if matched_preferred:
-        reasons.append(f"Matched preferred skills: {chr(44).join(matched_preferred)}")
+        reasons.append(f"Matched preferred skills: {', '.join(matched_preferred)}")
     if years_score >= 100:
         reasons.append("Experience requirement is met")
 
     if missing_required:
-        risks.append(f"Missing required skills: {chr(44).join(missing_required)}")
+        risks.append(f"Missing required skills: {', '.join(missing_required)}")
     if years_score < 100:
         risks.append("Experience is below or not confirmed")
     if work_auth_score == 50:
