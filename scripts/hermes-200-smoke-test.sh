@@ -43,6 +43,8 @@ assert data["parser_version"] == "basic_local_parser_v1", data
 assert data["schema_version"] == "hermes_understanding_v1", data
 assert data["quality"]["confidence"] >= 0.7, data["quality"]
 assert data["quality"]["needs_fallback"] is False, data["quality"]
+assert data["quality"]["metrics"]["quality_threshold"] == 0.7, data["quality"]
+assert data["quality"]["metrics"]["threshold_document_kind"] == "resume", data["quality"]
 assert data["structured_data"]["years_experience"] == 8, data["structured_data"]
 assert {"Python", "FastAPI", "PostgreSQL", "Docker", "AWS", "Kafka"}.issubset(skills), skills
 assert data["llm_context"]["original_token_count"] > 0, data["llm_context"]
@@ -52,6 +54,7 @@ print({
     "result_version": data["result_version"],
     "parser_version": data["parser_version"],
     "schema_version": data["schema_version"],
+    "quality_threshold": data["quality"]["metrics"]["quality_threshold"],
     "skills": sorted(skills),
     "years_experience": data["structured_data"]["years_experience"],
 })
