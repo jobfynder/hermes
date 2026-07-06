@@ -13,6 +13,7 @@ from app.routers.actions import router as actions_router
 from app.routers.workspace import router as workspace_router
 from app.routers.security import router as security_router
 from app.routers.understanding import router as understanding_router
+from app.routers.matching import router as matching_router
 
 app = FastAPI(
     title=HERMES_SERVICE_NAME,
@@ -30,3 +31,4 @@ app.include_router(actions_router)
 app.include_router(workspace_router)
 app.include_router(security_router)
 app.include_router(understanding_router)
+app.include_router(matching_router)
