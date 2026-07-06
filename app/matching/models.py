@@ -51,6 +51,12 @@ class ResumeToJobMatchResult(BaseModel):
     recommendation: str
     matcher_version: str = MATCHER_VERSION
 
+
+class MatchingPolicyResponse(BaseModel):
+    matcher_version: str
+    weights: dict[str, float]
+    thresholds: dict[str, float]
+
 class ResumeToJobFromUnderstandingRequest(BaseModel):
     resume_result: dict[str, Any]
     job_result: dict[str, Any]

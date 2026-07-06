@@ -65,6 +65,23 @@ message_admin_code="$(curl -s -o /tmp/hermes-message-admin.out -w "%{http_code}"
   -d '{"text":"Senior Java Developer with Spring Boot and AWS"}')"
 check_code "message endpoint with admin token" "200" "$message_admin_code"
 
+policy_admin_code="$(curl -s -o /tmp/hermes-matching-policy.out -w "%{http_code}" \
+  -X GET "$BASE_URL/matching/policy" \
+  -H "Authorization: Bearer $ADMIN_TOKEN")"
+check_code "matching policy endpoint with admin token" "200" "$policy_admin_code"
+
+python3 - /tmp/hermes-matching-policy.out <<'PYPOLICY'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+assert data["matcher_version"] == "basic_local_matcher_v1", data
+assert round(sum(data["weights"].values()), 4) == 1.0, data
+assert data["thresholds"]["submit_score"] == 80.0, data
+assert data["thresholds"]["review_score"] == 60.0, data
+print("PASS: matching policy endpoint response validated")
+PYPOLICY
+
 matching_admin_code="$(curl -s -o /tmp/hermes-matching-admin.out -w "%{http_code}" \
   -X POST "$BASE_URL/matching/resume-to-job" \
   -H "Authorization: Bearer $ADMIN_TOKEN" \

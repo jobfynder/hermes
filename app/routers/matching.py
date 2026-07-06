@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 
 from app.matching.adapters import build_resume_to_job_request_from_understanding
-from app.matching.models import ResumeToJobFromUnderstandingRequest, ResumeToJobMatchRequest, ResumeToJobMatchResult
+from app.matching.models import MatchingPolicyResponse, ResumeToJobFromUnderstandingRequest, ResumeToJobMatchRequest, ResumeToJobMatchResult
+from app.matching.policy import get_active_matching_policy
 from app.matching.scorer import evaluate_resume_to_job
 from app.security.rbac import require_permission
 
@@ -9,6 +10,13 @@ router = APIRouter(
     prefix="/matching",
     tags=["Matching"],
 )
+
+
+@router.get("/policy", response_model=MatchingPolicyResponse)
+def get_matching_policy(
+    user: dict = Depends(require_permission("matching:evaluate")),
+) -> MatchingPolicyResponse:
+    return MatchingPolicyResponse(**get_active_matching_policy())
 
 
 @router.post("/resume-to-job", response_model=ResumeToJobMatchResult)
