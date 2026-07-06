@@ -102,6 +102,37 @@ print({
 PY
 
 echo ""
+echo "=== job description field extraction ==="
+curl -sS -X POST "$BASE_URL/understanding/parse-text" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Need Java backend developer with Spring Boot, AWS, PostgreSQL, Kafka, Docker and 10 years experience.\nLocation: Dallas, TX\nEmployment Type: Contract\nWork Authorization: H1B\nRate: $65-75/hr","document_kind":"job_description"}' \
+  -o "$TMP_DIR/jd_fields.json"
+
+python3 - "$TMP_DIR/jd_fields.json" <<'PYJDFIELDS'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+structured = data["structured_data"]
+
+assert structured["job_title"] == "Java backend developer", structured
+assert structured["location"] == "Dallas, TX", structured
+assert structured["employment_type"] == "Contract", structured
+assert structured["work_authorization"] == "H1B", structured
+assert structured["rate_or_salary"] == "$65-75/hr", structured
+assert structured["years_experience"] == 10, structured
+
+print({
+    "jd_field_extraction": "ok",
+    "job_title": structured["job_title"],
+    "location": structured["location"],
+    "employment_type": structured["employment_type"],
+    "work_authorization": structured["work_authorization"],
+    "rate_or_salary": structured["rate_or_salary"],
+})
+PYJDFIELDS
+
+echo ""
 echo "=== resume contact extraction ==="
 curl -sS -X POST "$BASE_URL/understanding/parse-text" \
   -H "Content-Type: application/json" \
