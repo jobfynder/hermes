@@ -486,3 +486,51 @@ Result:
 - Parse-file text upload passed
 - Resume contact extraction passed
 - Taxonomy endpoint passed
+
+---
+
+## Additional Completed Milestones
+
+### 16. Job Description Field Extraction
+
+Implemented:
+
+- Job title extraction
+- Location extraction
+- Employment type extraction
+- Work authorization extraction
+- Rate/salary extraction
+- Job description schema updated with `rate_or_salary`
+
+Validated:
+
+- JD field extraction API test passed
+- Smoke test now validates JD field extraction
+
+Commits:
+
+- `58a0745 feat(hermes-200): add job description field extraction`
+- `a0d7822 test(hermes-200): include job description field extraction in smoke test`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `a0d7822 test(hermes-200): include job description field extraction in smoke test`
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- HERMES-200 smoke test passed
+- Health endpoint passed
+- Parse-text resume passed
+- Weak fallback passed
+- Parse-file text upload passed
+- Job description field extraction passed
+- Resume contact extraction passed
+- Skills taxonomy endpoint passed
