@@ -101,6 +101,9 @@ assert data["matcher_version"] == "basic_local_matcher_v1", data
 print("PASS: matching from-understanding response validated")
 PYFROMUNDERSTANDING
 
+python3 scripts/hermes-300-policy-validation.py >/tmp/hermes_policy_validation_output.txt
+echo "PASS: HERMES-300 matching policy validation"
+
 if docker ps --format '{{.Names}}' | grep -qx "hermes-api"; then
   docker exec hermes-api sh -c 'test ! -d /app/.git'
   echo "PASS: .git not present inside hermes-api container"
