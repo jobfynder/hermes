@@ -643,3 +643,61 @@ Result:
 - Resume contact extraction passed
 - Skills taxonomy endpoint passed
 - Unstructured.io placeholder is present but disabled by default
+
+---
+
+## Additional Completed Milestones
+
+### 19. Required vs Preferred JD Skills
+
+Implemented:
+
+- `required_skills`
+- `preferred_skills`
+- JD schema updated
+- Required skills section parsing
+- Preferred skills section parsing
+- Fallback behavior:
+  - If no required/preferred section is present, all detected skills remain in `skills`
+
+Validated:
+
+- Required skills extracted:
+  - Java
+  - Spring Boot
+  - PostgreSQL
+  - Kafka
+- Preferred skills extracted:
+  - AWS
+  - Docker
+- Smoke test now validates required/preferred JD skill extraction
+
+Commits:
+
+- `7242873 feat(hermes-200): extract required and preferred jd skills`
+- `7f865f8 test(hermes-200): include required preferred jd skills in smoke test`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `7f865f8 test(hermes-200): include required preferred jd skills in smoke test`
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- HERMES-200 smoke test passed
+- Health endpoint passed
+- Parse-text resume passed
+- Weak fallback passed
+- Parser validation passed
+- Parse-file text upload passed
+- Job description field extraction passed
+- Required/preferred JD skills passed
+- Resume contact extraction passed
+- Skills taxonomy endpoint passed
