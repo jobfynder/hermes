@@ -36,6 +36,7 @@ class JobDescriptionStructuredData(BaseModel):
     location: str | None = None
     work_authorization: str | None = None
     employment_type: str | None = None
+    rate_or_salary: str | None = None
     parser: ParserMetadata
 
 

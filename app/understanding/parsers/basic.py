@@ -2,6 +2,11 @@ import re
 from typing import Any
 
 from app.understanding.models import DocumentKind, ExtractedText
+from app.understanding.parsers.job_description_fields import (
+    extract_employment_type,
+    extract_location,
+    extract_rate_or_salary,
+)
 from app.understanding.parsers.contact import (
     extract_email,
     extract_linkedin_url,
@@ -91,7 +96,10 @@ def parse_basic_structured_data(
             skills=skills,
             years_experience=years_experience,
             job_title=probable_title,
+            location=extract_location(text),
             work_authorization=extract_work_authorization(text),
+            employment_type=extract_employment_type(text),
+            rate_or_salary=extract_rate_or_salary(text),
             parser=parser,
         ).model_dump()
 
