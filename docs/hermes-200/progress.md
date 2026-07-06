@@ -534,3 +534,55 @@ Result:
 - Job description field extraction passed
 - Resume contact extraction passed
 - Skills taxonomy endpoint passed
+
+---
+
+## Additional Completed Milestones
+
+### 17. Parser Output Validation
+
+Implemented:
+
+- `app/understanding/validation.py`
+- Validation result included in API response
+- Non-blocking validation warnings
+- Document-kind consistency check
+- Low-quality extraction warning
+- Missing skills warning
+- Missing resume contact warning
+- Missing JD title warning
+
+Validated:
+
+- Weak extraction returns validation warning:
+  - `extraction_quality_requires_fallback`
+- Smoke test now validates parser validation behavior
+
+Commits:
+
+- `68b4ccb feat(hermes-200): add parser output validation`
+- `2eb8bc7 test(hermes-200): include parser validation in smoke test`
+
+---
+
+## Latest Confirmed HERMES-200 State
+
+Latest pushed commit:
+
+- `2eb8bc7 test(hermes-200): include parser validation in smoke test`
+
+Validated with:
+
+- `scripts/hermes-200-smoke-test.sh`
+
+Result:
+
+- HERMES-200 smoke test passed
+- Health endpoint passed
+- Parse-text resume passed
+- Weak fallback passed
+- Parser validation passed
+- Parse-file text upload passed
+- Job description field extraction passed
+- Resume contact extraction passed
+- Skills taxonomy endpoint passed
