@@ -50,6 +50,7 @@ class ResumeToJobMatchResult(BaseModel):
     risks: list[str] = Field(default_factory=list)
     recommendation: str
     matcher_version: str = MATCHER_VERSION
+    policy_snapshot: dict[str, Any] = Field(default_factory=dict)
 
 
 class MatchingPolicyResponse(BaseModel):

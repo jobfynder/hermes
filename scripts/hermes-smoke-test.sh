@@ -97,6 +97,9 @@ data = json.load(open(sys.argv[1]))
 assert data["decision"] == "submit", data
 assert data["match_score"] >= 90, data
 assert data["matcher_version"] == "basic_local_matcher_v1", data
+assert data["policy_snapshot"]["matcher_version"] == "basic_local_matcher_v1", data
+assert round(sum(data["policy_snapshot"]["weights"].values()), 4) == 1.0, data
+assert data["policy_snapshot"]["thresholds"]["submit_score"] == 80.0, data
 print("PASS: matching endpoint response validated")
 PYMATCH
 
@@ -115,6 +118,9 @@ data = json.load(open(sys.argv[1]))
 assert data["decision"] == "submit", data
 assert data["match_score"] >= 90, data
 assert data["matcher_version"] == "basic_local_matcher_v1", data
+assert data["policy_snapshot"]["matcher_version"] == "basic_local_matcher_v1", data
+assert round(sum(data["policy_snapshot"]["weights"].values()), 4) == 1.0, data
+assert data["policy_snapshot"]["thresholds"]["submit_score"] == 80.0, data
 print("PASS: matching from-understanding response validated")
 PYFROMUNDERSTANDING
 

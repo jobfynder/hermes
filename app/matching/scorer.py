@@ -13,6 +13,7 @@ from app.matching.policy import (
     SUBMIT_SCORE_THRESHOLD,
     WORK_AUTHORIZATION_WEIGHT,
     YEARS_EXPERIENCE_WEIGHT,
+    get_active_matching_policy,
 )
 
 
@@ -178,4 +179,5 @@ def evaluate_resume_to_job(request: ResumeToJobMatchRequest) -> ResumeToJobMatch
         reasons=reasons,
         risks=risks,
         recommendation=recommendation,
+        policy_snapshot=get_active_matching_policy(),
     )
