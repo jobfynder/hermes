@@ -5,6 +5,7 @@ from app.understanding.fallback_policy import decide_fallback
 from app.understanding.models import DocumentKind, ExtractedText, RawDocument, UnderstandingResult
 from app.understanding.parsers.basic import parse_basic_structured_data
 from app.understanding.quality.scoring import score_extraction_quality
+from app.understanding.validation import validate_structured_output
 
 
 DEFAULT_LLM_CONTEXT_TOKENS = 1200
@@ -23,6 +24,11 @@ def build_understanding_result(
         extracted=extracted,
         document_kind=document_kind,
     )
+    validation = validate_structured_output(
+        document_kind=document_kind,
+        structured_data=structured_data,
+        quality=quality,
+    )
     fallback = decide_fallback(
         extracted=extracted,
         quality=quality,
@@ -34,6 +40,7 @@ def build_understanding_result(
         document_kind=document_kind,
         extracted_text=extracted,
         quality=quality,
+        validation=validation.model_dump(),
         fallback=fallback.model_dump(),
         llm_context={
             "text": compressed.text,
