@@ -83,6 +83,24 @@ assert data["matcher_version"] == "basic_local_matcher_v1", data
 print("PASS: matching endpoint response validated")
 PYMATCH
 
+from_understanding_code="$(curl -s -o /tmp/hermes-matching-from-understanding.out -w "%{http_code}" \
+  -X POST "$BASE_URL/matching/resume-to-job/from-understanding" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"resume_result":{"structured_data":{"skills":[{"name":"Python"},{"name":"FastAPI"},{"name":"PostgreSQL"},{"name":"Docker"}],"years_experience":6,"work_authorization":"H1B","location":"Remote"}},"job_result":{"structured_data":{"required_skills":[{"name":"Python"},{"name":"FastAPI"},{"name":"PostgreSQL"}],"preferred_skills":[{"name":"Docker"},{"name":"Kubernetes"}],"years_experience":5,"work_authorization":"H1B","location":"Remote"}}}')"
+check_code "matching from-understanding endpoint with admin token" "200" "$from_understanding_code"
+
+python3 - /tmp/hermes-matching-from-understanding.out <<'PYFROMUNDERSTANDING'
+import json
+import sys
+
+data = json.load(open(sys.argv[1]))
+assert data["decision"] == "submit", data
+assert data["match_score"] >= 90, data
+assert data["matcher_version"] == "basic_local_matcher_v1", data
+print("PASS: matching from-understanding response validated")
+PYFROMUNDERSTANDING
+
 if docker ps --format '{{.Names}}' | grep -qx "hermes-api"; then
   docker exec hermes-api sh -c 'test ! -d /app/.git'
   echo "PASS: .git not present inside hermes-api container"
