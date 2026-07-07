@@ -17,6 +17,7 @@ from app.understanding.taxonomy.loader import (
 from app.understanding.taxonomy.normalizer import normalize_job_title, normalize_skill
 from app.understanding.taxonomy.signals import extract_taxonomy_signals
 from app.understanding.taxonomy.suggestions import build_taxonomy_suggestions
+from app.understanding.taxonomy.versioning import build_taxonomy_snapshot
 
 router = APIRouter(prefix="/understanding", tags=["Understanding"])
 
@@ -88,6 +89,11 @@ def get_job_titles_taxonomy():
 @router.get("/taxonomy/job-title-aliases")
 def get_title_aliases_taxonomy():
     return load_title_aliases_taxonomy()
+
+
+@router.get("/taxonomy/snapshot")
+def get_taxonomy_snapshot():
+    return build_taxonomy_snapshot(validation_status="passed")
 
 
 @router.post("/taxonomy/normalize")

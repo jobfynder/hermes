@@ -44,6 +44,27 @@ def main() -> int:
         require(payload.get("taxonomy_type") or payload.get("skills"), f"{endpoint} missing taxonomy payload")
         print(f"OK: GET {endpoint}")
 
+
+    snapshot_response = client.get("/understanding/taxonomy/snapshot")
+    require(snapshot_response.status_code == 200, f"snapshot endpoint returned {snapshot_response.status_code}")
+
+    snapshot = snapshot_response.json()
+    require(
+        snapshot.get("result_version") == "hermes_taxonomy_snapshot_v1",
+        "snapshot endpoint returned wrong result_version",
+    )
+    require(
+        snapshot.get("snapshot_name") == "hermes-400-taxonomy-foundation-v1",
+        "snapshot endpoint returned wrong snapshot_name",
+    )
+    require(snapshot.get("validation_status") == "passed", "snapshot validation_status should be passed")
+
+    counts = snapshot.get("counts", {})
+    for key in ["canonical_skills", "skill_aliases", "job_titles", "title_aliases"]:
+        require(counts.get(key, 0) > 0, f"snapshot count missing for {key}")
+
+    print("OK: GET /understanding/taxonomy/snapshot details")
+
     response = client.post(
         "/understanding/taxonomy/normalize",
         json={
