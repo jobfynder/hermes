@@ -163,3 +163,15 @@ class SubmissionWorkflowPolicyResponse(BaseModel):
     supported_stages: list[str]
     allowed_transitions: dict[str, list[str]]
     terminal_stages: list[str]
+
+class SubmissionHandoffEvaluationRequest(BaseModel):
+    submission_id: str | None = None
+    current_stage: SubmissionStage = "discovered"
+    resume_result: dict[str, Any] = Field(default_factory=dict)
+    job_result: dict[str, Any] = Field(default_factory=dict)
+    match_result: dict[str, Any] = Field(default_factory=dict)
+    consultant_id: str | None = None
+    job_id: str | None = None
+    resume_id: str | None = None
+    existing_submission_keys: list[str] = Field(default_factory=list)
+
