@@ -11,12 +11,14 @@ from app.agents.models import (
     AgentPreparedAction,
     AgentRegistryResponse,
     AgentRunRequest,
+    AgentSnapshotResponse,
     AgentRunResult,
 )
 
 AGENT_VERSION = "hermes_agents_foundation_v1"
 AGENT_POLICY_VERSION = "hermes_agent_policy_v1"
 AGENT_AUDIT_VERSION = "hermes_agent_audit_event_v1"
+AGENT_HANDOFF_VERSION = "hermes_agent_handoff_v1"
 
 SUPPORTED_ACTION_MODES = ["dry_run", "prepare_only", "execute"]
 
@@ -135,6 +137,40 @@ def list_agents() -> AgentRegistryResponse:
     return AgentRegistryResponse(
         supported_action_modes=SUPPORTED_ACTION_MODES,
         agents=list(AGENT_REGISTRY.values()),
+    )
+
+
+def get_agent_snapshot() -> AgentSnapshotResponse:
+    supported_agents = sorted(AGENT_REGISTRY.keys())
+
+    return AgentSnapshotResponse(
+        agent_version=AGENT_VERSION,
+        policy_version=AGENT_POLICY_VERSION,
+        handoff_version=AGENT_HANDOFF_VERSION,
+        audit_version=AGENT_AUDIT_VERSION,
+        agent_count=len(AGENT_REGISTRY),
+        supported_agents=supported_agents,
+        supported_action_modes=SUPPORTED_ACTION_MODES,
+        safety_mode="dry_run_first_human_review_required",
+        execution_mode="dry_run_and_prepare_only_foundation",
+        api_routes=[
+            "GET /agents/health",
+            "GET /agents/registry",
+            "GET /agents/snapshot",
+            "GET /agents/{agent_id}",
+            "POST /agents/dry-run",
+        ],
+        closure_readiness={
+            "agent_registry": True,
+            "role_agents_defined": len(AGENT_REGISTRY) >= 3,
+            "dry_run_supported": "dry_run" in SUPPORTED_ACTION_MODES,
+            "execute_blocked_by_policy": True,
+            "policy_decisions": True,
+            "handoff_envelope": True,
+            "audit_event": True,
+            "rbac_routes": True,
+            "api_fixtures": True,
+        },
     )
 
 

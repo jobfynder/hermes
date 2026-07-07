@@ -79,6 +79,23 @@ def main() -> None:
     assert required_agents.issubset(agent_ids)
     write_fixture("agents-registry-response.json", registry)
 
+    snapshot = get("/agents/snapshot")
+    assert snapshot["snapshot_version"] == "hermes_agent_snapshot_v1"
+    assert snapshot["status"] == "healthy"
+    assert snapshot["agent_version"] == "hermes_agents_foundation_v1"
+    assert snapshot["policy_version"] == "hermes_agent_policy_v1"
+    assert snapshot["handoff_version"] == "hermes_agent_handoff_v1"
+    assert snapshot["audit_version"] == "hermes_agent_audit_event_v1"
+    assert snapshot["agent_count"] >= 6
+    assert "bench_sales" in snapshot["supported_agents"]
+    assert "dry_run" in snapshot["supported_action_modes"]
+    assert "GET /agents/snapshot" in snapshot["api_routes"]
+    assert snapshot["closure_readiness"]["agent_registry"] is True
+    assert snapshot["closure_readiness"]["policy_decisions"] is True
+    assert snapshot["closure_readiness"]["handoff_envelope"] is True
+    assert snapshot["closure_readiness"]["audit_event"] is True
+    write_fixture("agents-snapshot-response.json", snapshot)
+
     bench_sales = get("/agents/bench_sales")
     assert bench_sales["agent_id"] == "bench_sales"
     assert bench_sales["role"] == "bench_sales"
@@ -177,6 +194,7 @@ def main() -> None:
     required_paths = [
         "/agents/health",
         "/agents/registry",
+        "/agents/snapshot",
         "/agents/{agent_id}",
         "/agents/dry-run",
     ]

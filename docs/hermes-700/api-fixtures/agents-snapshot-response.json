@@ -1,0 +1,42 @@
+{
+  "agent_count": 6,
+  "agent_version": "hermes_agents_foundation_v1",
+  "api_routes": [
+    "GET /agents/health",
+    "GET /agents/registry",
+    "GET /agents/snapshot",
+    "GET /agents/{agent_id}",
+    "POST /agents/dry-run"
+  ],
+  "audit_version": "hermes_agent_audit_event_v1",
+  "closure_readiness": {
+    "agent_registry": true,
+    "api_fixtures": true,
+    "audit_event": true,
+    "dry_run_supported": true,
+    "execute_blocked_by_policy": true,
+    "handoff_envelope": true,
+    "policy_decisions": true,
+    "rbac_routes": true,
+    "role_agents_defined": true
+  },
+  "execution_mode": "dry_run_and_prepare_only_foundation",
+  "handoff_version": "hermes_agent_handoff_v1",
+  "policy_version": "hermes_agent_policy_v1",
+  "safety_mode": "dry_run_first_human_review_required",
+  "snapshot_version": "hermes_agent_snapshot_v1",
+  "status": "healthy",
+  "supported_action_modes": [
+    "dry_run",
+    "prepare_only",
+    "execute"
+  ],
+  "supported_agents": [
+    "bench_sales",
+    "consultant",
+    "engineering",
+    "founder",
+    "recruiter",
+    "support"
+  ]
+}

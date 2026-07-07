@@ -146,3 +146,19 @@ class AgentHealthResponse(BaseModel):
     agent_version: str
     agent_count: int
     safety_mode: str
+
+
+class AgentSnapshotResponse(BaseModel):
+    snapshot_version: str = "hermes_agent_snapshot_v1"
+    status: str = "healthy"
+    agent_version: str
+    policy_version: str
+    handoff_version: str
+    audit_version: str
+    agent_count: int
+    supported_agents: list[str]
+    supported_action_modes: list[str]
+    safety_mode: str
+    execution_mode: str
+    api_routes: list[str]
+    closure_readiness: dict[str, bool]

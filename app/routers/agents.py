@@ -6,12 +6,14 @@ from app.agents.models import (
     AgentRegistryResponse,
     AgentRunRequest,
     AgentRunResult,
+    AgentSnapshotResponse,
 )
 from app.agents.service import (
     get_agent,
     get_agent_health,
     list_agents,
     run_agent,
+    get_agent_snapshot,
 )
 from app.security.rbac import require_permission
 
@@ -30,6 +32,13 @@ def agents_registry(
     user: dict = Depends(require_permission("agents:read")),
 ) -> AgentRegistryResponse:
     return list_agents()
+
+
+@router.get("/snapshot", response_model=AgentSnapshotResponse)
+def agents_snapshot(
+    user: dict = Depends(require_permission("agents:read")),
+) -> AgentSnapshotResponse:
+    return get_agent_snapshot()
 
 
 @router.get("/{agent_id}", response_model=AgentDefinition)

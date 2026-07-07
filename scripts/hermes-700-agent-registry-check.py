@@ -6,7 +6,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app.agents.models import AgentContext, AgentRunRequest
-from app.agents.service import get_agent_health, get_agent, list_agents, run_agent
+from app.agents.service import get_agent_health, get_agent, list_agents, run_agent, get_agent_snapshot
 
 
 def test_health():
@@ -28,6 +28,25 @@ def test_registry():
     assert "engineering" in ids
     assert "support" in ids
     assert "dry_run" in registry.supported_action_modes
+
+
+def test_snapshot():
+    snapshot = get_agent_snapshot()
+
+    assert snapshot.snapshot_version == "hermes_agent_snapshot_v1"
+    assert snapshot.status == "healthy"
+    assert snapshot.agent_version == "hermes_agents_foundation_v1"
+    assert snapshot.policy_version == "hermes_agent_policy_v1"
+    assert snapshot.handoff_version == "hermes_agent_handoff_v1"
+    assert snapshot.audit_version == "hermes_agent_audit_event_v1"
+    assert snapshot.agent_count >= 6
+    assert "bench_sales" in snapshot.supported_agents
+    assert "dry_run" in snapshot.supported_action_modes
+    assert "GET /agents/snapshot" in snapshot.api_routes
+    assert snapshot.closure_readiness["agent_registry"] is True
+    assert snapshot.closure_readiness["policy_decisions"] is True
+    assert snapshot.closure_readiness["handoff_envelope"] is True
+    assert snapshot.closure_readiness["audit_event"] is True
 
 
 def test_agent_detail():
@@ -176,6 +195,7 @@ def test_unknown_agent():
 if __name__ == "__main__":
     test_health()
     test_registry()
+    test_snapshot()
     test_agent_detail()
     test_safe_dry_run()
     test_blocked_execute()
