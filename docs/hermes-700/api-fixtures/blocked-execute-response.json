@@ -9,13 +9,23 @@
     "effective_action_mode": "dry_run",
     "executed": false,
     "human_review_required": true,
+    "policy": {
+      "allowed": false,
+      "decision": "needs_review",
+      "human_review_required": true,
+      "matched_capability_id": "submission_packet",
+      "missing_permissions": [],
+      "policy_version": "hermes_agent_policy_v1",
+      "reason": "Requested action mode is not allowed for this capability."
+    },
     "requested_action_mode": "execute",
     "source": "hermes-700-agent-api-check"
   },
   "decision": "needs_review",
   "next_actions": [
     "Route this task through a human-approved workflow before execution.",
-    "Review the prepared action manually before any real-world action."
+    "Review the prepared action manually before any real-world action.",
+    "Review actor permissions, capability, and action mode before proceeding."
   ],
   "prepared_actions": [
     {
@@ -39,7 +49,8 @@
   "result_version": "hermes_agent_run_result_v1",
   "risks": [
     "Execute mode is blocked in the HERMES-700 foundation.",
-    "Task appears to include an external or high-risk action."
+    "Task appears to include an external or high-risk action.",
+    "Requested action mode is not allowed for this capability."
   ],
   "role": "bench_sales",
   "summary": "Bench Sales Agent prepared a safe dry_run response for human review."

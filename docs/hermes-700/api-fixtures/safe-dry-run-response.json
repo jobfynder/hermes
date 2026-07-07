@@ -9,6 +9,15 @@
     "effective_action_mode": "dry_run",
     "executed": false,
     "human_review_required": true,
+    "policy": {
+      "allowed": true,
+      "decision": "accepted",
+      "human_review_required": true,
+      "matched_capability_id": "job_review",
+      "missing_permissions": [],
+      "policy_version": "hermes_agent_policy_v1",
+      "reason": "Agent policy allowed this dry-run or prepare-only request."
+    },
     "requested_action_mode": "dry_run",
     "source": "hermes-700-agent-api-check"
   },

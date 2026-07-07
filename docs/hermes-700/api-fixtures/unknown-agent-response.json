@@ -5,6 +5,7 @@
   "audit": {
     "agent_version": "hermes_agents_foundation_v1",
     "executed": false,
+    "policy_version": "hermes_agent_policy_v1",
     "requested_action_mode": "dry_run"
   },
   "decision": "rejected",
