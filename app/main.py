@@ -1,3 +1,4 @@
+from app.routers import submissions
 from fastapi import FastAPI
 
 from app.config import HERMES_SERVICE_NAME, HERMES_VERSION
@@ -32,3 +33,4 @@ app.include_router(workspace_router)
 app.include_router(security_router)
 app.include_router(understanding_router)
 app.include_router(matching_router)
+app.include_router(submissions.router)
