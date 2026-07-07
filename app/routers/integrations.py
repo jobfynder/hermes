@@ -10,12 +10,15 @@ from app.integrations.models import (
     IntegrationRetryDecisionRequest,
     IntegrationRetryDecisionResponse,
     IntegrationRetryPolicyResponse,
+    IntegrationEventIdentityRequest,
+    IntegrationEventIdentityResponse,
 )
 from app.integrations.service import (
     get_integration_health,
     normalize_integration_event,
     get_retry_policy,
     decide_retry,
+    build_event_identity,
 )
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
@@ -65,4 +68,10 @@ def integrations_retry_decision(
     request: IntegrationRetryDecisionRequest,
 ) -> IntegrationRetryDecisionResponse:
     return decide_retry(request)
+
+@router.post("/events/identity", response_model=IntegrationEventIdentityResponse)
+def integrations_event_identity(
+    request: IntegrationEventIdentityRequest,
+) -> IntegrationEventIdentityResponse:
+    return build_event_identity(request)
 
