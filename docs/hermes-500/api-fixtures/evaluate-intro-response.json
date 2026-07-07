@@ -1,0 +1,9 @@
+{
+  "result_version": "hermes_submission_intelligence_result_v1",
+  "recommended_stage": "intro_requested",
+  "stage_changed": true,
+  "follow_up": {
+    "required": true,
+    "priority": "medium"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "result_version": "hermes_submission_intelligence_result_v1",
+  "recommended_stage": "matched",
+  "stage_changed": true,
+  "handoff": {
+    "job_id": "job-fixture-001",
+    "consultant_id": "consultant-fixture-001"
+  }
+}

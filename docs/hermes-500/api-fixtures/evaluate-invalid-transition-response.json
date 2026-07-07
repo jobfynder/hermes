@@ -1,0 +1,14 @@
+{
+  "result_version": "hermes_submission_intelligence_result_v1",
+  "recommended_stage": "discovered",
+  "stage_changed": false,
+  "conflicts": [
+    {
+      "conflict_type": "invalid_stage_transition"
+    }
+  ],
+  "follow_up": {
+    "required": true,
+    "priority": "high"
+  }
+}
