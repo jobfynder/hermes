@@ -6,6 +6,7 @@ from app.understanding.models import DocumentKind, ExtractedText, RawDocument, U
 from app.understanding.parsers.basic import parse_basic_structured_data
 from app.understanding.quality.scoring import score_extraction_quality
 from app.understanding.quality.thresholds import apply_document_quality_threshold
+from app.understanding.taxonomy.signals import extract_taxonomy_signals
 from app.understanding.validation import validate_structured_output
 
 
@@ -28,6 +29,17 @@ def build_understanding_result(
         extracted=extracted,
         document_kind=document_kind,
     )
+
+    taxonomy_signals = extract_taxonomy_signals(extracted.text)
+    structured_data["taxonomy_signals"] = taxonomy_signals
+    structured_data["normalized_skills"] = [
+        signal["normalized"]
+        for signal in taxonomy_signals.get("skills", [])
+    ]
+    structured_data["normalized_job_titles"] = [
+        signal["normalized"]
+        for signal in taxonomy_signals.get("job_titles", [])
+    ]
     validation = validate_structured_output(
         document_kind=document_kind,
         structured_data=structured_data,
