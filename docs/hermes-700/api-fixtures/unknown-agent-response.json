@@ -8,6 +8,7 @@
     "policy_version": "hermes_agent_policy_v1",
     "requested_action_mode": "dry_run"
   },
+  "audit_event": null,
   "decision": "rejected",
   "handoff": null,
   "next_actions": [

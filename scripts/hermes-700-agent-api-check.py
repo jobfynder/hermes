@@ -115,6 +115,12 @@ def main() -> None:
     assert safe["handoff"]["status"] == "prepared"
     assert safe["handoff"]["target"] == "human_review"
     assert safe["handoff"]["requires_human_approval"] is True
+    assert safe["audit_event"]["audit_version"] == "hermes_agent_audit_event_v1"
+    assert safe["audit_event"]["event_type"] == "agent_run_completed"
+    assert safe["audit_event"]["agent_id"] == "recruiter"
+    assert safe["audit_event"]["capability_id"] == "job_review"
+    assert safe["audit_event"]["executed"] is False
+    assert safe["audit_event"]["handoff_version"] == "hermes_agent_handoff_v1"
     write_fixture("safe-dry-run-response.json", safe)
 
     blocked = post(
@@ -145,6 +151,13 @@ def main() -> None:
     assert blocked["handoff"]["status"] == "blocked"
     assert blocked["handoff"]["target"] == "human_review"
     assert blocked["handoff"]["requires_human_approval"] is True
+    assert blocked["audit_event"]["audit_version"] == "hermes_agent_audit_event_v1"
+    assert blocked["audit_event"]["event_type"] == "agent_run_completed"
+    assert blocked["audit_event"]["agent_id"] == "bench_sales"
+    assert blocked["audit_event"]["capability_id"] == "submission_packet"
+    assert blocked["audit_event"]["decision"] == "needs_review"
+    assert blocked["audit_event"]["executed"] is False
+    assert blocked["audit_event"]["handoff_version"] == "hermes_agent_handoff_v1"
     write_fixture("blocked-execute-response.json", blocked)
 
     unknown = post(

@@ -95,6 +95,29 @@ class AgentHandoffEnvelope(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class AgentAuditEvent(BaseModel):
+    audit_version: str = "hermes_agent_audit_event_v1"
+    event_type: str = "agent_run_completed"
+    event_id: str
+    agent_id: str
+    role: AgentRole | str
+    capability_id: str | None = None
+    decision: AgentDecision
+    action_mode_requested: AgentActionMode
+    action_mode_effective: AgentActionMode
+    executed: bool = False
+    human_review_required: bool = True
+    policy_version: str | None = None
+    handoff_version: str | None = None
+    correlation_id: str | None = None
+    source: str | None = None
+    actor_id: str | None = None
+    actor_role: str | None = None
+    risk_count: int = 0
+    prepared_action_count: int = 0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentRunResult(BaseModel):
     result_version: str = "hermes_agent_run_result_v1"
     agent_version: str = "hermes_agents_foundation_v1"
@@ -108,6 +131,7 @@ class AgentRunResult(BaseModel):
     next_actions: list[str] = Field(default_factory=list)
     prepared_actions: list[AgentPreparedAction] = Field(default_factory=list)
     handoff: AgentHandoffEnvelope | None = None
+    audit_event: AgentAuditEvent | None = None
     audit: dict[str, Any] = Field(default_factory=dict)
 
 

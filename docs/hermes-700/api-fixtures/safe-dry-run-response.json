@@ -21,6 +21,34 @@
     "requested_action_mode": "dry_run",
     "source": "hermes-700-agent-api-check"
   },
+  "audit_event": {
+    "action_mode_effective": "dry_run",
+    "action_mode_requested": "dry_run",
+    "actor_id": "pavan-admin",
+    "actor_role": "admin",
+    "agent_id": "recruiter",
+    "audit_version": "hermes_agent_audit_event_v1",
+    "capability_id": "job_review",
+    "correlation_id": "corr-api-agent-safe-001",
+    "decision": "accepted",
+    "event_id": "agent-audit-be2bf3cbf328d845f8f8f10e328e2171",
+    "event_type": "agent_run_completed",
+    "executed": false,
+    "handoff_version": "hermes_agent_handoff_v1",
+    "human_review_required": true,
+    "metadata": {
+      "agent_version": "hermes_agents_foundation_v1",
+      "audit_version": "hermes_agent_audit_event_v1",
+      "handoff_status": "prepared",
+      "handoff_target": "human_review",
+      "policy_allowed": true
+    },
+    "policy_version": "hermes_agent_policy_v1",
+    "prepared_action_count": 1,
+    "risk_count": 0,
+    "role": "recruiter",
+    "source": "hermes-700-agent-api-check"
+  },
   "decision": "accepted",
   "handoff": {
     "action_mode_effective": "dry_run",

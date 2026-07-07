@@ -1,4 +1,8 @@
+import hashlib
+import json
+
 from app.agents.models import (
+    AgentAuditEvent,
     AgentCapability,
     AgentDefinition,
     AgentHandoffEnvelope,
@@ -12,6 +16,7 @@ from app.agents.models import (
 
 AGENT_VERSION = "hermes_agents_foundation_v1"
 AGENT_POLICY_VERSION = "hermes_agent_policy_v1"
+AGENT_AUDIT_VERSION = "hermes_agent_audit_event_v1"
 
 SUPPORTED_ACTION_MODES = ["dry_run", "prepare_only", "execute"]
 
@@ -246,6 +251,65 @@ def _build_prepared_actions(
     ]
 
 
+def _stable_audit_id(data: dict) -> str:
+    raw = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
+    return "agent-audit-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def build_agent_audit_event(
+    request: AgentRunRequest,
+    result_agent_id: str,
+    result_role: str,
+    decision: str,
+    action_mode_effective: str,
+    policy: AgentPolicyDecision | None,
+    handoff: AgentHandoffEnvelope | None,
+    risks: list[str],
+    prepared_actions: list[AgentPreparedAction],
+) -> AgentAuditEvent:
+    base = {
+        "agent_id": result_agent_id,
+        "role": result_role,
+        "capability_id": request.capability_id,
+        "decision": decision,
+        "requested_action_mode": request.action_mode,
+        "effective_action_mode": action_mode_effective,
+        "correlation_id": request.context.correlation_id,
+        "source": request.context.source,
+        "actor_id": request.context.actor_id,
+        "actor_role": request.context.actor_role,
+        "risk_count": len(risks),
+        "prepared_action_count": len(prepared_actions),
+    }
+
+    return AgentAuditEvent(
+        event_id=_stable_audit_id(base),
+        agent_id=result_agent_id,
+        role=result_role,
+        capability_id=request.capability_id,
+        decision=decision,  # type: ignore[arg-type]
+        action_mode_requested=request.action_mode,
+        action_mode_effective=action_mode_effective,  # type: ignore[arg-type]
+        executed=False,
+        human_review_required=True,
+        policy_version=policy.policy_version if policy else AGENT_POLICY_VERSION,
+        handoff_version=handoff.handoff_version if handoff else None,
+        correlation_id=request.context.correlation_id,
+        source=request.context.source,
+        actor_id=request.context.actor_id,
+        actor_role=request.context.actor_role,
+        risk_count=len(risks),
+        prepared_action_count=len(prepared_actions),
+        metadata={
+            "agent_version": AGENT_VERSION,
+            "audit_version": AGENT_AUDIT_VERSION,
+            "policy_allowed": policy.allowed if policy else False,
+            "handoff_status": handoff.status if handoff else None,
+            "handoff_target": handoff.target if handoff else None,
+        },
+    )
+
+
 def build_agent_handoff(
     request: AgentRunRequest,
     result_agent_id: str,
@@ -357,6 +421,17 @@ def run_agent(request: AgentRunRequest) -> AgentRunResult:
         prepared_actions=prepared_actions,
         blocked=handoff_blocked,
     )
+    audit_event = build_agent_audit_event(
+        request=request,
+        result_agent_id=agent.agent_id,
+        result_role=agent.role,
+        decision=decision,
+        action_mode_effective=action_mode_effective,
+        policy=policy,
+        handoff=handoff,
+        risks=risks,
+        prepared_actions=prepared_actions,
+    )
 
     return AgentRunResult(
         agent_id=agent.agent_id,
@@ -369,6 +444,7 @@ def run_agent(request: AgentRunRequest) -> AgentRunResult:
         next_actions=next_actions,
         prepared_actions=prepared_actions,
         handoff=handoff,
+        audit_event=audit_event,
         audit={
             "agent_version": AGENT_VERSION,
             "agent_role": agent.role,

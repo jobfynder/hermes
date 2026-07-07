@@ -63,6 +63,19 @@ def test_safe_dry_run():
     assert result.handoff.status == "prepared"
     assert result.handoff.target == "human_review"
     assert result.handoff.requires_human_approval is True
+    assert result.audit_event is not None
+    assert result.audit_event.audit_version == "hermes_agent_audit_event_v1"
+    assert result.audit_event.agent_id == "bench_sales"
+    assert result.audit_event.capability_id == "submission_packet"
+    assert result.audit_event.decision == "needs_review"
+    assert result.audit_event.executed is False
+    assert result.audit_event is not None
+    assert result.audit_event.audit_version == "hermes_agent_audit_event_v1"
+    assert result.audit_event.event_type == "agent_run_completed"
+    assert result.audit_event.agent_id == "recruiter"
+    assert result.audit_event.capability_id == "job_review"
+    assert result.audit_event.executed is False
+    assert result.audit_event.handoff_version == "hermes_agent_handoff_v1"
 
 
 def test_blocked_execute():
