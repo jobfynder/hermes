@@ -93,3 +93,19 @@ class IntegrationRetryPolicyResponse(BaseModel):
     retryable_error_types: list[str] = Field(default_factory=list)
     non_retryable_error_types: list[str] = Field(default_factory=list)
 
+class IntegrationEventIdentityRequest(BaseModel):
+    event: IntegrationEnvelope
+    idempotency_namespace: str = "hermes-integrations"
+
+
+class IntegrationEventIdentityResponse(BaseModel):
+    result_version: str = "hermes_integration_event_identity_v1"
+    integration_version: str = "hermes_integrations_foundation_v1"
+    provider: IntegrationProvider
+    event_type: IntegrationEventType
+    correlation_id: str
+    idempotency_key: str
+    payload_fingerprint: str
+    replay_safe: bool = True
+    reasons: list[str] = Field(default_factory=list)
+

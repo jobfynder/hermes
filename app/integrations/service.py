@@ -1,3 +1,5 @@
+import hashlib
+import json
 from uuid import uuid4
 
 from app.integrations.models import (
@@ -7,6 +9,8 @@ from app.integrations.models import (
     IntegrationRetryDecisionRequest,
     IntegrationRetryDecisionResponse,
     IntegrationRetryPolicyResponse,
+    IntegrationEventIdentityRequest,
+    IntegrationEventIdentityResponse,
 )
 
 INTEGRATION_VERSION = "hermes_integrations_foundation_v1"
@@ -139,5 +143,45 @@ def decide_retry(request: IntegrationRetryDecisionRequest) -> IntegrationRetryDe
         reason="Retry safety could not be determined.",
         risks=risks,
         next_actions=next_actions,
+    )
+
+def _stable_json_fingerprint(data: dict) -> str:
+    raw = json.dumps(data, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def build_event_identity(
+    request: IntegrationEventIdentityRequest,
+) -> IntegrationEventIdentityResponse:
+    event = request.event
+    normalized = normalize_integration_event(event)
+    source = event.source
+
+    payload_fingerprint = _stable_json_fingerprint(normalized.payload)
+
+    source_external_id = source.external_id or "no-external-id"
+    raw_key = {
+        "namespace": request.idempotency_namespace,
+        "provider": source.provider,
+        "event_type": event.event_type,
+        "source_external_id": source_external_id,
+        "correlation_id": normalized.correlation_id,
+        "payload_fingerprint": payload_fingerprint,
+    }
+
+    idempotency_key = _stable_json_fingerprint(raw_key)
+
+    reasons = [
+        "Event identity generated from provider, event type, source id, correlation id, and payload fingerprint."
+    ]
+
+    return IntegrationEventIdentityResponse(
+        provider=normalized.provider,
+        event_type=normalized.event_type,
+        correlation_id=normalized.correlation_id,
+        idempotency_key=idempotency_key,
+        payload_fingerprint=payload_fingerprint,
+        replay_safe=True,
+        reasons=reasons,
     )
 
