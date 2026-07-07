@@ -1,7 +1,8 @@
 import json
+import os
 import urllib.request
 
-BASE = "http://127.0.0.1:8000"
+BASE = os.environ.get("HERMES_API_BASE_URL", "http://127.0.0.1:8000")
 
 def get(path):
     with urllib.request.urlopen(BASE + path, timeout=10) as r:
