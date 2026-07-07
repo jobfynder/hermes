@@ -1,0 +1,46 @@
+{
+  "action_mode_effective": "dry_run",
+  "agent_id": "bench_sales",
+  "agent_version": "hermes_agents_foundation_v1",
+  "audit": {
+    "agent_role": "bench_sales",
+    "agent_version": "hermes_agents_foundation_v1",
+    "correlation_id": "corr-api-agent-blocked-001",
+    "effective_action_mode": "dry_run",
+    "executed": false,
+    "human_review_required": true,
+    "requested_action_mode": "execute",
+    "source": "hermes-700-agent-api-check"
+  },
+  "decision": "needs_review",
+  "next_actions": [
+    "Route this task through a human-approved workflow before execution.",
+    "Review the prepared action manually before any real-world action."
+  ],
+  "prepared_actions": [
+    {
+      "action_type": "review_required",
+      "blocked_reason": "HERMES-700 foundation does not allow autonomous external actions.",
+      "description": "The requested task appears to involve an external, irreversible, or high-risk action. Hermes prepared this as review-only.",
+      "payload": {
+        "agent_id": "bench_sales",
+        "requested_action_mode": "execute",
+        "task": "Submit this consultant and send a message to the recruiter."
+      },
+      "requires_human_approval": true,
+      "risk_level": "blocked",
+      "title": "Human review required before external or high-risk action"
+    }
+  ],
+  "reasons": [
+    "Agent bench_sales is registered.",
+    "HERMES-700 runs agents in dry-run or prepare-only mode by default."
+  ],
+  "result_version": "hermes_agent_run_result_v1",
+  "risks": [
+    "Execute mode is blocked in the HERMES-700 foundation.",
+    "Task appears to include an external or high-risk action."
+  ],
+  "role": "bench_sales",
+  "summary": "Bench Sales Agent prepared a safe dry_run response for human review."
+}

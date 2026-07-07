@@ -1,0 +1,22 @@
+{
+  "action_mode_effective": "dry_run",
+  "agent_id": "unknown-agent",
+  "agent_version": "hermes_agents_foundation_v1",
+  "audit": {
+    "agent_version": "hermes_agents_foundation_v1",
+    "executed": false,
+    "requested_action_mode": "dry_run"
+  },
+  "decision": "rejected",
+  "next_actions": [
+    "Use /agents/registry to select a supported agent."
+  ],
+  "prepared_actions": [],
+  "reasons": [],
+  "result_version": "hermes_agent_run_result_v1",
+  "risks": [
+    "Unknown agent id."
+  ],
+  "role": "unknown",
+  "summary": "Agent was not found in the HERMES-700 registry."
+}

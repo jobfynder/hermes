@@ -1,0 +1,36 @@
+{
+  "agent_id": "bench_sales",
+  "allowed_permissions": [
+    "agents:read",
+    "agents:run",
+    "matching:evaluate",
+    "submissions:evaluate"
+  ],
+  "capabilities": [
+    {
+      "allowed_action_modes": [
+        "dry_run",
+        "prepare_only"
+      ],
+      "capability_id": "submission_packet",
+      "description": "Prepare submission packet guidance without sending.",
+      "name": "Submission Packet",
+      "permissions_required": []
+    },
+    {
+      "allowed_action_modes": [
+        "dry_run",
+        "prepare_only"
+      ],
+      "capability_id": "follow_up_plan",
+      "description": "Prepare recruiter follow-up next steps.",
+      "name": "Follow-Up Plan",
+      "permissions_required": []
+    }
+  ],
+  "default_action_mode": "dry_run",
+  "description": "Supports bench sales matching, submission preparation, duplicate-risk review, and follow-up planning.",
+  "human_review_required": true,
+  "name": "Bench Sales Agent",
+  "role": "bench_sales"
+}

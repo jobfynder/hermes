@@ -1,0 +1,6 @@
+{
+  "agent_count": 6,
+  "agent_version": "hermes_agents_foundation_v1",
+  "safety_mode": "dry_run_first_human_review_required",
+  "status": "healthy"
+}
