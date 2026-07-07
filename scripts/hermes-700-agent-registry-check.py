@@ -41,9 +41,9 @@ def test_agent_detail():
 def test_safe_dry_run():
     request = AgentRunRequest(
         agent_id="recruiter",
+        capability_id="job_review",
         task="Review this job and prepare next-step recommendations.",
         action_mode="dry_run",
-        capability_id="job_review",
         context=AgentContext(
             correlation_id="corr-agent-001",
             source="script-check",
@@ -58,22 +58,19 @@ def test_safe_dry_run():
     assert result.action_mode_effective == "dry_run"
     assert result.audit["executed"] is False
     assert result.prepared_actions
+
     assert result.handoff is not None
     assert result.handoff.handoff_version == "hermes_agent_handoff_v1"
     assert result.handoff.status == "prepared"
     assert result.handoff.target == "human_review"
     assert result.handoff.requires_human_approval is True
-    assert result.audit_event is not None
-    assert result.audit_event.audit_version == "hermes_agent_audit_event_v1"
-    assert result.audit_event.agent_id == "bench_sales"
-    assert result.audit_event.capability_id == "submission_packet"
-    assert result.audit_event.decision == "needs_review"
-    assert result.audit_event.executed is False
+
     assert result.audit_event is not None
     assert result.audit_event.audit_version == "hermes_agent_audit_event_v1"
     assert result.audit_event.event_type == "agent_run_completed"
     assert result.audit_event.agent_id == "recruiter"
     assert result.audit_event.capability_id == "job_review"
+    assert result.audit_event.decision == "accepted"
     assert result.audit_event.executed is False
     assert result.audit_event.handoff_version == "hermes_agent_handoff_v1"
 
@@ -81,9 +78,9 @@ def test_safe_dry_run():
 def test_blocked_execute():
     request = AgentRunRequest(
         agent_id="bench_sales",
+        capability_id="submission_packet",
         task="Submit this consultant and send a message to the recruiter.",
         action_mode="execute",
-        capability_id="submission_packet",
         context=AgentContext(
             correlation_id="corr-agent-002",
             source="script-check",
@@ -99,9 +96,19 @@ def test_blocked_execute():
     assert result.audit["executed"] is False
     assert result.prepared_actions[0].risk_level == "blocked"
     assert result.prepared_actions[0].requires_human_approval is True
+
     assert result.handoff is not None
     assert result.handoff.status == "blocked"
     assert result.handoff.requires_human_approval is True
+
+    assert result.audit_event is not None
+    assert result.audit_event.audit_version == "hermes_agent_audit_event_v1"
+    assert result.audit_event.event_type == "agent_run_completed"
+    assert result.audit_event.agent_id == "bench_sales"
+    assert result.audit_event.capability_id == "submission_packet"
+    assert result.audit_event.decision == "needs_review"
+    assert result.audit_event.executed is False
+    assert result.audit_event.handoff_version == "hermes_agent_handoff_v1"
 
 
 def test_missing_permission_policy():
@@ -124,6 +131,9 @@ def test_missing_permission_policy():
     assert result.audit["executed"] is False
     assert result.audit["policy"]["allowed"] is False
     assert "agents:run" in result.audit["policy"]["missing_permissions"]
+    assert result.audit_event is not None
+    assert result.audit_event.decision == "needs_review"
+    assert result.audit_event.executed is False
 
 
 def test_unknown_capability_policy():
@@ -145,6 +155,9 @@ def test_unknown_capability_policy():
     assert result.decision == "rejected"
     assert result.audit["executed"] is False
     assert result.audit["policy"]["allowed"] is False
+    assert result.audit_event is not None
+    assert result.audit_event.decision == "rejected"
+    assert result.audit_event.executed is False
 
 
 def test_unknown_agent():
