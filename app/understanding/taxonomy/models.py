@@ -101,4 +101,3 @@ class TaxonomySignalExtractionResult(BaseModel):
     skills: list[ExtractedTaxonomySignal] = Field(default_factory=list)
     job_titles: list[ExtractedTaxonomySignal] = Field(default_factory=list)
     unknown_terms: list[TaxonomySuggestion] = Field(default_factory=list)
-
