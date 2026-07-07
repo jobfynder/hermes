@@ -84,3 +84,21 @@ class TaxonomySuggestion(BaseModel):
     confidence: TaxonomyConfidence = "low"
     status: ReviewStatus = "review_required"
     source_context: str | None = None
+
+class ExtractedTaxonomySignal(BaseModel):
+    raw_text: str = Field(..., min_length=1)
+    normalized: str = Field(..., min_length=1)
+    signal_type: Literal["skill", "job_title"]
+    match_type: Literal["canonical", "alias"]
+    confidence: TaxonomyConfidence
+    start_index: int = Field(..., ge=0)
+    end_index: int = Field(..., ge=0)
+
+
+class TaxonomySignalExtractionResult(BaseModel):
+    result_version: str = "hermes_taxonomy_signal_extraction_v1"
+    taxonomy_versions: dict[str, str] = Field(default_factory=dict)
+    skills: list[ExtractedTaxonomySignal] = Field(default_factory=list)
+    job_titles: list[ExtractedTaxonomySignal] = Field(default_factory=list)
+    unknown_terms: list[TaxonomySuggestion] = Field(default_factory=list)
+
