@@ -53,3 +53,10 @@ class IntegrationHealthResponse(BaseModel):
     integration_version: str
     supported_providers: list[str]
     supported_event_types: list[str]
+
+class JobfynderSubmissionHandoffResult(BaseModel):
+    result_version: str = "hermes_jobfynder_submission_handoff_result_v1"
+    integration: IntegrationNormalizedEvent
+    submission_intelligence: dict[str, Any]
+    handoff: dict[str, Any] = Field(default_factory=dict)
+
