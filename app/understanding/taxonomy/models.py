@@ -101,3 +101,9 @@ class TaxonomySignalExtractionResult(BaseModel):
     skills: list[ExtractedTaxonomySignal] = Field(default_factory=list)
     job_titles: list[ExtractedTaxonomySignal] = Field(default_factory=list)
     unknown_terms: list[TaxonomySuggestion] = Field(default_factory=list)
+
+class TaxonomySuggestionQueueResult(BaseModel):
+    result_version: str = "hermes_taxonomy_suggestion_queue_v1"
+    suggestions: list[TaxonomySuggestion] = Field(default_factory=list)
+    accepted_count: int = 0
+    review_required_count: int = 0
