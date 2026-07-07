@@ -48,6 +48,7 @@ class AgentContext(BaseModel):
 class AgentRunRequest(BaseModel):
     agent_id: str
     task: str
+    capability_id: str | None = None
     action_mode: AgentActionMode = "dry_run"
     context: AgentContext = Field(default_factory=AgentContext)
     input: dict[str, Any] = Field(default_factory=dict)
@@ -61,6 +62,16 @@ class AgentPreparedAction(BaseModel):
     requires_human_approval: bool = True
     blocked_reason: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentPolicyDecision(BaseModel):
+    policy_version: str = "hermes_agent_policy_v1"
+    allowed: bool
+    decision: AgentDecision
+    reason: str
+    missing_permissions: list[str] = Field(default_factory=list)
+    matched_capability_id: str | None = None
+    human_review_required: bool = True
 
 
 class AgentRunResult(BaseModel):

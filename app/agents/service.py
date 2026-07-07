@@ -2,6 +2,7 @@ from app.agents.models import (
     AgentCapability,
     AgentDefinition,
     AgentHealthResponse,
+    AgentPolicyDecision,
     AgentPreparedAction,
     AgentRegistryResponse,
     AgentRunRequest,
@@ -9,6 +10,7 @@ from app.agents.models import (
 )
 
 AGENT_VERSION = "hermes_agents_foundation_v1"
+AGENT_POLICY_VERSION = "hermes_agent_policy_v1"
 
 SUPPORTED_ACTION_MODES = ["dry_run", "prepare_only", "execute"]
 
@@ -134,6 +136,73 @@ def get_agent(agent_id: str) -> AgentDefinition | None:
     return AGENT_REGISTRY.get(agent_id)
 
 
+def _has_permission(actor_permissions: list[str], required_permission: str) -> bool:
+    return "*" in actor_permissions or required_permission in actor_permissions
+
+
+def evaluate_agent_policy(request: AgentRunRequest) -> AgentPolicyDecision:
+    agent = get_agent(request.agent_id)
+
+    if not agent:
+        return AgentPolicyDecision(
+            allowed=False,
+            decision="rejected",
+            reason="Agent is not registered.",
+        )
+
+    matched_capability_id: str | None = None
+    required_permissions = list(agent.allowed_permissions)
+
+    if request.capability_id:
+        matched_capability = None
+        for capability in agent.capabilities:
+            if capability.capability_id == request.capability_id:
+                matched_capability = capability
+                matched_capability_id = capability.capability_id
+                break
+
+        if matched_capability is None:
+            return AgentPolicyDecision(
+                allowed=False,
+                decision="rejected",
+                reason="Requested capability is not registered for this agent.",
+                matched_capability_id=request.capability_id,
+            )
+
+        required_permissions.extend(matched_capability.permissions_required)
+
+        if request.action_mode not in matched_capability.allowed_action_modes:
+            return AgentPolicyDecision(
+                allowed=False,
+                decision="needs_review",
+                reason="Requested action mode is not allowed for this capability.",
+                matched_capability_id=matched_capability_id,
+            )
+
+    actor_permissions = request.context.permissions or []
+    missing_permissions = [
+        permission
+        for permission in sorted(set(required_permissions))
+        if not _has_permission(actor_permissions, permission)
+    ]
+
+    if missing_permissions:
+        return AgentPolicyDecision(
+            allowed=False,
+            decision="needs_review",
+            reason="Actor context is missing one or more agent permissions.",
+            missing_permissions=missing_permissions,
+            matched_capability_id=matched_capability_id,
+        )
+
+    return AgentPolicyDecision(
+        allowed=True,
+        decision="accepted",
+        reason="Agent policy allowed this dry-run or prepare-only request.",
+        matched_capability_id=matched_capability_id,
+    )
+
+
 def _contains_blocked_action(task: str) -> bool:
     normalized = task.lower()
     return any(keyword in normalized for keyword in BLOCKED_ACTION_KEYWORDS)
@@ -190,10 +259,13 @@ def run_agent(request: AgentRunRequest) -> AgentRunResult:
             next_actions=["Use /agents/registry to select a supported agent."],
             audit={
                 "agent_version": AGENT_VERSION,
+                "policy_version": AGENT_POLICY_VERSION,
                 "requested_action_mode": request.action_mode,
                 "executed": False,
             },
         )
+
+    policy = evaluate_agent_policy(request)
 
     reasons: list[str] = [
         f"Agent {agent.agent_id} is registered.",
@@ -213,7 +285,13 @@ def run_agent(request: AgentRunRequest) -> AgentRunResult:
         risks.append("Task appears to include an external or high-risk action.")
         next_actions.append("Review the prepared action manually before any real-world action.")
 
-    if not request.task.strip():
+    if not policy.allowed:
+        risks.append(policy.reason)
+        if policy.missing_permissions:
+            risks.append("Actor context does not include all permissions expected by this agent.")
+        next_actions.append("Review actor permissions, capability, and action mode before proceeding.")
+        decision = policy.decision
+    elif not request.task.strip():
         risks.append("Task is empty.")
         next_actions.append("Provide a clear task for the agent.")
         decision = "needs_review"
@@ -243,6 +321,7 @@ def run_agent(request: AgentRunRequest) -> AgentRunResult:
             "effective_action_mode": action_mode_effective,
             "executed": False,
             "human_review_required": True,
+            "policy": policy.model_dump(),
             "correlation_id": request.context.correlation_id,
             "source": request.context.source,
         },

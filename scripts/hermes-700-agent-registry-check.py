@@ -43,7 +43,12 @@ def test_safe_dry_run():
         agent_id="recruiter",
         task="Review this job and prepare next-step recommendations.",
         action_mode="dry_run",
-        context=AgentContext(correlation_id="corr-agent-001", source="script-check"),
+        capability_id="job_review",
+        context=AgentContext(
+            correlation_id="corr-agent-001",
+            source="script-check",
+            permissions=["agents:read", "agents:run", "matching:evaluate", "submissions:evaluate"],
+        ),
         input={"job_id": "job-001"},
     )
 
@@ -60,7 +65,12 @@ def test_blocked_execute():
         agent_id="bench_sales",
         task="Submit this consultant and send a message to the recruiter.",
         action_mode="execute",
-        context=AgentContext(correlation_id="corr-agent-002", source="script-check"),
+        capability_id="submission_packet",
+        context=AgentContext(
+            correlation_id="corr-agent-002",
+            source="script-check",
+            permissions=["agents:read", "agents:run", "matching:evaluate", "submissions:evaluate"],
+        ),
         input={"consultant_id": "consultant-001", "job_id": "job-001"},
     )
 
@@ -71,6 +81,49 @@ def test_blocked_execute():
     assert result.audit["executed"] is False
     assert result.prepared_actions[0].risk_level == "blocked"
     assert result.prepared_actions[0].requires_human_approval is True
+
+
+def test_missing_permission_policy():
+    request = AgentRunRequest(
+        agent_id="recruiter",
+        capability_id="job_review",
+        task="Review this job.",
+        action_mode="dry_run",
+        context=AgentContext(
+            correlation_id="corr-agent-003",
+            source="script-check",
+            permissions=["agents:read"],
+        ),
+        input={"job_id": "job-001"},
+    )
+
+    result = run_agent(request)
+
+    assert result.decision == "needs_review"
+    assert result.audit["executed"] is False
+    assert result.audit["policy"]["allowed"] is False
+    assert "agents:run" in result.audit["policy"]["missing_permissions"]
+
+
+def test_unknown_capability_policy():
+    request = AgentRunRequest(
+        agent_id="recruiter",
+        capability_id="not_real",
+        task="Review this job.",
+        action_mode="dry_run",
+        context=AgentContext(
+            correlation_id="corr-agent-004",
+            source="script-check",
+            permissions=["*"],
+        ),
+        input={"job_id": "job-001"},
+    )
+
+    result = run_agent(request)
+
+    assert result.decision == "rejected"
+    assert result.audit["executed"] is False
+    assert result.audit["policy"]["allowed"] is False
 
 
 def test_unknown_agent():
@@ -92,5 +145,7 @@ if __name__ == "__main__":
     test_agent_detail()
     test_safe_dry_run()
     test_blocked_execute()
+    test_missing_permission_policy()
+    test_unknown_capability_policy()
     test_unknown_agent()
     print("HERMES-700 agent registry checks passed.")

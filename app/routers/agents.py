@@ -48,4 +48,7 @@ def agents_dry_run(
     request: AgentRunRequest,
     user: dict = Depends(require_permission("agents:run")),
 ) -> AgentRunResult:
+    request.context.actor_id = request.context.actor_id or user.get("id")
+    request.context.actor_role = request.context.actor_role or user.get("role")
+    request.context.permissions = request.context.permissions or user.get("permissions", [])
     return run_agent(request)

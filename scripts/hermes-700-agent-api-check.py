@@ -90,6 +90,7 @@ def main() -> None:
         "/agents/dry-run",
         {
             "agent_id": "recruiter",
+            "capability_id": "job_review",
             "task": "Review this job and prepare next-step recommendations.",
             "action_mode": "dry_run",
             "context": {
@@ -108,12 +109,15 @@ def main() -> None:
     assert safe["decision"] == "accepted"
     assert safe["action_mode_effective"] == "dry_run"
     assert safe["prepared_actions"][0]["risk_level"] == "low"
+    assert safe["audit"]["policy"]["allowed"] is True
+    assert safe["audit"]["policy"]["matched_capability_id"] == "job_review"
     write_fixture("safe-dry-run-response.json", safe)
 
     blocked = post(
         "/agents/dry-run",
         {
             "agent_id": "bench_sales",
+            "capability_id": "submission_packet",
             "task": "Submit this consultant and send a message to the recruiter.",
             "action_mode": "execute",
             "context": {
@@ -132,6 +136,7 @@ def main() -> None:
     assert blocked["action_mode_effective"] == "dry_run"
     assert blocked["prepared_actions"][0]["risk_level"] == "blocked"
     assert blocked["prepared_actions"][0]["requires_human_approval"] is True
+    assert blocked["audit"]["policy"]["matched_capability_id"] == "submission_packet"
     write_fixture("blocked-execute-response.json", blocked)
 
     unknown = post(
