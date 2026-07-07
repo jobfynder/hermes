@@ -60,3 +60,36 @@ class JobfynderSubmissionHandoffResult(BaseModel):
     submission_intelligence: dict[str, Any]
     handoff: dict[str, Any] = Field(default_factory=dict)
 
+class IntegrationErrorSnapshot(BaseModel):
+    error_type: str = "unknown"
+    status_code: int | None = None
+    message: str | None = None
+    retry_count: int = Field(default=0, ge=0)
+    max_retries: int = Field(default=3, ge=0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class IntegrationRetryDecisionRequest(BaseModel):
+    provider: IntegrationProvider = "unknown"
+    event_type: IntegrationEventType = "unknown"
+    error: IntegrationErrorSnapshot = Field(default_factory=IntegrationErrorSnapshot)
+
+
+class IntegrationRetryDecisionResponse(BaseModel):
+    result_version: str = "hermes_integration_retry_decision_v1"
+    integration_version: str = "hermes_integrations_foundation_v1"
+    decision: Literal["retry", "do_not_retry", "needs_review"]
+    retry_after_seconds: int | None = None
+    reason: str
+    risks: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+
+
+class IntegrationRetryPolicyResponse(BaseModel):
+    integration_version: str = "hermes_integrations_foundation_v1"
+    max_retries_default: int = 3
+    retryable_status_codes: list[int] = Field(default_factory=list)
+    non_retryable_status_codes: list[int] = Field(default_factory=list)
+    retryable_error_types: list[str] = Field(default_factory=list)
+    non_retryable_error_types: list[str] = Field(default_factory=list)
+
