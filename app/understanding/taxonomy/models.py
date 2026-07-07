@@ -107,3 +107,11 @@ class TaxonomySuggestionQueueResult(BaseModel):
     suggestions: list[TaxonomySuggestion] = Field(default_factory=list)
     accepted_count: int = 0
     review_required_count: int = 0
+
+class TaxonomySnapshot(BaseModel):
+    result_version: str = "hermes_taxonomy_snapshot_v1"
+    snapshot_name: str
+    taxonomy_versions: dict[str, str] = Field(default_factory=dict)
+    counts: dict[str, int] = Field(default_factory=dict)
+    source_files: dict[str, str] = Field(default_factory=dict)
+    validation_status: Literal["not_run", "passed", "failed"] = "not_run"
