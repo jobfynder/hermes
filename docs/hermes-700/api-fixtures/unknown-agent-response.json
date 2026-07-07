@@ -9,6 +9,7 @@
     "requested_action_mode": "dry_run"
   },
   "decision": "rejected",
+  "handoff": null,
   "next_actions": [
     "Use /agents/registry to select a supported agent."
   ],

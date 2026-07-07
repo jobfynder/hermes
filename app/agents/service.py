@@ -1,6 +1,7 @@
 from app.agents.models import (
     AgentCapability,
     AgentDefinition,
+    AgentHandoffEnvelope,
     AgentHealthResponse,
     AgentPolicyDecision,
     AgentPreparedAction,
@@ -245,6 +246,49 @@ def _build_prepared_actions(
     ]
 
 
+def build_agent_handoff(
+    request: AgentRunRequest,
+    result_agent_id: str,
+    result_role: str,
+    decision: str,
+    action_mode_effective: str,
+    prepared_actions: list[AgentPreparedAction],
+    blocked: bool,
+) -> AgentHandoffEnvelope:
+    if not prepared_actions:
+        return AgentHandoffEnvelope(
+            status="not_required",
+            target="none",
+            correlation_id=request.context.correlation_id,
+            source_agent_id=result_agent_id,
+            source_role=result_role,
+            action_mode_effective=action_mode_effective,  # type: ignore[arg-type]
+            reason="No handoff was required for this agent result.",
+            payload={},
+        )
+
+    status = "blocked" if blocked else "prepared"
+    target = "human_review"
+
+    return AgentHandoffEnvelope(
+        status=status,  # type: ignore[arg-type]
+        target=target,
+        correlation_id=request.context.correlation_id,
+        source_agent_id=result_agent_id,
+        source_role=result_role,
+        action_mode_effective=action_mode_effective,  # type: ignore[arg-type]
+        requires_human_approval=True,
+        reason="Agent output prepared as a controlled handoff for human review.",
+        payload={
+            "decision": decision,
+            "task": request.task,
+            "capability_id": request.capability_id,
+            "input": request.input,
+            "prepared_actions": [action.model_dump() for action in prepared_actions],
+        },
+    )
+
+
 def run_agent(request: AgentRunRequest) -> AgentRunResult:
     agent = get_agent(request.agent_id)
 
@@ -302,7 +346,17 @@ def run_agent(request: AgentRunRequest) -> AgentRunResult:
         next_actions.append("Review the prepared recommendation and decide whether to create a governed workflow.")
 
     action_mode_effective = "dry_run" if requested_execute else request.action_mode
+    handoff_blocked = requested_execute or blocked_action or decision in {"needs_review", "rejected"}
     prepared_actions = _build_prepared_actions(request=request, blocked=(requested_execute or blocked_action))
+    handoff = build_agent_handoff(
+        request=request,
+        result_agent_id=agent.agent_id,
+        result_role=agent.role,
+        decision=decision,
+        action_mode_effective=action_mode_effective,
+        prepared_actions=prepared_actions,
+        blocked=handoff_blocked,
+    )
 
     return AgentRunResult(
         agent_id=agent.agent_id,
@@ -314,6 +368,7 @@ def run_agent(request: AgentRunRequest) -> AgentRunResult:
         risks=risks,
         next_actions=next_actions,
         prepared_actions=prepared_actions,
+        handoff=handoff,
         audit={
             "agent_version": AGENT_VERSION,
             "agent_role": agent.role,

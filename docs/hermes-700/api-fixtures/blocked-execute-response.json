@@ -22,6 +22,41 @@
     "source": "hermes-700-agent-api-check"
   },
   "decision": "needs_review",
+  "handoff": {
+    "action_mode_effective": "dry_run",
+    "correlation_id": "corr-api-agent-blocked-001",
+    "handoff_version": "hermes_agent_handoff_v1",
+    "payload": {
+      "capability_id": "submission_packet",
+      "decision": "needs_review",
+      "input": {
+        "consultant_id": "consultant-001",
+        "job_id": "job-001"
+      },
+      "prepared_actions": [
+        {
+          "action_type": "review_required",
+          "blocked_reason": "HERMES-700 foundation does not allow autonomous external actions.",
+          "description": "The requested task appears to involve an external, irreversible, or high-risk action. Hermes prepared this as review-only.",
+          "payload": {
+            "agent_id": "bench_sales",
+            "requested_action_mode": "execute",
+            "task": "Submit this consultant and send a message to the recruiter."
+          },
+          "requires_human_approval": true,
+          "risk_level": "blocked",
+          "title": "Human review required before external or high-risk action"
+        }
+      ],
+      "task": "Submit this consultant and send a message to the recruiter."
+    },
+    "reason": "Agent output prepared as a controlled handoff for human review.",
+    "requires_human_approval": true,
+    "source_agent_id": "bench_sales",
+    "source_role": "bench_sales",
+    "status": "blocked",
+    "target": "human_review"
+  },
   "next_actions": [
     "Route this task through a human-approved workflow before execution.",
     "Review the prepared action manually before any real-world action.",

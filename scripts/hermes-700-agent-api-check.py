@@ -111,6 +111,10 @@ def main() -> None:
     assert safe["prepared_actions"][0]["risk_level"] == "low"
     assert safe["audit"]["policy"]["allowed"] is True
     assert safe["audit"]["policy"]["matched_capability_id"] == "job_review"
+    assert safe["handoff"]["handoff_version"] == "hermes_agent_handoff_v1"
+    assert safe["handoff"]["status"] == "prepared"
+    assert safe["handoff"]["target"] == "human_review"
+    assert safe["handoff"]["requires_human_approval"] is True
     write_fixture("safe-dry-run-response.json", safe)
 
     blocked = post(
@@ -137,6 +141,10 @@ def main() -> None:
     assert blocked["prepared_actions"][0]["risk_level"] == "blocked"
     assert blocked["prepared_actions"][0]["requires_human_approval"] is True
     assert blocked["audit"]["policy"]["matched_capability_id"] == "submission_packet"
+    assert blocked["handoff"]["handoff_version"] == "hermes_agent_handoff_v1"
+    assert blocked["handoff"]["status"] == "blocked"
+    assert blocked["handoff"]["target"] == "human_review"
+    assert blocked["handoff"]["requires_human_approval"] is True
     write_fixture("blocked-execute-response.json", blocked)
 
     unknown = post(

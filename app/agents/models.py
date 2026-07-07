@@ -15,6 +15,14 @@ AgentRole = Literal[
 AgentDecision = Literal["accepted", "needs_review", "rejected"]
 AgentActionMode = Literal["dry_run", "prepare_only", "execute"]
 AgentRiskLevel = Literal["low", "medium", "high", "blocked"]
+AgentHandoffTarget = Literal[
+    "human_review",
+    "n8n",
+    "jobfynder_api",
+    "engineering_memory",
+    "none",
+]
+AgentHandoffStatus = Literal["prepared", "blocked", "not_required"]
 
 
 class AgentCapability(BaseModel):
@@ -74,6 +82,19 @@ class AgentPolicyDecision(BaseModel):
     human_review_required: bool = True
 
 
+class AgentHandoffEnvelope(BaseModel):
+    handoff_version: str = "hermes_agent_handoff_v1"
+    status: AgentHandoffStatus = "prepared"
+    target: AgentHandoffTarget = "human_review"
+    correlation_id: str | None = None
+    source_agent_id: str
+    source_role: AgentRole | str
+    action_mode_effective: AgentActionMode = "dry_run"
+    requires_human_approval: bool = True
+    reason: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
 class AgentRunResult(BaseModel):
     result_version: str = "hermes_agent_run_result_v1"
     agent_version: str = "hermes_agents_foundation_v1"
@@ -86,6 +107,7 @@ class AgentRunResult(BaseModel):
     risks: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     prepared_actions: list[AgentPreparedAction] = Field(default_factory=list)
+    handoff: AgentHandoffEnvelope | None = None
     audit: dict[str, Any] = Field(default_factory=dict)
 
 

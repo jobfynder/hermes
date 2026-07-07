@@ -22,6 +22,44 @@
     "source": "hermes-700-agent-api-check"
   },
   "decision": "accepted",
+  "handoff": {
+    "action_mode_effective": "dry_run",
+    "correlation_id": "corr-api-agent-safe-001",
+    "handoff_version": "hermes_agent_handoff_v1",
+    "payload": {
+      "capability_id": "job_review",
+      "decision": "accepted",
+      "input": {
+        "job_id": "job-001",
+        "title": "Python FastAPI Developer"
+      },
+      "prepared_actions": [
+        {
+          "action_type": "next_step_recommendation",
+          "blocked_reason": null,
+          "description": "Hermes can prepare a structured recommendation for human review.",
+          "payload": {
+            "agent_id": "recruiter",
+            "input_keys": [
+              "job_id",
+              "title"
+            ],
+            "task": "Review this job and prepare next-step recommendations."
+          },
+          "requires_human_approval": true,
+          "risk_level": "low",
+          "title": "Prepare next-step recommendation"
+        }
+      ],
+      "task": "Review this job and prepare next-step recommendations."
+    },
+    "reason": "Agent output prepared as a controlled handoff for human review.",
+    "requires_human_approval": true,
+    "source_agent_id": "recruiter",
+    "source_role": "recruiter",
+    "status": "prepared",
+    "target": "human_review"
+  },
   "next_actions": [
     "Review the prepared recommendation and decide whether to create a governed workflow."
   ],

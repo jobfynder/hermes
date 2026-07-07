@@ -58,6 +58,11 @@ def test_safe_dry_run():
     assert result.action_mode_effective == "dry_run"
     assert result.audit["executed"] is False
     assert result.prepared_actions
+    assert result.handoff is not None
+    assert result.handoff.handoff_version == "hermes_agent_handoff_v1"
+    assert result.handoff.status == "prepared"
+    assert result.handoff.target == "human_review"
+    assert result.handoff.requires_human_approval is True
 
 
 def test_blocked_execute():
@@ -81,6 +86,9 @@ def test_blocked_execute():
     assert result.audit["executed"] is False
     assert result.prepared_actions[0].risk_level == "blocked"
     assert result.prepared_actions[0].requires_human_approval is True
+    assert result.handoff is not None
+    assert result.handoff.status == "blocked"
+    assert result.handoff.requires_human_approval is True
 
 
 def test_missing_permission_policy():
