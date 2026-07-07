@@ -1,0 +1,321 @@
+{
+  "version": "jobfynder_canonical_skills_v1",
+  "taxonomy_type": "canonical_skills",
+  "skills": [
+    {
+      "name": "Python",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": ["python3", "py"],
+      "related_skills": ["FastAPI", "Django", "Flask"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Java",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": ["core java", "java 8", "java 11", "java 17"],
+      "related_skills": ["Spring Boot"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "JavaScript",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": ["js", "ecmascript"],
+      "related_skills": ["React", "Node.js", "TypeScript"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "TypeScript",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": ["ts"],
+      "related_skills": ["JavaScript", "React", "Node.js"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "React",
+      "category": "Frontend",
+      "skill_type": "framework",
+      "aliases": ["react.js", "reactjs"],
+      "related_skills": ["JavaScript", "TypeScript", "Next.js"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Next.js",
+      "category": "Frontend",
+      "skill_type": "framework",
+      "aliases": ["nextjs", "next js"],
+      "related_skills": ["React", "JavaScript", "TypeScript"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Node.js",
+      "category": "Backend",
+      "skill_type": "runtime",
+      "aliases": ["nodejs", "node js", "node"],
+      "related_skills": ["JavaScript", "TypeScript"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "FastAPI",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": ["fast api"],
+      "related_skills": ["Python"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Django",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [],
+      "related_skills": ["Python"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Flask",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [],
+      "related_skills": ["Python"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Spring Boot",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": ["springboot", "spring"],
+      "related_skills": ["Java"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "PostgreSQL",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": ["postgres", "postgresql db"],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "MySQL",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "MongoDB",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": ["mongo"],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Redis",
+      "category": "Database",
+      "skill_type": "cache",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Elasticsearch",
+      "category": "Search",
+      "skill_type": "search_engine",
+      "aliases": ["elastic search", "elastic"],
+      "related_skills": ["Typesense"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Typesense",
+      "category": "Search",
+      "skill_type": "search_engine",
+      "aliases": [],
+      "related_skills": ["Elasticsearch"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "AWS",
+      "category": "Cloud",
+      "skill_type": "cloud_platform",
+      "aliases": ["amazon web services"],
+      "related_skills": ["Docker", "Kubernetes", "Terraform"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Azure",
+      "category": "Cloud",
+      "skill_type": "cloud_platform",
+      "aliases": ["microsoft azure"],
+      "related_skills": ["Docker", "Kubernetes", "Terraform"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "GCP",
+      "category": "Cloud",
+      "skill_type": "cloud_platform",
+      "aliases": ["google cloud", "google cloud platform"],
+      "related_skills": ["Docker", "Kubernetes", "Terraform"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Docker",
+      "category": "DevOps",
+      "skill_type": "containerization",
+      "aliases": [],
+      "related_skills": ["Kubernetes"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Kubernetes",
+      "category": "DevOps",
+      "skill_type": "orchestration",
+      "aliases": ["k8s"],
+      "related_skills": ["Docker"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Kafka",
+      "category": "Messaging",
+      "skill_type": "streaming",
+      "aliases": ["apache kafka"],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "RabbitMQ",
+      "category": "Messaging",
+      "skill_type": "queue",
+      "aliases": ["rabbit mq"],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Terraform",
+      "category": "DevOps",
+      "skill_type": "iac",
+      "aliases": ["terraform iac"],
+      "related_skills": ["AWS", "Azure", "GCP"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Jenkins",
+      "category": "DevOps",
+      "skill_type": "ci_cd",
+      "aliases": [],
+      "related_skills": ["GitHub Actions"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "GitHub Actions",
+      "category": "DevOps",
+      "skill_type": "ci_cd",
+      "aliases": ["github ci", "github workflows"],
+      "related_skills": ["Jenkins"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "REST API",
+      "category": "API",
+      "skill_type": "api_style",
+      "aliases": ["restful api", "rest"],
+      "related_skills": ["GraphQL"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "GraphQL",
+      "category": "API",
+      "skill_type": "api_style",
+      "aliases": [],
+      "related_skills": ["REST API"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "NLP",
+      "category": "AI",
+      "skill_type": "ai_domain",
+      "aliases": ["natural language processing"],
+      "related_skills": ["spaCy", "LLM"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "spaCy",
+      "category": "AI",
+      "skill_type": "nlp_library",
+      "aliases": ["spacy"],
+      "related_skills": ["NLP"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "LLM",
+      "category": "AI",
+      "skill_type": "ai_domain",
+      "aliases": ["large language model", "large language models"],
+      "related_skills": ["NLP", "Generative AI"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Generative AI",
+      "category": "AI",
+      "skill_type": "ai_domain",
+      "aliases": ["gen ai", "genai"],
+      "related_skills": ["LLM", "NLP"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Resume Parsing",
+      "category": "Recruitment Intelligence",
+      "skill_type": "domain_capability",
+      "aliases": ["resume parser", "cv parsing"],
+      "related_skills": ["NLP"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "name": "Job Matching",
+      "category": "Recruitment Intelligence",
+      "skill_type": "domain_capability",
+      "aliases": ["matching engine", "candidate matching"],
+      "related_skills": ["Resume Parsing"],
+      "confidence": "high",
+      "source": "seed"
+    }
+  ]
+}

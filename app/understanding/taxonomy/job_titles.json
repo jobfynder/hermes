@@ -1,0 +1,132 @@
+{
+  "version": "jobfynder_job_titles_v1",
+  "taxonomy_type": "job_titles",
+  "titles": [
+    {
+      "title": "Senior Java Developer",
+      "family": "Software Engineering",
+      "seniority": "senior",
+      "aliases": ["sr java developer", "senior java engineer", "sr java engineer"],
+      "related_titles": ["Java Developer", "Backend Developer"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Frontend React Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": ["react ui developer", "react frontend developer", "ui react engineer"],
+      "related_titles": ["Frontend Developer", "React Developer"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Full Stack Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": ["fullstack developer", "full stack engineer", "mern developer"],
+      "related_titles": ["Frontend React Developer", "Backend Developer"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "DevOps Engineer",
+      "family": "Infrastructure",
+      "seniority": "mid",
+      "aliases": ["dev ops engineer", "cloud devops engineer"],
+      "related_titles": ["Site Reliability Engineer"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Site Reliability Engineer",
+      "family": "Infrastructure",
+      "seniority": "mid",
+      "aliases": ["sre", "site reliability"],
+      "related_titles": ["DevOps Engineer"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Data Engineer",
+      "family": "Data",
+      "seniority": "mid",
+      "aliases": ["big data engineer", "etl developer"],
+      "related_titles": ["Python Developer"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "QA Engineer",
+      "family": "Quality Engineering",
+      "seniority": "mid",
+      "aliases": ["quality analyst", "test engineer", "software tester"],
+      "related_titles": ["Automation Engineer"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Technical Recruiter",
+      "family": "Recruiting",
+      "seniority": "mid",
+      "aliases": ["tech recruiter", "it recruiter", "staffing recruiter"],
+      "related_titles": ["US IT Recruiter"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "US IT Recruiter",
+      "family": "Recruiting",
+      "seniority": "mid",
+      "aliases": ["us recruiter", "us technical recruiter", "us staffing recruiter"],
+      "related_titles": ["Technical Recruiter"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Bench Sales Recruiter",
+      "family": "Recruiting",
+      "seniority": "mid",
+      "aliases": ["bench sales", "bench sales executive", "bench marketing recruiter", "marketing recruiter"],
+      "related_titles": ["Business Development Manager"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Business Development Manager",
+      "family": "Sales",
+      "seniority": "mid",
+      "aliases": ["bdm", "business development executive"],
+      "related_titles": ["Bench Sales Recruiter", "Account Manager"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Account Manager",
+      "family": "Sales",
+      "seniority": "mid",
+      "aliases": ["client account manager", "staffing account manager"],
+      "related_titles": ["Business Development Manager"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "Talent Acquisition Specialist",
+      "family": "Recruiting",
+      "seniority": "mid",
+      "aliases": ["ta specialist", "talent acquisition recruiter"],
+      "related_titles": ["Technical Recruiter"],
+      "confidence": "high",
+      "source": "seed"
+    },
+    {
+      "title": "AI Engineer",
+      "family": "AI Engineering",
+      "seniority": "mid",
+      "aliases": ["genai engineer", "generative ai engineer", "llm engineer"],
+      "related_titles": ["Machine Learning Engineer"],
+      "confidence": "medium",
+      "source": "seed"
+    }
+  ]
+}
