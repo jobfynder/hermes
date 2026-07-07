@@ -1,0 +1,24 @@
+{
+  "status": "healthy",
+  "integration_version": "hermes_integrations_foundation_v1",
+  "supported_providers": [
+    "jobfynder_api",
+    "n8n",
+    "webhook",
+    "email",
+    "telegram",
+    "whatsapp",
+    "slack",
+    "unknown"
+  ],
+  "supported_event_types": [
+    "document_received",
+    "job_received",
+    "resume_received",
+    "match_requested",
+    "submission_event",
+    "workflow_handoff",
+    "notification_requested",
+    "unknown"
+  ]
+}
