@@ -14,6 +14,11 @@ required = [
     "jobfynder-submission-handoff-response.json",
     "jobfynder-submission-handoff-duplicate-request.json",
     "jobfynder-submission-handoff-duplicate-response.json",
+    "event-identity-response.json",
+    "event-identity-request.json",
+    "retry-decision-response.json",
+    "retry-decision-request.json",
+    "retry-policy-response.json",
 ]
 
 missing = [name for name in required if not (d / name).exists()]
@@ -36,5 +41,21 @@ assert handoff["submission_intelligence"]["recommended_stage"] == "matched"
 dup = json.loads((d / "jobfynder-submission-handoff-duplicate-response.json").read_text())
 assert dup["submission_intelligence"]["recommended_stage"] == "duplicate_risk"
 assert dup["submission_intelligence"]["conflicts"]
+
+
+retry_policy = json.loads((d / "retry-policy-response.json").read_text())
+assert retry_policy["integration_version"] == "hermes_integrations_foundation_v1"
+assert 429 in retry_policy["retryable_status_codes"]
+assert 422 in retry_policy["non_retryable_status_codes"]
+
+retry_decision = json.loads((d / "retry-decision-response.json").read_text())
+assert retry_decision["result_version"] == "hermes_integration_retry_decision_v1"
+assert retry_decision["decision"] == "retry"
+
+identity = json.loads((d / "event-identity-response.json").read_text())
+assert identity["result_version"] == "hermes_integration_event_identity_v1"
+assert identity["provider"] == "jobfynder_api"
+assert identity["event_type"] == "workflow_handoff"
+assert identity["replay_safe"] is True
 
 print("HERMES-600 API fixture validation passed.")

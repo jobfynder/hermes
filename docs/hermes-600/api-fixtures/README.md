@@ -10,3 +10,9 @@ Routes covered:
 More Jobfynder handoff fixtures are added in Step 007-B.
 
 - `POST /integrations/jobfynder/submission-handoff/evaluate`
+
+- `GET /integrations/retry-policy`
+
+- `POST /integrations/retry-decision`
+
+- `POST /integrations/events/identity`

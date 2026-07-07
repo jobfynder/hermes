@@ -1,0 +1,14 @@
+{
+  "provider": "jobfynder_api",
+  "event_type": "workflow_handoff",
+  "error": {
+    "error_type": "timeout",
+    "status_code": 504,
+    "message": "Gateway timeout from downstream service.",
+    "retry_count": 1,
+    "max_retries": 3,
+    "metadata": {
+      "source": "n8n"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "event": {
+    "event_type": "workflow_handoff",
+    "source": {
+      "provider": "jobfynder_api",
+      "external_id": "event-identity-api-001",
+      "channel": "api",
+      "actor_id": "recruiter-001"
+    },
+    "correlation_id": "corr-identity-api-001",
+    "payload": {
+      "submission_id": "submission-identity-api-001",
+      "job_id": "job-identity-api-001",
+      "consultant_id": "consultant-identity-api-001"
+    }
+  },
+  "idempotency_namespace": "jobfynder-api"
+}
