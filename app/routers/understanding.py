@@ -15,6 +15,7 @@ from app.understanding.taxonomy.loader import (
     load_title_aliases_taxonomy,
 )
 from app.understanding.taxonomy.normalizer import normalize_job_title, normalize_skill
+from app.understanding.taxonomy.signals import extract_taxonomy_signals
 
 router = APIRouter(prefix="/understanding", tags=["Understanding"])
 
@@ -22,6 +23,10 @@ router = APIRouter(prefix="/understanding", tags=["Understanding"])
 class TaxonomyNormalizeRequest(BaseModel):
     skills: list[str] = Field(default_factory=list)
     job_titles: list[str] = Field(default_factory=list)
+
+
+class TaxonomySignalExtractionRequest(BaseModel):
+    text: str = Field(..., min_length=1)
 
 
 @router.post("/parse-text", response_model=UnderstandingResult)
@@ -91,3 +96,8 @@ def normalize_taxonomy_terms(request: TaxonomyNormalizeRequest):
             for title in request.job_titles
         ],
     }
+
+
+@router.post("/taxonomy/extract-signals")
+def extract_taxonomy_signal_terms(request: TaxonomySignalExtractionRequest):
+    return extract_taxonomy_signals(request.text)

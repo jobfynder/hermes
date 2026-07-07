@@ -19,6 +19,10 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def normalized_names(items: list[dict[str, object]]) -> set[str]:
+    return {str(item["normalized"]) for item in items}
+
+
 def main() -> int:
     print("HERMES-400 taxonomy API check started")
 
@@ -70,6 +74,39 @@ def main() -> int:
     require(normalized_titles[3]["matched"] is False, "unknown title should not be matched")
 
     print("OK: POST /understanding/taxonomy/normalize")
+
+    response = client.post(
+        "/understanding/taxonomy/extract-signals",
+        json={
+            "text": (
+                "React UI Developer needed with JavaScript, ReactJS, TypeScript, "
+                "AWS, K8s, PostgreSQL, and RESTful API. SRE exposure is a plus."
+            )
+        },
+    )
+
+    require(response.status_code == 200, f"extract-signals endpoint returned {response.status_code}")
+
+    signal_payload = response.json()
+    require(
+        signal_payload.get("result_version") == "hermes_taxonomy_signal_extraction_v1",
+        "extract-signals endpoint returned wrong result_version",
+    )
+
+    skill_names = normalized_names(signal_payload.get("skills", []))
+    title_names = normalized_names(signal_payload.get("job_titles", []))
+
+    require("JavaScript" in skill_names, "JavaScript signal missing")
+    require("React" in skill_names, "React signal missing")
+    require("TypeScript" in skill_names, "TypeScript signal missing")
+    require("AWS" in skill_names, "AWS signal missing")
+    require("Kubernetes" in skill_names, "Kubernetes signal missing")
+    require("PostgreSQL" in skill_names, "PostgreSQL signal missing")
+    require("REST API" in skill_names, "REST API signal missing")
+    require("Frontend React Developer" in title_names, "Frontend React Developer title signal missing")
+    require("Site Reliability Engineer" in title_names, "Site Reliability Engineer title signal missing")
+
+    print("OK: POST /understanding/taxonomy/extract-signals")
     print("HERMES-400 taxonomy API check PASSED")
 
     return 0
