@@ -107,6 +107,43 @@ def main() -> int:
     require("Site Reliability Engineer" in title_names, "Site Reliability Engineer title signal missing")
 
     print("OK: POST /understanding/taxonomy/extract-signals")
+
+    response = client.post(
+        "/understanding/taxonomy/suggestions",
+        json={
+            "skills": ["JavaScript", "Vector Database", "RAG Pipeline"],
+            "job_titles": ["SRE", "Prompt Engineer"],
+            "source_context": "api-check",
+        },
+    )
+
+    require(response.status_code == 200, f"suggestions endpoint returned {response.status_code}")
+
+    suggestions_payload = response.json()
+    require(
+        suggestions_payload.get("result_version") == "hermes_taxonomy_suggestion_queue_v1",
+        "suggestions endpoint returned wrong result_version",
+    )
+
+    suggestions = suggestions_payload.get("suggestions", [])
+    observed = {
+        (str(item["suggestion_type"]), str(item["observed_term"]))
+        for item in suggestions
+    }
+
+    require(("skill", "Vector Database") in observed, "Vector Database suggestion missing")
+    require(("skill", "RAG Pipeline") in observed, "RAG Pipeline suggestion missing")
+    require(("job_title", "Prompt Engineer") in observed, "Prompt Engineer suggestion missing")
+    require(("skill", "JavaScript") not in observed, "known JavaScript should not be suggested")
+    require(("job_title", "SRE") not in observed, "known SRE should not be suggested")
+    require(suggestions_payload.get("accepted_count") == 0, "suggestions endpoint should not auto-approve")
+    require(
+        suggestions_payload.get("review_required_count") == len(suggestions),
+        "suggestions review_required_count mismatch",
+    )
+
+    print("OK: POST /understanding/taxonomy/suggestions")
+
     print("HERMES-400 taxonomy API check PASSED")
 
     return 0
