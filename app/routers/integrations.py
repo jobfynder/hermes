@@ -7,10 +7,15 @@ from app.integrations.models import (
     IntegrationHealthResponse,
     IntegrationNormalizedEvent,
     JobfynderSubmissionHandoffResult,
+    IntegrationRetryDecisionRequest,
+    IntegrationRetryDecisionResponse,
+    IntegrationRetryPolicyResponse,
 )
 from app.integrations.service import (
     get_integration_health,
     normalize_integration_event,
+    get_retry_policy,
+    decide_retry,
 )
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
@@ -49,4 +54,15 @@ def evaluate_jobfynder_submission_handoff(
             "consultant_id": submission_request.consultant.consultant_id,
         },
     )
+
+@router.get("/retry-policy", response_model=IntegrationRetryPolicyResponse)
+def integrations_retry_policy() -> IntegrationRetryPolicyResponse:
+    return get_retry_policy()
+
+
+@router.post("/retry-decision", response_model=IntegrationRetryDecisionResponse)
+def integrations_retry_decision(
+    request: IntegrationRetryDecisionRequest,
+) -> IntegrationRetryDecisionResponse:
+    return decide_retry(request)
 
