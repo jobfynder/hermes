@@ -1,10 +1,11 @@
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, Form, UploadFile
 
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse
 from app.channels.registry import get_supported_channels
 from app.channels.service import process_channel_intake
+from app.intake.service import process_file_intake
 
 router = APIRouter(prefix="/channels", tags=["Channels"])
 
@@ -61,3 +62,21 @@ def telegram_webhook(payload: dict[str, Any]) -> ChannelIntakeResponse:
     )
 
     return process_channel_intake(request)
+
+
+
+@router.post("/intake/file")
+async def channel_file_intake(
+    file: UploadFile = File(...),
+    channel: str = Form("generic_api"),
+    source_message_id: str = Form(...),
+    document_kind: str = Form("unknown"),
+):
+    content = await file.read()
+
+    return process_file_intake(
+        filename=file.filename or "uploaded.txt",
+        content=content,
+        content_type=file.content_type,
+        document_kind=document_kind,
+    )
