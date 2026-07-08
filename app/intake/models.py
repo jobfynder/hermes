@@ -41,6 +41,17 @@ class AttachmentRecord(BaseModel):
 
 class FileIntakeResult(BaseModel):
     result_version: str = "hermes_file_intake_result_v1"
+    channel: str = "generic_api"
+    source_message_id: str
+    document_kind: str = "unknown"
+    intake_status: str
+    draft_object_type: str | None = None
+    requires_review: bool = False
+    confidence: float = 0.0
+    normalized_skills: list[str] = Field(default_factory=list)
+    normalized_job_titles: list[str] = Field(default_factory=list)
+    taxonomy_signals: dict = Field(default_factory=dict)
     attachment: AttachmentRecord
     extracted_text: dict
     understanding_result: dict
+    errors: list[str] = Field(default_factory=list)

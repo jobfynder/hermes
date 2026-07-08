@@ -79,4 +79,6 @@ async def channel_file_intake(
         content=content,
         content_type=file.content_type,
         document_kind=document_kind,
+        channel=channel,
+        source_message_id=source_message_id,
     )
