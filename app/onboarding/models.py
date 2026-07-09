@@ -73,3 +73,37 @@ class OnboardingProfileDraft(BaseModel):
     understanding_result: dict = Field(default_factory=dict)
     taxonomy_signals: dict = Field(default_factory=dict)
     errors: list[str] = Field(default_factory=list)
+
+
+class OnboardingVerificationDraftRequest(BaseModel):
+    session_id: str
+    role: OnboardingRole
+    full_name: str
+    company_name: str | None = None
+    company_email: str | None = None
+    phone: str | None = None
+    linkedin_url: str | None = None
+    location: str | None = None
+    staffing_focus: str | None = None
+    notes: str | None = None
+    channel: str = "generic_api"
+    metadata: dict = Field(default_factory=dict)
+
+
+class OnboardingVerificationDraft(BaseModel):
+    result_version: str = "hermes_onboarding_verification_draft_v1"
+    session_id: str
+    role: OnboardingRole
+    status: Literal["draft", "needs_review", "blocked"] = "needs_review"
+    full_name: str
+    company_name: str | None = None
+    company_email: str | None = None
+    phone: str | None = None
+    linkedin_url: str | None = None
+    location: str | None = None
+    staffing_focus: str | None = None
+    trust_signals: dict = Field(default_factory=dict)
+    missing_fields: list[str] = Field(default_factory=list)
+    requires_admin_review: bool = True
+    confidence: float = 0.0
+    errors: list[str] = Field(default_factory=list)

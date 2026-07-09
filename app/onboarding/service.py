@@ -247,3 +247,101 @@ def publish_profile_draft(session_id: str) -> dict:
         "requires_user_review": False,
         "draft": draft.model_dump(),
     }
+
+
+def _email_domain(email: str | None) -> str | None:
+    if not email or "@" not in email:
+        return None
+
+    return email.split("@", 1)[1].lower().strip()
+
+
+def _is_public_email_domain(domain: str | None) -> bool:
+    return domain in {
+        "gmail.com",
+        "yahoo.com",
+        "outlook.com",
+        "hotmail.com",
+        "icloud.com",
+        "aol.com",
+        "proton.me",
+        "protonmail.com",
+    }
+
+
+def create_verification_draft(request):
+    from app.drafts.service import create_draft_object
+    from app.onboarding.models import OnboardingVerificationDraft
+
+    missing_fields: list[str] = []
+    trust_signals = {
+        "has_company_email": bool(request.company_email),
+        "has_company_name": bool(request.company_name),
+        "has_linkedin_url": bool(request.linkedin_url),
+        "has_phone": bool(request.phone),
+        "company_email_domain": _email_domain(request.company_email),
+        "public_email_domain": _is_public_email_domain(_email_domain(request.company_email)),
+        "user_review_required": True,
+        "admin_review_required": True,
+    }
+
+    if request.role in {"bench_sales", "recruiter"}:
+        for field in ["company_name", "company_email", "linkedin_url"]:
+            if not getattr(request, field):
+                missing_fields.append(field)
+
+    if request.role == "unknown":
+        missing_fields.append("role")
+
+    confidence = 0.85
+    if missing_fields:
+        confidence -= 0.25
+    if trust_signals["public_email_domain"]:
+        confidence -= 0.25
+
+    confidence = max(confidence, 0.1)
+
+    draft = OnboardingVerificationDraft(
+        session_id=request.session_id,
+        role=request.role,
+        status="needs_review" if missing_fields or trust_signals["public_email_domain"] else "draft",
+        full_name=request.full_name,
+        company_name=request.company_name,
+        company_email=request.company_email,
+        phone=request.phone,
+        linkedin_url=request.linkedin_url,
+        location=request.location,
+        staffing_focus=request.staffing_focus,
+        trust_signals=trust_signals,
+        missing_fields=missing_fields,
+        requires_admin_review=True,
+        confidence=confidence,
+        errors=[],
+    )
+
+    draft_object = create_draft_object(
+        draft_type="draft_bench_sales_profile" if request.role == "bench_sales" else (
+            "draft_recruiter_profile" if request.role == "recruiter" else "draft_consultant_profile"
+        ),
+        source="onboarding_verification",
+        source_ref=request.session_id,
+        channel=request.channel,
+        source_message_id=request.session_id,
+        payload=draft.model_dump(),
+        normalized_skills=[],
+        normalized_job_titles=[],
+        taxonomy_signals={},
+        confidence=confidence,
+        requires_review=True,
+        metadata={
+            "onboarding_session_id": request.session_id,
+            "verification_draft": True,
+        },
+    )
+
+    draft.trust_signals = {
+        **draft.trust_signals,
+        "draft_object_id": draft_object.draft_id,
+    }
+
+    return draft
