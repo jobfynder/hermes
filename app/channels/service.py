@@ -1,9 +1,16 @@
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
+from app.drafts.service import create_draft_object
+from app.runtime.events import emit_event
+from app.runtime.intake_log import (
+    load_idempotency_keys,
+    record_idempotency_key,
+    record_intake,
+)
 from app.understanding.models import RawDocument
 from app.understanding.service import understand_document
 
 
-_seen_duplicate_keys: set[str] = set()
+_seen_duplicate_keys: set[str] = load_idempotency_keys()
 
 
 def build_duplicate_key(request: ChannelIntakeRequest) -> str:
@@ -75,7 +82,7 @@ def draft_object_for(document_kind: DocumentKind) -> str:
 
 def confidence_from_understanding(result: dict, document_kind: DocumentKind) -> float:
     quality = result.get("quality", {})
-    score = quality.get("score")
+    score = quality.get("confidence")
 
     if isinstance(score, int | float):
         return float(score)
@@ -91,6 +98,23 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
     duplicate_key = build_duplicate_key(request)
 
     if duplicate_key in _seen_duplicate_keys:
+        record_intake(
+            {
+                "duplicate_key": duplicate_key,
+                "channel": request.channel,
+                "source_message_id": request.source_message_id,
+                "status": "duplicate",
+                "document_kind": "unknown",
+            }
+        )
+        emit_event(
+            "intake.duplicate",
+            {
+                "duplicate_key": duplicate_key,
+                "channel": request.channel,
+                "source_message_id": request.source_message_id,
+            },
+        )
         return ChannelIntakeResponse(
             channel=request.channel,
             source_message_id=request.source_message_id,
@@ -103,6 +127,26 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         )
 
     _seen_duplicate_keys.add(duplicate_key)
+    record_idempotency_key(duplicate_key)
+    record_intake(
+        {
+            "duplicate_key": duplicate_key,
+            "channel": request.channel,
+            "source_message_id": request.source_message_id,
+            "status": "received",
+            "content_type": request.content_type,
+            "has_text": bool(request.text),
+            "attachment_count": len(request.attachments),
+        }
+    )
+    emit_event(
+        "intake.received",
+        {
+            "duplicate_key": duplicate_key,
+            "channel": request.channel,
+            "source_message_id": request.source_message_id,
+        },
+    )
 
     document_kind = detect_document_kind(request)
 
@@ -142,16 +186,68 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
 
     requires_review = confidence < 0.7 or document_kind in {"unknown", "plain_message"}
 
+    record_intake(
+        {
+            "duplicate_key": duplicate_key,
+            "channel": request.channel,
+            "source_message_id": request.source_message_id,
+            "status": "parsed",
+            "document_kind": document_kind,
+            "normalized_skills": normalized_skills,
+            "normalized_job_titles": normalized_job_titles,
+            "confidence": confidence,
+            "requires_review": requires_review,
+        }
+    )
+    emit_event(
+        "intake.parsed",
+        {
+            "duplicate_key": duplicate_key,
+            "channel": request.channel,
+            "source_message_id": request.source_message_id,
+            "document_kind": document_kind,
+            "normalized_skills": normalized_skills,
+            "normalized_job_titles": normalized_job_titles,
+        },
+    )
+
+    draft_type = draft_object_for(document_kind)
+
+    draft = create_draft_object(
+        draft_type=draft_type,
+        source="channel_text_intake",
+        source_ref=duplicate_key,
+        channel=request.channel,
+        source_message_id=request.source_message_id,
+        payload={
+            "text": request.text or "",
+            "document_kind": document_kind,
+            "structured_data": structured_data,
+        },
+        normalized_skills=normalized_skills,
+        normalized_job_titles=normalized_job_titles,
+        taxonomy_signals=taxonomy_signals,
+        confidence=confidence,
+        requires_review=requires_review,
+        metadata={
+            "duplicate_key": duplicate_key,
+            "content_type": request.content_type,
+        },
+    )
+
     return ChannelIntakeResponse(
         channel=request.channel,
         source_message_id=request.source_message_id,
         intake_status="parsed",
         document_kind=document_kind,
-        understanding_result=understanding_dict,
+        understanding_result={
+            **understanding_dict,
+            "draft_id": draft.draft_id,
+        },
         taxonomy_signals=taxonomy_signals,
         normalized_skills=normalized_skills,
         normalized_job_titles=normalized_job_titles,
-        draft_object_type=draft_object_for(document_kind),
+        draft_object_type=draft_type,
         requires_review=requires_review,
         confidence=confidence,
         errors=[],

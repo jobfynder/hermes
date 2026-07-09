@@ -1,8 +1,11 @@
 from pathlib import Path
 
 from app.channels.service import draft_object_for
+from app.drafts.service import create_draft_object
 from app.intake.models import FileIntakeResult
 from app.intake.storage import store_attachment
+from app.runtime.events import emit_event
+from app.runtime.intake_log import record_intake
 from app.understanding.extractors.local_file import extract_local_file
 from app.understanding.models import DocumentKind
 from app.understanding.service import build_understanding_result
@@ -29,6 +32,27 @@ def process_file_intake(
     channel: str = "generic_api",
     source_message_id: str = "unknown",
 ) -> FileIntakeResult:
+    record_intake(
+        {
+            "channel": channel,
+            "source_message_id": source_message_id,
+            "status": "file_received",
+            "filename": filename,
+            "content_type": content_type,
+            "size_bytes": len(content),
+        }
+    )
+    emit_event(
+        "file_intake.received",
+        {
+            "channel": channel,
+            "source_message_id": source_message_id,
+            "filename": filename,
+            "content_type": content_type,
+            "size_bytes": len(content),
+        },
+    )
+
     attachment = store_attachment(
         filename=filename,
         content=content,
@@ -77,12 +101,62 @@ def process_file_intake(
 
     requires_review = confidence < 0.7 or document_kind == "unknown"
 
+    record_intake(
+        {
+            "channel": channel,
+            "source_message_id": source_message_id,
+            "status": "file_parsed",
+            "document_kind": document_kind,
+            "attachment_id": attachment.attachment_id,
+            "normalized_skills": normalized_skills,
+            "normalized_job_titles": normalized_job_titles,
+            "confidence": confidence,
+            "requires_review": requires_review,
+        }
+    )
+    emit_event(
+        "file_intake.parsed",
+        {
+            "channel": channel,
+            "source_message_id": source_message_id,
+            "document_kind": document_kind,
+            "attachment_id": attachment.attachment_id,
+            "normalized_skills": normalized_skills,
+            "normalized_job_titles": normalized_job_titles,
+        },
+    )
+
+    draft_type = draft_object_for(document_kind)
+
+    draft = create_draft_object(
+        draft_type=draft_type,
+        source="file_intake",
+        source_ref=attachment.storage_ref,
+        channel=channel,
+        source_message_id=source_message_id,
+        payload={
+            "filename": filename,
+            "content_type": content_type,
+            "document_kind": document_kind,
+            "structured_data": structured_data,
+        },
+        normalized_skills=normalized_skills,
+        normalized_job_titles=normalized_job_titles,
+        taxonomy_signals=taxonomy_signals,
+        confidence=confidence,
+        requires_review=requires_review,
+        metadata={
+            "attachment_id": attachment.attachment_id,
+            "checksum_sha256": attachment.checksum_sha256,
+        },
+    )
+
     return FileIntakeResult(
         channel=channel,
         source_message_id=source_message_id,
         document_kind=document_kind,
         intake_status="parsed",
-        draft_object_type=draft_object_for(document_kind),
+        draft_object_type=draft_type,
         requires_review=requires_review,
         confidence=confidence,
         normalized_skills=normalized_skills,
@@ -90,6 +164,9 @@ def process_file_intake(
         taxonomy_signals=taxonomy_signals,
         attachment=attachment,
         extracted_text=extracted.model_dump(),
-        understanding_result=understanding_dict,
+        understanding_result={
+            **understanding_dict,
+            "draft_id": draft.draft_id,
+        },
         errors=[],
     )

@@ -9,7 +9,7 @@ services:
 
     volumes:
       - /opt/jobfynder-docs:/jobfynder-docs
-      - /opt/hermes-runtime:/hermes-runtime:ro
+      - /opt/hermes-runtime:/hermes-runtime
 
     environment:
       - HERMES_RBAC_ENFORCEMENT=enabled
