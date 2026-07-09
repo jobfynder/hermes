@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from app.access.models import ActionAccessRequest
+from app.access.service import authorize_action
 from app.channels.service import draft_object_for
 from app.drafts.service import create_draft_object
 from app.intake.models import FileIntakeResult
@@ -31,7 +33,76 @@ def process_file_intake(
     document_kind: DocumentKind = "unknown",
     channel: str = "generic_api",
     source_message_id: str = "unknown",
+    actor_id: str | None = None,
+    role: str | None = None,
+    action: str | None = None,
 ) -> FileIntakeResult:
+    if actor_id or role or action:
+        if not actor_id or not role or not action:
+            attachment = store_attachment(
+                filename=filename,
+                content=content,
+                content_type=content_type,
+            )
+            return FileIntakeResult(
+                channel=channel,
+                source_message_id=source_message_id,
+                document_kind=document_kind,
+                intake_status="failed",
+                draft_object_type=draft_object_for(document_kind),
+                requires_review=True,
+                confidence=0.0,
+                normalized_skills=[],
+                normalized_job_titles=[],
+                taxonomy_signals={},
+                attachment=attachment,
+                extracted_text={},
+                understanding_result={
+                    "status": "failed",
+                    "errors": ["access_context_incomplete"],
+                },
+                errors=["access_context_incomplete"],
+            )
+
+        decision = authorize_action(
+            ActionAccessRequest(
+                actor_id=actor_id,
+                role=role,
+                action=action,
+                channel=channel,
+                metadata={
+                    "source_message_id": source_message_id,
+                    "filename": filename,
+                },
+            )
+        )
+
+        if decision.status != "allowed":
+            attachment = store_attachment(
+                filename=filename,
+                content=content,
+                content_type=content_type,
+            )
+            return FileIntakeResult(
+                channel=channel,
+                source_message_id=source_message_id,
+                document_kind=document_kind,
+                intake_status="failed",
+                draft_object_type=draft_object_for(document_kind),
+                requires_review=True,
+                confidence=0.0,
+                normalized_skills=[],
+                normalized_job_titles=[],
+                taxonomy_signals={},
+                attachment=attachment,
+                extracted_text={},
+                understanding_result={
+                    "status": "failed",
+                    "errors": [decision.reason or "action_not_allowed"],
+                },
+                errors=[decision.reason or "action_not_allowed"],
+            )
+
     record_intake(
         {
             "channel": channel,

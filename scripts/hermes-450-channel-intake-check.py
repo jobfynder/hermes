@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
@@ -6,6 +7,8 @@ from app.main import app
 
 
 client = TestClient(app)
+
+RUN_ID = str(uuid4())
 
 
 def assert_ok(condition: bool, message: str) -> None:
@@ -43,7 +46,7 @@ def test_supported_channels() -> None:
 def test_text_intake_and_duplicate() -> None:
     payload = {
         "channel": "generic_api",
-        "source_message_id": "hermes-450-check-text-001",
+        "source_message_id": f"hermes-450-check-text-{RUN_ID}",
         "sender": {
             "sender_id": "test-user",
             "sender_name": "Hermes Test",
@@ -65,7 +68,7 @@ def test_text_intake_and_duplicate() -> None:
     assert_ok(data["draft_object_type"] == "draft_job_requirement", "draft object should be job requirement")
     assert_ok("AWS" in data["normalized_skills"], "AWS should be normalized")
     assert_ok("Java" in data["normalized_skills"], "Java should be normalized")
-    assert_ok(data["duplicate_key"] == "generic_api:hermes-450-check-text-001", "duplicate key should be stable")
+    assert_ok(data["duplicate_key"] == f"generic_api:hermes-450-check-text-{RUN_ID}", "duplicate key should be stable")
 
     duplicate = client.post("/channels/intake", json=payload)
     assert_ok(duplicate.status_code == 200, "duplicate should return 200")
@@ -78,7 +81,7 @@ def test_telegram_webhook_intake() -> None:
     payload = {
         "update_id": 450001,
         "message": {
-            "message_id": 77,
+            "message_id": int(RUN_ID.replace("-", "")[:8], 16) % 100000000,
             "from": {
                 "id": 12345,
                 "first_name": "Pavan",
@@ -112,7 +115,7 @@ def test_file_intake() -> None:
         "/channels/intake/file",
         data={
             "channel": "generic_api",
-            "source_message_id": "hermes-450-check-file-001",
+            "source_message_id": f"hermes-450-check-file-{RUN_ID}",
             "document_kind": "job_description",
         },
         files={
@@ -125,7 +128,7 @@ def test_file_intake() -> None:
 
     assert_ok(data["result_version"] == "hermes_file_intake_result_v1", "file result version should match")
     assert_ok(data["channel"] == "generic_api", "file channel should be returned")
-    assert_ok(data["source_message_id"] == "hermes-450-check-file-001", "file source id should be returned")
+    assert_ok(data["source_message_id"] == f"hermes-450-check-file-{RUN_ID}", "file source id should be returned")
     assert_ok(data["intake_status"] == "parsed", "file intake should parse")
     assert_ok(data["document_kind"] == "job_description", "file document kind should match")
     assert_ok(data["draft_object_type"] == "draft_job_requirement", "file draft object should be job requirement")

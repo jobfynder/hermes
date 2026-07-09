@@ -65,6 +65,9 @@ class ChannelSender(BaseModel):
 class ChannelIntakeRequest(BaseModel):
     channel: ChannelName
     source_message_id: str
+    actor_id: str | None = None
+    role: str | None = None
+    action: str | None = None
     sender: ChannelSender = Field(default_factory=ChannelSender)
     workspace_id: str | None = None
     conversation_id: str | None = None

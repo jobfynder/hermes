@@ -1,3 +1,5 @@
+from app.access.models import ActionAccessRequest
+from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
 from app.drafts.service import create_draft_object
 from app.runtime.events import emit_event
@@ -65,6 +67,12 @@ def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
     return "plain_message" if text.strip() else "unknown"
 
 
+def understanding_document_kind(document_kind: DocumentKind) -> str:
+    if document_kind in {"resume", "job_description", "unknown"}:
+        return document_kind
+
+    return "message"
+
 def draft_object_for(document_kind: DocumentKind) -> str:
     mapping = {
         "resume": "draft_consultant_profile",
@@ -94,8 +102,47 @@ def confidence_from_understanding(result: dict, document_kind: DocumentKind) -> 
     return 0.75
 
 
+def enforce_optional_action_access(request: ChannelIntakeRequest) -> list[str]:
+    if not request.actor_id and not request.role and not request.action:
+        return []
+
+    if not request.actor_id or not request.role or not request.action:
+        return ["access_context_incomplete"]
+
+    decision = authorize_action(
+        ActionAccessRequest(
+            actor_id=request.actor_id,
+            role=request.role,
+            action=request.action,
+            channel=request.channel,
+            metadata={
+                "source_message_id": request.source_message_id,
+            },
+        )
+    )
+
+    if decision.status != "allowed":
+        return [decision.reason or "action_not_allowed"]
+
+    return []
+
+
 def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeResponse:
     duplicate_key = build_duplicate_key(request)
+
+    access_errors = enforce_optional_action_access(request)
+    if access_errors:
+        return ChannelIntakeResponse(
+            channel=request.channel,
+            source_message_id=request.source_message_id,
+            intake_status="failed",
+            document_kind="unknown",
+            draft_object_type="draft_channel_note",
+            requires_review=True,
+            confidence=0.0,
+            errors=access_errors,
+            duplicate_key=duplicate_key,
+        )
 
     if duplicate_key in _seen_duplicate_keys:
         record_intake(
@@ -168,7 +215,7 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             content=request.text or "",
             filename=None,
             content_type="text/plain",
-            document_kind=document_kind,
+            document_kind=understanding_document_kind(document_kind),
         )
     )
 

@@ -48,6 +48,9 @@ async def channel_file_intake(
     channel: str = Form("generic_api"),
     source_message_id: str = Form(...),
     document_kind: str = Form("unknown"),
+    actor_id: str | None = Form(None),
+    role: str | None = Form(None),
+    action: str | None = Form(None),
 ):
     content = await file.read()
 
@@ -58,4 +61,7 @@ async def channel_file_intake(
         document_kind=document_kind,
         channel=channel,
         source_message_id=source_message_id,
+        actor_id=actor_id,
+        role=role,
+        action=action,
     )

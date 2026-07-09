@@ -17,6 +17,7 @@ from app.routers.matching import router as matching_router
 from app.routers.channels import router as channels_router
 from app.routers.onboarding import router as onboarding_router
 from app.routers.drafts import router as drafts_router
+from app.routers.access import router as access_router
 
 app = FastAPI(
     title=HERMES_SERVICE_NAME,
@@ -38,3 +39,4 @@ app.include_router(matching_router)
 app.include_router(channels_router)
 app.include_router(onboarding_router)
 app.include_router(drafts_router)
+app.include_router(access_router)
