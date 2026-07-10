@@ -1,4 +1,7 @@
 from fastapi import FastAPI
+from app.routers import submissions
+from app.routers import integrations
+from app.routers import agents
 
 from app.config import HERMES_SERVICE_NAME, HERMES_VERSION
 
@@ -54,3 +57,6 @@ app.include_router(brightdata_provider_router)
 app.include_router(email_provider_router)
 app.include_router(provider_contracts_router)
 app.include_router(comm_intake_router)
+app.include_router(submissions.router)
+app.include_router(integrations.router)
+app.include_router(agents.router)

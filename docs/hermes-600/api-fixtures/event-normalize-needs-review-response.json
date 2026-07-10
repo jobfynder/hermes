@@ -1,0 +1,24 @@
+{
+  "result_version": "hermes_integration_event_v1",
+  "integration_version": "hermes_integrations_foundation_v1",
+  "event_type": "unknown",
+  "provider": "unknown",
+  "correlation_id": "hermes-generated-uuid",
+  "decision": "needs_review",
+  "reasons": [
+    "Received unknown from unknown."
+  ],
+  "risks": [
+    "Integration provider is unknown.",
+    "Integration event type is unknown.",
+    "Integration payload is empty."
+  ],
+  "payload": {},
+  "handoff": {
+    "source_provider": "unknown",
+    "source_external_id": null,
+    "channel": null,
+    "actor_id": null,
+    "metadata": {}
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "result_version": "hermes_integration_retry_decision_v1",
+  "integration_version": "hermes_integrations_foundation_v1",
+  "decision": "retry",
+  "retry_after_seconds": 60,
+  "reason": "Transient integration failure can be retried safely.",
+  "risks": [],
+  "next_actions": [
+    "Retry after 60 seconds."
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "result_version": "hermes_jobfynder_submission_handoff_result_v1",
+  "integration": {
+    "result_version": "hermes_integration_event_v1",
+    "integration_version": "hermes_integrations_foundation_v1",
+    "event_type": "workflow_handoff",
+    "provider": "jobfynder_api",
+    "correlation_id": "corr-jobfynder-api-001",
+    "decision": "accepted",
+    "reasons": [
+      "Received workflow_handoff from jobfynder_api."
+    ],
+    "risks": [],
+    "payload": {
+      "submission_id": "submission-api-001",
+      "current_stage": "discovered",
+      "requirement": {
+        "job_id": "job-api-001",
+        "title": "Python Developer",
+        "required_skills": [
+          "Python",
+          "FastAPI"
+        ]
+      },
+      "consultant": {
+        "consultant_id": "consultant-api-001",
+        "name": "Test Consultant",
+        "skills": [
+          "Python",
+          "FastAPI"
+        ]
+      },
+      "match_result": {
+        "decision": "submit",
+        "match_score": 91
+      }
+    },
+    "handoff": {
+      "source_provider": "jobfynder_api",
+      "source_external_id": "jobfynder-api-001",
+      "channel": "api",
+      "actor_id": "recruiter-001",
+      "metadata": {}
+    }
+  },
+  "submission_intelligence": {
+    "result_version": "hermes_submission_intelligence_result_v1",
+    "workflow_version": "hermes_submission_workflow_v1",
+    "submission_id": "submission-api-001",
+    "current_stage": "discovered",
+    "recommended_stage": "matched",
+    "stage_changed": true,
+    "conflicts": [],
+    "risks": []
+  },
+  "handoff": {
+    "source": "hermes-600-jobfynder-integration",
+    "correlation_id": "corr-jobfynder-api-001",
+    "submission_id": "submission-api-001",
+    "job_id": "job-api-001",
+    "consultant_id": "consultant-api-001"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "current_stage": "discovered",
+  "event": {
+    "event_type": "outcome_recorded",
+    "metadata": {
+      "outcome_type": "placed"
+    }
+  }
+}

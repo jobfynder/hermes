@@ -1,0 +1,221 @@
+{
+  "agent_version": "hermes_agents_foundation_v1",
+  "agents": [
+    {
+      "agent_id": "founder",
+      "allowed_permissions": [
+        "agents:read",
+        "agents:run",
+        "mission_control:read"
+      ],
+      "capabilities": [
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "executive_summary",
+          "description": "Summarize platform state and key decisions.",
+          "name": "Executive Summary",
+          "permissions_required": []
+        },
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "risk_review",
+          "description": "Identify risks and safe next steps.",
+          "name": "Risk Review",
+          "permissions_required": []
+        }
+      ],
+      "default_action_mode": "dry_run",
+      "description": "Prepares founder-level summaries, risks, decisions, and strategic next steps.",
+      "human_review_required": true,
+      "name": "Founder Agent",
+      "role": "founder"
+    },
+    {
+      "agent_id": "recruiter",
+      "allowed_permissions": [
+        "agents:read",
+        "agents:run",
+        "matching:evaluate",
+        "submissions:evaluate"
+      ],
+      "capabilities": [
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "job_review",
+          "description": "Review requirements and explain hiring workflow next steps.",
+          "name": "Job Review",
+          "permissions_required": []
+        },
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "candidate_fit",
+          "description": "Prepare candidate fit reasoning for review.",
+          "name": "Candidate Fit",
+          "permissions_required": []
+        }
+      ],
+      "default_action_mode": "dry_run",
+      "description": "Supports recruiter-side job, match, submission, and follow-up workflows.",
+      "human_review_required": true,
+      "name": "Recruiter Agent",
+      "role": "recruiter"
+    },
+    {
+      "agent_id": "bench_sales",
+      "allowed_permissions": [
+        "agents:read",
+        "agents:run",
+        "matching:evaluate",
+        "submissions:evaluate"
+      ],
+      "capabilities": [
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "submission_packet",
+          "description": "Prepare submission packet guidance without sending.",
+          "name": "Submission Packet",
+          "permissions_required": []
+        },
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "follow_up_plan",
+          "description": "Prepare recruiter follow-up next steps.",
+          "name": "Follow-Up Plan",
+          "permissions_required": []
+        }
+      ],
+      "default_action_mode": "dry_run",
+      "description": "Supports bench sales matching, submission preparation, duplicate-risk review, and follow-up planning.",
+      "human_review_required": true,
+      "name": "Bench Sales Agent",
+      "role": "bench_sales"
+    },
+    {
+      "agent_id": "consultant",
+      "allowed_permissions": [
+        "agents:read",
+        "agents:run",
+        "matching:evaluate"
+      ],
+      "capabilities": [
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "job_fit_explanation",
+          "description": "Explain job fit in plain language.",
+          "name": "Job Fit Explanation",
+          "permissions_required": []
+        },
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "profile_improvement",
+          "description": "Suggest profile and resume improvements.",
+          "name": "Profile Improvement",
+          "permissions_required": []
+        }
+      ],
+      "default_action_mode": "dry_run",
+      "description": "Supports consultant-facing job-fit explanation, profile improvement, and application-status summaries.",
+      "human_review_required": true,
+      "name": "Consultant Agent",
+      "role": "consultant"
+    },
+    {
+      "agent_id": "engineering",
+      "allowed_permissions": [
+        "agents:read",
+        "agents:run",
+        "engineering_memory:write"
+      ],
+      "capabilities": [
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "implementation_plan",
+          "description": "Prepare safe implementation steps.",
+          "name": "Implementation Plan",
+          "permissions_required": []
+        },
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "module_status",
+          "description": "Summarize Hermes module state.",
+          "name": "Module Status",
+          "permissions_required": []
+        }
+      ],
+      "default_action_mode": "dry_run",
+      "description": "Supports safe engineering summaries, module status, implementation planning, and operational checklists.",
+      "human_review_required": true,
+      "name": "Engineering Agent",
+      "role": "engineering"
+    },
+    {
+      "agent_id": "support",
+      "allowed_permissions": [
+        "agents:read",
+        "agents:run"
+      ],
+      "capabilities": [
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "support_summary",
+          "description": "Summarize user issue and likely resolution path.",
+          "name": "Support Summary",
+          "permissions_required": []
+        },
+        {
+          "allowed_action_modes": [
+            "dry_run",
+            "prepare_only"
+          ],
+          "capability_id": "reply_draft",
+          "description": "Prepare support reply drafts for human review.",
+          "name": "Reply Draft",
+          "permissions_required": []
+        }
+      ],
+      "default_action_mode": "dry_run",
+      "description": "Supports user issue summaries, support reply drafts, and safe escalation routing.",
+      "human_review_required": true,
+      "name": "Support Agent",
+      "role": "support"
+    }
+  ],
+  "supported_action_modes": [
+    "dry_run",
+    "prepare_only",
+    "execute"
+  ]
+}

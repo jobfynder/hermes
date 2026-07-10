@@ -1,0 +1,33 @@
+{
+  "integration_version": "hermes_integrations_foundation_v1",
+  "max_retries_default": 3,
+  "retryable_status_codes": [
+    408,
+    429,
+    500,
+    502,
+    503,
+    504
+  ],
+  "non_retryable_status_codes": [
+    400,
+    401,
+    403,
+    404,
+    409,
+    422
+  ],
+  "retryable_error_types": [
+    "timeout",
+    "rate_limited",
+    "temporary_network",
+    "server_error"
+  ],
+  "non_retryable_error_types": [
+    "validation_error",
+    "authentication_error",
+    "permission_error",
+    "not_found",
+    "duplicate"
+  ]
+}

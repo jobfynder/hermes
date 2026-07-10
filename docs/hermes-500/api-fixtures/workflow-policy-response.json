@@ -1,0 +1,25 @@
+{
+  "workflow_version": "hermes_submission_workflow_v1",
+  "supported_stages": [
+    "discovered",
+    "matched",
+    "intro_requested",
+    "intro_accepted",
+    "submitted",
+    "screening",
+    "client_submitted",
+    "interview",
+    "offer",
+    "placed",
+    "rejected",
+    "withdrawn",
+    "duplicate_risk",
+    "closed_lost"
+  ],
+  "terminal_stages": [
+    "placed",
+    "rejected",
+    "withdrawn",
+    "closed_lost"
+  ]
+}

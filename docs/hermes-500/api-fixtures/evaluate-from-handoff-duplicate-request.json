@@ -1,0 +1,28 @@
+{
+  "current_stage": "matched",
+  "consultant_id": "consultant-fixture-001",
+  "job_id": "job-fixture-001",
+  "existing_submission_keys": [
+    "consultant-fixture-001:job-fixture-001"
+  ],
+  "resume_result": {
+    "structured_data": {
+      "normalized_skills": [
+        "Python"
+      ]
+    }
+  },
+  "job_result": {
+    "structured_data": {
+      "required_skills": [
+        {
+          "name": "Python"
+        }
+      ]
+    }
+  },
+  "match_result": {
+    "decision": "submit",
+    "match_score": 91
+  }
+}

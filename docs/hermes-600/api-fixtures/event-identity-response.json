@@ -1,0 +1,13 @@
+{
+  "result_version": "hermes_integration_event_identity_v1",
+  "integration_version": "hermes_integrations_foundation_v1",
+  "provider": "jobfynder_api",
+  "event_type": "workflow_handoff",
+  "correlation_id": "corr-identity-api-001",
+  "idempotency_key": "stable-sha256-idempotency-key",
+  "payload_fingerprint": "stable-sha256-payload-fingerprint",
+  "replay_safe": true,
+  "reasons": [
+    "Event identity generated from provider, event type, source id, correlation id, and payload fingerprint."
+  ]
+}

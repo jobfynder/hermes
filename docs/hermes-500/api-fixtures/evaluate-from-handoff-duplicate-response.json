@@ -1,0 +1,14 @@
+{
+  "result_version": "hermes_submission_intelligence_result_v1",
+  "recommended_stage": "duplicate_risk",
+  "stage_changed": true,
+  "conflicts": [
+    {
+      "conflict_type": "possible_duplicate_submission"
+    }
+  ],
+  "follow_up": {
+    "required": true,
+    "priority": "high"
+  }
+}

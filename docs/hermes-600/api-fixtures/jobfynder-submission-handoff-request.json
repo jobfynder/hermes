@@ -1,0 +1,34 @@
+{
+  "event_type": "workflow_handoff",
+  "source": {
+    "provider": "jobfynder_api",
+    "external_id": "jobfynder-api-001",
+    "channel": "api",
+    "actor_id": "recruiter-001"
+  },
+  "correlation_id": "corr-jobfynder-api-001",
+  "payload": {
+    "submission_id": "submission-api-001",
+    "current_stage": "discovered",
+    "requirement": {
+      "job_id": "job-api-001",
+      "title": "Python Developer",
+      "required_skills": [
+        "Python",
+        "FastAPI"
+      ]
+    },
+    "consultant": {
+      "consultant_id": "consultant-api-001",
+      "name": "Test Consultant",
+      "skills": [
+        "Python",
+        "FastAPI"
+      ]
+    },
+    "match_result": {
+      "decision": "submit",
+      "match_score": 91
+    }
+  }
+}
