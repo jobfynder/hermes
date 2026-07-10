@@ -5,6 +5,8 @@ from app.onboarding.models import (
     OnboardingProfileDraftRequest,
     OnboardingSession,
     OnboardingSessionRequest,
+    OnboardingVerificationDraft,
+    OnboardingVerificationDraftRequest,
 )
 from app.onboarding.service import (
     create_onboarding_session,
@@ -12,6 +14,7 @@ from app.onboarding.service import (
     get_onboarding_session,
     get_profile_draft,
     publish_profile_draft,
+    create_verification_draft,
 )
 
 router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
@@ -52,3 +55,10 @@ def read_onboarding_profile_draft(session_id: str) -> OnboardingProfileDraft:
 @router.post("/profile/publish/{session_id}")
 def publish_onboarding_profile(session_id: str) -> dict:
     return publish_profile_draft(session_id)
+
+@router.post("/verification/draft", response_model=OnboardingVerificationDraft)
+def create_onboarding_verification_draft(
+    request: OnboardingVerificationDraftRequest,
+) -> OnboardingVerificationDraft:
+    return create_verification_draft(request)
+

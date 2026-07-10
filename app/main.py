@@ -20,6 +20,10 @@ from app.routers.drafts import router as drafts_router
 from app.routers.access import router as access_router
 from app.routers.telegram_provider import router as telegram_provider_router
 from app.routers.providers import router as providers_router
+from app.routers.linkedin_provider import router as linkedin_provider_router
+from app.routers.brightdata_provider import router as brightdata_provider_router
+from app.routers.email_provider import router as email_provider_router
+from app.routers.provider_contracts import router as provider_contracts_router
 
 app = FastAPI(
     title=HERMES_SERVICE_NAME,
@@ -44,3 +48,7 @@ app.include_router(drafts_router)
 app.include_router(access_router)
 app.include_router(telegram_provider_router)
 app.include_router(providers_router)
+app.include_router(linkedin_provider_router)
+app.include_router(brightdata_provider_router)
+app.include_router(email_provider_router)
+app.include_router(provider_contracts_router)

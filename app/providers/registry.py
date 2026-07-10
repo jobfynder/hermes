@@ -1,5 +1,6 @@
 from app.providers.models import ProviderHealth
 from app.providers.telegram.service import telegram_provider_status
+from app.providers.brightdata.service import brightdata_provider_status
 
 
 PROVIDER_NAMES = [
@@ -34,6 +35,27 @@ def telegram_health() -> ProviderHealth:
     )
 
 
+def brightdata_health() -> ProviderHealth:
+    status = brightdata_provider_status()
+    configured = bool(status.get("configured"))
+
+    return ProviderHealth(
+        provider="brightdata",
+        status="configured" if configured else "contract",
+        configured=configured,
+        supports_webhook=False,
+        supports_files=True,
+        supports_outbound=False,
+        webhook_url=None,
+        checks={
+            "has_api_key": status.get("has_api_key"),
+            "has_profile_api_url": status.get("has_profile_api_url"),
+            "uses_linkedin_oauth_token": status.get("uses_linkedin_oauth_token"),
+        },
+        errors=[] if configured else ["brightdata_not_configured"],
+    )
+
+
 def contract_health(provider: str) -> ProviderHealth:
     return ProviderHealth(
         provider=provider,
@@ -53,6 +75,9 @@ def contract_health(provider: str) -> ProviderHealth:
 def get_provider_health(provider: str) -> ProviderHealth:
     if provider == "telegram":
         return telegram_health()
+
+    if provider == "brightdata":
+        return brightdata_health()
 
     if provider in PROVIDER_NAMES:
         return contract_health(provider)
