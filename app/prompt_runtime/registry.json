@@ -1,0 +1,75 @@
+{
+  "registry_version": "hermes_prompt_registry_v1",
+  "prompts": [
+    {
+      "prompt_id": "resume_builder.summary_improve",
+      "name": "Resume Summary Improvement",
+      "domain": "resume_builder",
+      "version": "v1",
+      "description": "Improves a resume summary using only verified source text.",
+      "required_variables": ["source_text"],
+      "optional_variables": ["target_role", "tone", "constraints"],
+      "system_template": "You are Hermes Resume Builder. Improve resume wording without inventing facts. Use only verified source material. Do not add employers, dates, degrees, certifications, projects, tools, clients, metrics, or work authorization unless present in the source.",
+      "user_template": "Source resume text:\\n{source_text}\\n\\nTarget role: {target_role}\\nTone: {tone}\\nConstraints: {constraints}\\n\\nReturn an improved professional summary and list any missing information as questions instead of inventing it.",
+      "safety_policy": "hermes_resume_no_fabrication_v1",
+      "default_model": "portkey-default",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true,
+        "no_fabrication": true
+      }
+    },
+    {
+      "prompt_id": "resume_builder.bullet_rewrite",
+      "name": "Resume Bullet Rewrite",
+      "domain": "resume_builder",
+      "version": "v1",
+      "description": "Rewrites resume bullets for clarity and impact without adding unsupported claims.",
+      "required_variables": ["source_text"],
+      "optional_variables": ["target_role", "skills_to_emphasize", "constraints"],
+      "system_template": "You rewrite resume bullets. Preserve truth. Do not add unsupported achievements, numbers, companies, dates, domains, tools, certifications, or leadership claims.",
+      "user_template": "Original resume bullets:\\n{source_text}\\n\\nTarget role: {target_role}\\nSkills to emphasize only if present: {skills_to_emphasize}\\nConstraints: {constraints}\\n\\nRewrite the bullets. If evidence is missing, mark it as a question for the user.",
+      "safety_policy": "hermes_resume_no_fabrication_v1",
+      "default_model": "portkey-default",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true,
+        "no_fabrication": true
+      }
+    },
+    {
+      "prompt_id": "matching.fit_explanation",
+      "name": "Candidate Fit Explanation",
+      "domain": "matching",
+      "version": "v1",
+      "description": "Explains resume-to-job match reasoning from structured match evidence.",
+      "required_variables": ["match_result"],
+      "optional_variables": ["resume_snapshot", "job_snapshot"],
+      "system_template": "You explain candidate-job fit using only the provided structured match evidence. Do not change the match decision or invent skills.",
+      "user_template": "Match result:\\n{match_result}\\n\\nResume snapshot:\\n{resume_snapshot}\\n\\nJob snapshot:\\n{job_snapshot}\\n\\nExplain strengths, gaps, risks, and next actions.",
+      "safety_policy": "hermes_prompt_safety_v1",
+      "default_model": "portkey-default",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true
+      }
+    },
+    {
+      "prompt_id": "agents.support_reply_draft",
+      "name": "Support Reply Draft",
+      "domain": "support",
+      "version": "v1",
+      "description": "Drafts a support reply for human review.",
+      "required_variables": ["issue_summary"],
+      "optional_variables": ["user_context", "resolution_status"],
+      "system_template": "You draft support replies for human review. Be accurate, clear, and do not promise actions that are not confirmed.",
+      "user_template": "Issue summary:\\n{issue_summary}\\n\\nUser context:\\n{user_context}\\n\\nResolution status:\\n{resolution_status}\\n\\nDraft a concise support reply.",
+      "safety_policy": "hermes_prompt_safety_v1",
+      "default_model": "portkey-default",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true
+      }
+    }
+  ]
+}

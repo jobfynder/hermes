@@ -1,0 +1,11 @@
+{
+  "prompt_id": "resume_builder.summary_improve",
+  "variables": {
+    "source_text": "Senior Java developer with Spring Boot and AWS experience.",
+    "target_role": "Senior Java Developer",
+    "tone": "professional",
+    "constraints": "Do not add unsupported facts."
+  },
+  "mode": "dry_run",
+  "source": "fixture"
+}
