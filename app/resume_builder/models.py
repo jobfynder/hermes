@@ -225,3 +225,47 @@ class ResumeTailoringResponse(BaseModel):
     risks: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeQualityRequest(BaseModel):
+    document: ResumeDocumentInput
+    required_sections: list[ResumeSectionKind] = Field(
+        default_factory=lambda: [
+            "contact",
+            "summary",
+            "skills",
+            "experience",
+            "education",
+        ]
+    )
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeQualityMetric(BaseModel):
+    code: str
+    label: str
+    score: float = Field(..., ge=0.0, le=100.0)
+    status: Literal["pass", "warning", "fail"]
+    message: str
+    section_id: str | None = None
+    requires_user_input: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeQualityResponse(BaseModel):
+    result_version: str = "hermes_resume_quality_v1"
+    decision: ResumeBuilderDecision
+    quality_score: float = Field(..., ge=0.0, le=100.0)
+    completeness_score: float = Field(..., ge=0.0, le=100.0)
+    provenance_score: float = Field(..., ge=0.0, le=100.0)
+    metrics: list[ResumeQualityMetric] = Field(default_factory=list)
+    missing_sections: list[ResumeSectionKind] = Field(default_factory=list)
+    empty_sections: list[str] = Field(default_factory=list)
+    unverified_sections: list[str] = Field(default_factory=list)
+    human_review_required: bool = True
+    automatic_fix_allowed: bool = False
+    external_ai_used: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)

@@ -6,6 +6,8 @@ from app.resume_builder.models import (
     ResumeBuilderSafetyPolicy,
     ResumeBulletSuggestionRequest,
     ResumeDocumentInput,
+    ResumeQualityRequest,
+    ResumeQualityResponse,
     ResumeSkillNormalizationRequest,
     ResumeSkillNormalizationResponse,
     ResumeSuggestionResponse,
@@ -15,6 +17,7 @@ from app.resume_builder.models import (
 )
 from app.resume_builder.service import (
     analyze_resume_document,
+    analyze_resume_quality,
     analyze_resume_tailoring,
     get_resume_builder_health,
     suggest_bullet,
@@ -105,3 +108,16 @@ def resume_builder_tailor(
     ),
 ) -> ResumeTailoringResponse:
     return analyze_resume_tailoring(request)
+
+
+@router.post(
+    "/quality/analyze",
+    response_model=ResumeQualityResponse,
+)
+def resume_builder_quality_analyze(
+    request: ResumeQualityRequest,
+    _user: dict = Depends(
+        require_permission("resume_builder:analyze")
+    ),
+) -> ResumeQualityResponse:
+    return analyze_resume_quality(request)

@@ -1,3 +1,6 @@
+from app.resume_builder.quality import (
+    analyze_resume_quality,
+)
 from app.resume_builder.tailoring import (
     analyze_resume_tailoring,
 )
