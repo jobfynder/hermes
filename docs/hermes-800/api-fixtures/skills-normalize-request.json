@@ -1,0 +1,19 @@
+{
+  "skills": [
+    "JS",
+    "ReactJS",
+    "K8s",
+    "Unknown Internal Platform"
+  ],
+  "source_references": [
+    {
+      "source_id": "resume-source-003",
+      "source_type": "parsed_resume",
+      "field_path": "skills",
+      "excerpt": "JS, ReactJS, K8s, Unknown Internal Platform",
+      "verified": true,
+      "metadata": {}
+    }
+  ],
+  "metadata": {}
+}

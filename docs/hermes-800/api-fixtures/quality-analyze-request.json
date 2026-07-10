@@ -1,0 +1,93 @@
+{
+  "document": {
+    "resume_id": "resume-001",
+    "user_id": "user-001",
+    "source_text": "Verified resume source.",
+    "sections": [
+      {
+        "section_id": "contact",
+        "section_type": "contact",
+        "content": "Candidate contact details",
+        "source_references": [
+          {
+            "source_id": "source-contact",
+            "source_type": "parsed_resume",
+            "field_path": "contact",
+            "verified": true,
+            "metadata": {}
+          }
+        ],
+        "metadata": {}
+      },
+      {
+        "section_id": "summary",
+        "section_type": "summary",
+        "content": "Backend engineer.",
+        "source_references": [
+          {
+            "source_id": "source-summary",
+            "source_type": "parsed_resume",
+            "field_path": "summary",
+            "verified": true,
+            "metadata": {}
+          }
+        ],
+        "metadata": {}
+      },
+      {
+        "section_id": "skills",
+        "section_type": "skills",
+        "content": "Java, AWS",
+        "source_references": [
+          {
+            "source_id": "source-skills",
+            "source_type": "parsed_resume",
+            "field_path": "skills",
+            "verified": true,
+            "metadata": {}
+          }
+        ],
+        "metadata": {}
+      },
+      {
+        "section_id": "experience",
+        "section_type": "experience",
+        "content": "Built backend services.",
+        "source_references": [
+          {
+            "source_id": "source-experience",
+            "source_type": "parsed_resume",
+            "field_path": "experience",
+            "verified": true,
+            "metadata": {}
+          }
+        ],
+        "metadata": {}
+      },
+      {
+        "section_id": "education",
+        "section_type": "education",
+        "content": "Verified education.",
+        "source_references": [
+          {
+            "source_id": "source-education",
+            "source_type": "parsed_resume",
+            "field_path": "education",
+            "verified": true,
+            "metadata": {}
+          }
+        ],
+        "metadata": {}
+      }
+    ],
+    "metadata": {}
+  },
+  "required_sections": [
+    "contact",
+    "summary",
+    "skills",
+    "experience",
+    "education"
+  ],
+  "metadata": {}
+}

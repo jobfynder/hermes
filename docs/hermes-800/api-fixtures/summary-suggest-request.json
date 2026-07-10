@@ -1,0 +1,19 @@
+{
+  "source_text": "Senior Java engineer with AWS experience.",
+  "target_role": "Senior Backend Engineer",
+  "tone": "professional",
+  "constraints": "Do not invent metrics, employers, dates, or achievements.",
+  "source_references": [
+    {
+      "source_id": "resume-source-001",
+      "source_type": "resume_text",
+      "field_path": "summary",
+      "excerpt": "Senior Java engineer with AWS experience.",
+      "verified": true,
+      "metadata": {}
+    }
+  ],
+  "correlation_id": "resume-summary-001",
+  "actor_id": "user-001",
+  "metadata": {}
+}

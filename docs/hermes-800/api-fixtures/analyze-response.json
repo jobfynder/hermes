@@ -1,0 +1,20 @@
+{
+  "result_version": "hermes_resume_builder_result_v1",
+  "decision": "completed",
+  "human_review_required": true,
+  "issues": [],
+  "reasons": [
+    "Resume input passed deterministic safety validation."
+  ],
+  "risks": [],
+  "next_actions": [
+    "Proceed only with human-reviewed, source-grounded suggestions."
+  ],
+  "metadata": {
+    "section_count": 1,
+    "error_count": 0,
+    "warning_count": 0,
+    "external_ai_used": false,
+    "prompt_runtime_used": false
+  }
+}

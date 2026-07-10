@@ -1,0 +1,24 @@
+{
+  "resume_id": "resume-001",
+  "user_id": "user-001",
+  "source_text": "Senior Java engineer with AWS experience.",
+  "sections": [
+    {
+      "section_id": "summary",
+      "section_type": "summary",
+      "content": "Senior Java engineer with AWS experience.",
+      "source_references": [
+        {
+          "source_id": "resume-source-001",
+          "source_type": "resume_text",
+          "field_path": "summary",
+          "excerpt": "Senior Java engineer with AWS experience.",
+          "verified": true,
+          "metadata": {}
+        }
+      ],
+      "metadata": {}
+    }
+  ],
+  "metadata": {}
+}

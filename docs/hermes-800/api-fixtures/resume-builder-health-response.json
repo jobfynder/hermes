@@ -1,0 +1,12 @@
+{
+  "status": "healthy",
+  "module": "HERMES-800",
+  "service": "resume_builder_intelligence",
+  "foundation_version": "hermes_resume_builder_v1",
+  "deterministic_analysis_enabled": true,
+  "prompt_runtime_available": true,
+  "prompt_runtime_default_mode": "dry_run",
+  "external_ai_enabled": false,
+  "human_review_required": true,
+  "automatic_publish_allowed": false
+}

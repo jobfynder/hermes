@@ -1,0 +1,9 @@
+{
+  "policy_version": "hermes_resume_builder_safety_v1",
+  "fabrication_allowed": false,
+  "human_review_required": true,
+  "automatic_publish_allowed": false,
+  "external_ai_enabled": false,
+  "prompt_runtime_mode": "dry_run",
+  "source_traceability_required": true
+}

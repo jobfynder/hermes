@@ -1,0 +1,22 @@
+{
+  "source_text": "Built Java APIs and deployed services on AWS.",
+  "target_role": "Senior Backend Engineer",
+  "skills_to_emphasize": [
+    "Java",
+    "AWS"
+  ],
+  "constraints": "Do not invent metrics or unsupported responsibilities.",
+  "source_references": [
+    {
+      "source_id": "resume-source-002",
+      "source_type": "resume_text",
+      "field_path": "experience[0].bullets[0]",
+      "excerpt": "Built Java APIs and deployed services on AWS.",
+      "verified": true,
+      "metadata": {}
+    }
+  ],
+  "correlation_id": "resume-bullet-001",
+  "actor_id": "user-001",
+  "metadata": {}
+}

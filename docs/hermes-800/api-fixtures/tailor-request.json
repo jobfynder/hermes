@@ -1,0 +1,37 @@
+{
+  "resume": {
+    "skills": [
+      "Java",
+      "Spring Boot",
+      "PostgreSQL",
+      "AWS"
+    ],
+    "years_experience": 7,
+    "location": "Dallas, TX",
+    "work_authorization": "H1B"
+  },
+  "job": {
+    "required_skills": [
+      "Java",
+      "Spring Boot",
+      "Kafka"
+    ],
+    "preferred_skills": [
+      "AWS",
+      "Docker"
+    ],
+    "years_experience": 6,
+    "location": "Dallas, TX",
+    "work_authorization": "H1B"
+  },
+  "source_references": [
+    {
+      "source_id": "resume-source-004",
+      "source_type": "parsed_resume",
+      "field_path": "skills",
+      "verified": true,
+      "metadata": {}
+    }
+  ],
+  "metadata": {}
+}
