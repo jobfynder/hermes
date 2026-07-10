@@ -177,3 +177,51 @@ class ResumeSkillNormalizationResponse(BaseModel):
     risks: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeTailoringRequest(BaseModel):
+    resume: dict[str, Any] = Field(default_factory=dict)
+    job: dict[str, Any] = Field(default_factory=dict)
+    source_references: list[ResumeSourceReference] = Field(
+        default_factory=list
+    )
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeTailoringOpportunity(BaseModel):
+    code: str
+    category: Literal[
+        "matched_skill",
+        "missing_required_skill",
+        "preferred_skill",
+        "experience",
+        "location",
+        "work_authorization",
+        "general",
+    ]
+    message: str
+    skill: str | None = None
+    requires_user_input: bool = False
+    safe_to_emphasize: bool = False
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeTailoringResponse(BaseModel):
+    result_version: str = "hermes_resume_tailoring_v1"
+    decision: ResumeBuilderDecision
+    match_decision: str
+    match_score: float
+    matched_required_skills: list[str] = Field(default_factory=list)
+    missing_required_skills: list[str] = Field(default_factory=list)
+    matched_preferred_skills: list[str] = Field(default_factory=list)
+    opportunities: list[ResumeTailoringOpportunity] = Field(
+        default_factory=list
+    )
+    human_review_required: bool = True
+    automatic_rewrite_allowed: bool = False
+    external_ai_used: bool = False
+    source_traceability_present: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)

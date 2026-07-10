@@ -1,3 +1,6 @@
+from app.resume_builder.tailoring import (
+    analyze_resume_tailoring,
+)
 from app.resume_builder.taxonomy import (
     normalize_resume_skills,
 )

@@ -10,9 +10,12 @@ from app.resume_builder.models import (
     ResumeSkillNormalizationResponse,
     ResumeSuggestionResponse,
     ResumeSummarySuggestionRequest,
+    ResumeTailoringRequest,
+    ResumeTailoringResponse,
 )
 from app.resume_builder.service import (
     analyze_resume_document,
+    analyze_resume_tailoring,
     get_resume_builder_health,
     suggest_bullet,
     suggest_summary,
@@ -89,3 +92,16 @@ def resume_builder_skills_normalize(
     ),
 ) -> ResumeSkillNormalizationResponse:
     return normalize_resume_skills(request)
+
+
+@router.post(
+    "/tailor",
+    response_model=ResumeTailoringResponse,
+)
+def resume_builder_tailor(
+    request: ResumeTailoringRequest,
+    _user: dict = Depends(
+        require_permission("resume_builder:analyze")
+    ),
+) -> ResumeTailoringResponse:
+    return analyze_resume_tailoring(request)
