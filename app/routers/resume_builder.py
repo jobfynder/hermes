@@ -4,11 +4,16 @@ from app.resume_builder.models import (
     ResumeBuilderHealthResponse,
     ResumeBuilderResult,
     ResumeBuilderSafetyPolicy,
+    ResumeBulletSuggestionRequest,
     ResumeDocumentInput,
+    ResumeSuggestionResponse,
+    ResumeSummarySuggestionRequest,
 )
 from app.resume_builder.service import (
     analyze_resume_document,
     get_resume_builder_health,
+    suggest_bullet,
+    suggest_summary,
     get_resume_builder_policy,
 )
 from app.security.rbac import require_permission
@@ -42,3 +47,29 @@ def resume_builder_analyze(
     ),
 ) -> ResumeBuilderResult:
     return analyze_resume_document(document)
+
+
+@router.post(
+    "/summary/suggest",
+    response_model=ResumeSuggestionResponse,
+)
+def resume_builder_summary_suggest(
+    request: ResumeSummarySuggestionRequest,
+    _user: dict = Depends(
+        require_permission("resume_builder:suggest")
+    ),
+) -> ResumeSuggestionResponse:
+    return suggest_summary(request)
+
+
+@router.post(
+    "/bullets/suggest",
+    response_model=ResumeSuggestionResponse,
+)
+def resume_builder_bullet_suggest(
+    request: ResumeBulletSuggestionRequest,
+    _user: dict = Depends(
+        require_permission("resume_builder:suggest")
+    ),
+) -> ResumeSuggestionResponse:
+    return suggest_bullet(request)

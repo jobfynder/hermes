@@ -1,3 +1,7 @@
+from app.resume_builder.adapters import (
+    suggest_bullet,
+    suggest_summary,
+)
 from app.resume_builder.models import (
     ResumeBuilderHealthResponse,
     ResumeBuilderResult,

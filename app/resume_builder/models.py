@@ -96,3 +96,50 @@ class ResumeBuilderResult(BaseModel):
     risks: list[str] = Field(default_factory=list)
     next_actions: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeSummarySuggestionRequest(BaseModel):
+    source_text: str = Field(..., min_length=1)
+    target_role: str | None = None
+    tone: str | None = None
+    constraints: str | None = None
+    source_references: list[ResumeSourceReference] = Field(
+        default_factory=list
+    )
+    correlation_id: str | None = None
+    actor_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeBulletSuggestionRequest(BaseModel):
+    source_text: str = Field(..., min_length=1)
+    target_role: str | None = None
+    skills_to_emphasize: list[str] = Field(default_factory=list)
+    constraints: str | None = None
+    source_references: list[ResumeSourceReference] = Field(
+        default_factory=list
+    )
+    correlation_id: str | None = None
+    actor_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeSuggestionResponse(BaseModel):
+    result_version: str = "hermes_resume_suggestion_v1"
+    suggestion_type: Literal["summary", "bullet"]
+    decision: ResumeBuilderDecision
+    prompt_id: str
+    prompt_version: str
+    mode_requested: Literal["dry_run"] = "dry_run"
+    mode_effective: Literal["dry_run"] = "dry_run"
+    provider: str
+    output_text: str | None = None
+    human_review_required: bool = True
+    source_traceability_present: bool
+    reasons: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    rendered_messages: list[dict[str, str]] = Field(
+        default_factory=list
+    )
+    metadata: dict[str, Any] = Field(default_factory=dict)
