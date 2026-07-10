@@ -24,6 +24,7 @@ from app.routers.linkedin_provider import router as linkedin_provider_router
 from app.routers.brightdata_provider import router as brightdata_provider_router
 from app.routers.email_provider import router as email_provider_router
 from app.routers.provider_contracts import router as provider_contracts_router
+from app.routers.comm_intake import router as comm_intake_router
 
 app = FastAPI(
     title=HERMES_SERVICE_NAME,
@@ -52,3 +53,4 @@ app.include_router(linkedin_provider_router)
 app.include_router(brightdata_provider_router)
 app.include_router(email_provider_router)
 app.include_router(provider_contracts_router)
+app.include_router(comm_intake_router)
