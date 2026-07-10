@@ -1,3 +1,6 @@
+from app.resume_builder.taxonomy import (
+    normalize_resume_skills,
+)
 from app.resume_builder.adapters import (
     suggest_bullet,
     suggest_summary,

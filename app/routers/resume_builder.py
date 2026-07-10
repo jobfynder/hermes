@@ -6,6 +6,8 @@ from app.resume_builder.models import (
     ResumeBuilderSafetyPolicy,
     ResumeBulletSuggestionRequest,
     ResumeDocumentInput,
+    ResumeSkillNormalizationRequest,
+    ResumeSkillNormalizationResponse,
     ResumeSuggestionResponse,
     ResumeSummarySuggestionRequest,
 )
@@ -15,6 +17,7 @@ from app.resume_builder.service import (
     suggest_bullet,
     suggest_summary,
     get_resume_builder_policy,
+    normalize_resume_skills,
 )
 from app.security.rbac import require_permission
 
@@ -73,3 +76,16 @@ def resume_builder_bullet_suggest(
     ),
 ) -> ResumeSuggestionResponse:
     return suggest_bullet(request)
+
+
+@router.post(
+    "/skills/normalize",
+    response_model=ResumeSkillNormalizationResponse,
+)
+def resume_builder_skills_normalize(
+    request: ResumeSkillNormalizationRequest,
+    _user: dict = Depends(
+        require_permission("resume_builder:analyze")
+    ),
+) -> ResumeSkillNormalizationResponse:
+    return normalize_resume_skills(request)

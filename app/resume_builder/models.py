@@ -143,3 +143,37 @@ class ResumeSuggestionResponse(BaseModel):
         default_factory=list
     )
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeSkillNormalizationRequest(BaseModel):
+    skills: list[str] = Field(default_factory=list)
+    source_references: list[ResumeSourceReference] = Field(
+        default_factory=list
+    )
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeNormalizedSkill(BaseModel):
+    input: str
+    normalized: str
+    matched: bool
+    match_type: Literal["canonical", "alias", "unknown"]
+    confidence: Literal["high", "medium", "low"]
+    taxonomy_version: str
+
+
+class ResumeSkillNormalizationResponse(BaseModel):
+    result_version: str = "hermes_resume_skill_normalization_v1"
+    decision: ResumeBuilderDecision
+    normalized_skills: list[ResumeNormalizedSkill] = Field(
+        default_factory=list
+    )
+    canonical_skills: list[str] = Field(default_factory=list)
+    unknown_skills: list[str] = Field(default_factory=list)
+    human_review_required: bool = True
+    external_ai_used: bool = False
+    source_traceability_present: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
