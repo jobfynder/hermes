@@ -4,8 +4,8 @@ from typing import Any
 def build_start_menu() -> dict[str, Any]:
     return {
         "text": (
-            "Welcome to Jobfynder Hermes.\n\n"
-            "Please choose what you want to do. Free chat is disabled to protect your data and reduce processing cost."
+            "Welcome to Jobfynder.\n\n"
+            "Choose an action below, or directly paste a job description, resume, hotlist, or recruiter profile."
         ),
         "reply_markup": {
             "keyboard": [

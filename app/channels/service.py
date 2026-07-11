@@ -21,6 +21,19 @@ def build_duplicate_key(request: ChannelIntakeRequest) -> str:
     return f"{request.channel}:{request.source_message_id}"
 
 
+
+def is_duplicate_key(duplicate_key: str) -> bool:
+    return duplicate_key in _seen_duplicate_keys
+
+
+def remember_duplicate_key(duplicate_key: str) -> None:
+    if duplicate_key in _seen_duplicate_keys:
+        return
+
+    _seen_duplicate_keys.add(duplicate_key)
+    record_idempotency_key(duplicate_key)
+
+
 _JOB_STRONG_MARKERS = (
     "job description",
     "job opening",

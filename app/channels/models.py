@@ -79,8 +79,18 @@ class ChannelIntakeRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+
+class ChannelOutboundMessage(BaseModel):
+    channel: ChannelName
+    conversation_id: str
+    text: str
+    reply_markup: dict[str, Any] | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class ChannelIntakeResponse(BaseModel):
     channel: ChannelName
+    outbound_messages: list[ChannelOutboundMessage] = Field(default_factory=list)
     source_message_id: str
     intake_status: IntakeStatus
     document_kind: DocumentKind
