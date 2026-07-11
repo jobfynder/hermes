@@ -99,10 +99,34 @@ def main() -> None:
     assert onboarding_start.intake_status == "parsed"
     assert onboarding_start.understanding_result["state"] == "waiting_for_onboarding"
     assert "Role: Recruiter" in onboarding_start.outbound_messages[0].text
+    assert onboarding_start.outbound_messages[0].reply_markup == {
+        "remove_keyboard": True
+    }
+
+    accidental_switch = workflow.process_comm_channel_intake(
+        make_request(
+            "test-onboarding-003",
+            "Recruiter: Post Job Requirement",
+        )
+    )
+
+    assert accidental_switch.intake_status == "parsed"
+    assert accidental_switch.understanding_result["status"] == (
+        "workflow_already_active"
+    )
+    assert sessions["telegram:telegram-test-user"].state == (
+        "waiting_for_onboarding"
+    )
+    assert sessions["telegram:telegram-test-user"].action == (
+        "onboarding_start"
+    )
+    assert accidental_switch.outbound_messages[0].reply_markup == {
+        "remove_keyboard": True
+    }
 
     invalid = workflow.process_comm_channel_intake(
         make_request(
-            "test-onboarding-003",
+            "test-onboarding-004",
             "Name: Test Recruiter",
         )
     )
@@ -113,7 +137,7 @@ def main() -> None:
 
     completed = workflow.process_comm_channel_intake(
         make_request(
-            "test-onboarding-004",
+            "test-onboarding-005",
             (
                 "Role: Recruiter\n"
                 "Name: Test Recruiter\n"

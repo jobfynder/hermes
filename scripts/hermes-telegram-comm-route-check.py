@@ -130,6 +130,9 @@ def main() -> None:
         "Role: Recruiter"
         in onboarding_start_body["outbound_messages"][0]["text"]
     )
+    assert onboarding_start_body["outbound_messages"][0]["reply_markup"] == {
+        "remove_keyboard": True
+    }
 
     completed = client.post(
         "/internal/comm/intake",

@@ -413,63 +413,126 @@ def process_telegram_comm_intake(
 
     mapped = map_telegram_text_to_action(request.text or "")
 
-    if mapped:
+    # /start is the explicit reset command and is always allowed.
+    if mapped and mapped.get("type") == "menu":
         claimed, duplicate_key = _claim_workflow_request(request)
 
         if not claimed:
             return _duplicate_response(request, duplicate_key)
 
-        if mapped.get("type") == "menu":
-            transition = reset_to_menu(session)
-            menu = build_start_menu()
+        transition = reset_to_menu(session)
+        menu = build_start_menu()
 
-            return _control_response(
+        return _control_response(
+            request,
+            duplicate_key=duplicate_key,
+            session=transition.session,
+            status="menu_shown",
+            outbound=_outbound(
                 request,
-                duplicate_key=duplicate_key,
-                session=transition.session,
+                menu["text"],
+                reply_markup=menu["reply_markup"],
                 status="menu_shown",
-                outbound=_outbound(
-                    request,
-                    menu["text"],
-                    reply_markup=menu["reply_markup"],
-                    status="menu_shown",
-                ),
-            )
+            ),
+        )
 
-        if mapped.get("type") in {"action", "onboarding"}:
-            transition = start_waiting_for_action(
-                session=session,
-                role=mapped.get("role") or "unknown",
-                action=mapped.get("action") or "onboarding_start",
-            )
+    # Do not allow a persistent Telegram keyboard button to replace an
+    # active workflow. The user must use /start to cancel or change it.
+    if session.state == "waiting_for_onboarding":
+        if mapped:
+            claimed, duplicate_key = _claim_workflow_request(request)
 
-            prompt = (
-                _onboarding_prompt()
-                if transition.session.action == "onboarding_start"
-                else transition.response_text
-            )
+            if not claimed:
+                return _duplicate_response(request, duplicate_key)
 
             return _control_response(
                 request,
                 duplicate_key=duplicate_key,
-                session=transition.session,
-                status="waiting_for_input",
+                session=session,
+                status="workflow_already_active",
                 outbound=_outbound(
                     request,
-                    prompt or "Please send the requested information.",
-                    status="waiting_for_input",
+                    (
+                        "Onboarding is already active. Please send your "
+                        "profile details in the requested format, or use "
+                        "/start to cancel and return to the menu.\n\n"
+                        + _onboarding_prompt()
+                    ),
+                    reply_markup={"remove_keyboard": True},
+                    status="workflow_already_active",
                     metadata={
-                        "action": transition.session.action,
-                        "expected_input": transition.session.expected_input,
+                        "action": session.action,
+                        "expected_input": session.expected_input,
                     },
                 ),
             )
 
-    if session.state == "waiting_for_onboarding":
         return _process_onboarding_input(request, session)
 
     if session.state in BUSINESS_WAITING_STATES:
+        if mapped:
+            claimed, duplicate_key = _claim_workflow_request(request)
+
+            if not claimed:
+                return _duplicate_response(request, duplicate_key)
+
+            return _control_response(
+                request,
+                duplicate_key=duplicate_key,
+                session=session,
+                status="workflow_already_active",
+                outbound=_outbound(
+                    request,
+                    (
+                        "A Jobfynder workflow is already active. Please "
+                        "send the requested content, or use /start to "
+                        "cancel and return to the menu."
+                    ),
+                    reply_markup={"remove_keyboard": True},
+                    status="workflow_already_active",
+                    metadata={
+                        "action": session.action,
+                        "expected_input": session.expected_input,
+                    },
+                ),
+            )
+
         return _process_waiting_business_input(request, session)
+
+    if mapped and mapped.get("type") in {"action", "onboarding"}:
+        claimed, duplicate_key = _claim_workflow_request(request)
+
+        if not claimed:
+            return _duplicate_response(request, duplicate_key)
+
+        transition = start_waiting_for_action(
+            session=session,
+            role=mapped.get("role") or "unknown",
+            action=mapped.get("action") or "onboarding_start",
+        )
+
+        prompt = (
+            _onboarding_prompt()
+            if transition.session.action == "onboarding_start"
+            else transition.response_text
+        )
+
+        return _control_response(
+            request,
+            duplicate_key=duplicate_key,
+            session=transition.session,
+            status="waiting_for_input",
+            outbound=_outbound(
+                request,
+                prompt or "Please send the requested information.",
+                reply_markup={"remove_keyboard": True},
+                status="waiting_for_input",
+                metadata={
+                    "action": transition.session.action,
+                    "expected_input": transition.session.expected_input,
+                },
+            ),
+        )
 
     # Preserve the production behavior that allows a user to directly paste
     # a job description, resume, hotlist, or profile without opening the menu.
