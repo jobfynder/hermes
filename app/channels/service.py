@@ -1,3 +1,5 @@
+import re
+
 from app.access.models import ActionAccessRequest
 from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
@@ -19,53 +21,187 @@ def build_duplicate_key(request: ChannelIntakeRequest) -> str:
     return f"{request.channel}:{request.source_message_id}"
 
 
-def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
-    text = (request.text or "").lower()
+_JOB_STRONG_MARKERS = (
+    "job description",
+    "job opening",
+    "job requirement",
+    "job posting",
+    "opening for",
+    "hiring for",
+    "we are hiring",
+    "looking for a",
+    "looking for an",
+    "seeking a",
+    "seeking an",
+    "position available",
+    "required skills",
+    "must have",
+    "nice to have",
+    "responsibilities",
+    "requirements",
+    "contract duration",
+    "contract length",
+    "hourly rate",
+    "pay rate",
+    "client location",
+    "work location",
+)
 
-    if not text and request.attachments:
+_RESUME_STRONG_MARKERS = (
+    "resume",
+    "curriculum vitae",
+    "professional summary",
+    "career objective",
+    "work experience",
+    "employment history",
+    "education",
+    "technical skills",
+)
+
+_HOTLIST_MARKERS = (
+    "hotlist",
+    "available consultants",
+    "bench list",
+)
+
+_VENDOR_MARKERS = (
+    "vendor list",
+    "implementation partner",
+    "prime vendor",
+)
+
+_PROFILE_CUES = (
+    "candidate",
+    "consultant",
+    "available immediately",
+    "on bench",
+    "my experience",
+    "i have ",
+    "i am ",
+    "email:",
+    "phone:",
+    "linkedin",
+    "professional summary",
+    "work experience",
+    "employment history",
+    "education",
+    "resume",
+    "curriculum vitae",
+)
+
+_TECHNOLOGY_MARKERS = (
+    "java",
+    "spring boot",
+    "python",
+    ".net",
+    "c#",
+    "c++",
+    "javascript",
+    "typescript",
+    "node.js",
+    "nodejs",
+    "react",
+    "angular",
+    "aws",
+    "azure",
+    "gcp",
+    "sql",
+    "postgresql",
+    "mysql",
+    "oracle",
+    "docker",
+    "kubernetes",
+    "terraform",
+    "jenkins",
+    "kafka",
+    "salesforce",
+    "sap",
+    "snowflake",
+    "databricks",
+    "devops",
+    "linux",
+    "golang",
+    "ruby",
+    "php",
+)
+
+_TITLE_PATTERN = re.compile(
+    r"\b(?:senior|sr\.?|lead|principal|staff|junior|jr\.?|mid(?:-level)?)?"
+    r"\s*(?:[a-z0-9+#.\-]+\s+){0,3}"
+    r"(?:developer|engineer|architect|analyst|administrator|consultant|"
+    r"manager|recruiter|scientist|designer|specialist)\b",
+    re.IGNORECASE,
+)
+
+_EXPERIENCE_PATTERN = re.compile(
+    r"\b\d{1,2}\+?\s*(?:years?|yrs?)"
+    r"(?:\s+of)?(?:\s+(?:professional\s+)?)?experience\b",
+    re.IGNORECASE,
+)
+
+
+def _contains_marker(text: str, markers: tuple[str, ...]) -> bool:
+    return any(marker in text for marker in markers)
+
+
+def _marker_count(text: str, markers: tuple[str, ...]) -> int:
+    return sum(1 for marker in markers if marker in text)
+
+
+def _technology_count(text: str) -> int:
+    count = 0
+
+    for marker in _TECHNOLOGY_MARKERS:
+        pattern = rf"(?<![a-z0-9]){re.escape(marker)}(?![a-z0-9])"
+        if re.search(pattern, text, re.IGNORECASE):
+            count += 1
+
+    return count
+
+
+def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
+    text = " ".join((request.text or "").lower().split())
+
+    if not text:
         return "unknown"
 
-    resume_markers = [
-        "resume",
-        "curriculum vitae",
-        "professional summary",
-        "work experience",
-        "education",
-    ]
-    jd_markers = [
-        "job description",
-        "required skills",
-        "responsibilities",
-        "requirements",
-        "rate",
-        "location",
-    ]
-    hotlist_markers = [
-        "hotlist",
-        "available consultants",
-        "bench list",
-    ]
-    vendor_markers = [
-        "vendor list",
-        "implementation partner",
-        "prime vendor",
-    ]
-
-    if any(marker in text for marker in hotlist_markers):
+    if _contains_marker(text, _HOTLIST_MARKERS):
         return "hotlist"
-    if any(marker in text for marker in vendor_markers):
+
+    if _contains_marker(text, _VENDOR_MARKERS):
         return "vendor_list"
-    if any(marker in text for marker in jd_markers):
+
+    job_marker_count = _marker_count(text, _JOB_STRONG_MARKERS)
+    resume_marker_count = _marker_count(text, _RESUME_STRONG_MARKERS)
+
+    if job_marker_count and not resume_marker_count:
         return "job_description"
-    if any(marker in text for marker in resume_markers):
+
+    if resume_marker_count and not job_marker_count:
         return "resume"
+
+    if job_marker_count and resume_marker_count:
+        if job_marker_count > resume_marker_count:
+            return "job_description"
+        return "resume"
+
     if "bench sales" in text:
         return "bench_sales_profile"
-    if "recruiter" in text:
+
+    if "recruiter" in text and not _TITLE_PATTERN.search(text):
         return "recruiter_profile"
 
-    return "plain_message" if text.strip() else "unknown"
+    has_title = bool(_TITLE_PATTERN.search(text))
+    has_experience = bool(_EXPERIENCE_PATTERN.search(text))
+    technology_count = _technology_count(text)
+    has_profile_cue = _contains_marker(text, _PROFILE_CUES)
 
+    if has_title and has_experience and technology_count >= 3:
+        if has_profile_cue:
+            return "resume"
+        return "job_description"
+
+    return "plain_message"
 
 def understanding_document_kind(document_kind: DocumentKind) -> str:
     if document_kind in {"resume", "job_description", "unknown"}:
