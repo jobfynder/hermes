@@ -1,5 +1,7 @@
 from typing import Any
 
+from app.email_parsing.routing import classify_recipient_mailbox
+
 
 def email_provider_status() -> dict[str, Any]:
     return {
@@ -10,6 +12,8 @@ def email_provider_status() -> dict[str, Any]:
         "supports_files": True,
         "supports_outbound": False,
         "purpose": "normalized_email_intake_contract",
+        "parser_mode": "deterministic",
+        "uses_llm": False,
     }
 
 
@@ -27,7 +31,15 @@ def normalize_email_payload(payload: dict[str, Any]) -> dict[str, Any]:
         sender = {"email": sender}
 
     subject = payload.get("subject") or ""
-    body = payload.get("text") or payload.get("body") or payload.get("plain_text") or ""
+    body = (
+        payload.get("text")
+        or payload.get("body")
+        or payload.get("plain_text")
+        or ""
+    )
+
+    recipients = payload.get("to")
+    intended_document_kind = classify_recipient_mailbox(recipients)
 
     return {
         "channel": "email",
@@ -37,13 +49,21 @@ def normalize_email_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "sender_name": sender.get("name"),
             "email": sender.get("email") or sender.get("address"),
         },
-        "content_type": "text",
+        "content_type": (
+            "mixed"
+            if payload.get("attachments")
+            else "text"
+        ),
         "text": f"Subject: {subject}\n\n{body}".strip(),
         "attachments": payload.get("attachments", []),
+        "received_at": payload.get("received_at"),
         "metadata": {
             "subject": subject,
-            "to": payload.get("to"),
+            "to": recipients,
             "cc": payload.get("cc"),
             "provider": payload.get("provider"),
+            "intended_document_kind": intended_document_kind,
+            "parser_mode": "deterministic",
+            "uses_llm": False,
         },
     }

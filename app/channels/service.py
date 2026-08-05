@@ -2,6 +2,7 @@ from app.access.models import ActionAccessRequest
 from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
 from app.drafts.service import create_draft_object
+from app.email_parsing.parsers import parse_email_business_records
 from app.runtime.events import emit_event
 from app.runtime.intake_log import (
     load_idempotency_keys,
@@ -20,6 +21,14 @@ def build_duplicate_key(request: ChannelIntakeRequest) -> str:
 
 
 def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
+    if request.channel == "email":
+        intended_document_kind = request.metadata.get(
+            "intended_document_kind"
+        )
+
+        if intended_document_kind in {"hotlist", "job_description"}:
+            return intended_document_kind
+
     text = (request.text or "").lower()
 
     if not text and request.attachments:
@@ -231,7 +240,25 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         document_kind=document_kind,
     )
 
-    requires_review = confidence < 0.7 or document_kind in {"unknown", "plain_message"}
+    email_parsing: dict = {}
+
+    if request.channel == "email":
+        email_parsing = parse_email_business_records(
+            text=request.text or "",
+            document_kind=document_kind,
+        )
+        structured_data["email_parsing"] = email_parsing
+
+        email_confidence = email_parsing.get("confidence")
+
+        if isinstance(email_confidence, int | float):
+            confidence = float(email_confidence)
+
+    requires_review = (
+        confidence < 0.7
+        or document_kind in {"unknown", "plain_message"}
+        or bool(email_parsing.get("requires_review"))
+    )
 
     record_intake(
         {
