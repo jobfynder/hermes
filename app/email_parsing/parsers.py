@@ -228,6 +228,9 @@ def _build_table_hotlist_records(text: str) -> list[dict[str, Any]]:
 
 
 def _build_fallback_hotlist_records(text: str) -> list[dict[str, Any]]:
+    if not text.strip():
+        return []
+
     blocks = [
         block.strip()
         for block in re.split(r"\n\s*\n", text)
@@ -376,6 +379,18 @@ def _split_requirement_sections(text: str) -> list[str]:
 
 def parse_requirement_email(text: str) -> dict[str, Any]:
     clean_text = _clean_email_text(text)
+
+    if not clean_text:
+        return {
+            "parser": PARSER_METADATA,
+            "document_kind": "job_description",
+            "records": [],
+            "record_count": 0,
+            "confidence": 0.0,
+            "requires_review": True,
+            "warnings": ["no_requirements_detected"],
+        }
+
     sections = _split_requirement_sections(clean_text)
     records: list[dict[str, Any]] = []
 
@@ -409,11 +424,44 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
             or structured.get("job_title")
         )
 
-        has_title = bool(job_title)
-        has_content = bool(required_skills or section.strip())
+        explicit_required_skills = _extract_labeled_value(
+            section,
+            [
+                "Required Skills",
+                "Must Have Skills",
+                "Mandatory Skills",
+                "Skills Required",
+            ],
+        )
 
-        confidence = 0.92 if has_title and has_content else (
-            0.62 if has_title or required_skills else 0.35
+        body_without_title = re.sub(
+            (
+                r"(?im)^\\s*(?:job title|position|role)"
+                r"\\s*[:\\-]\\s*.+?\\s*$"
+            ),
+            "",
+            section,
+            count=1,
+        ).strip()
+
+        has_title = bool(job_title)
+        has_required_skills = bool(required_skills)
+        has_requirement_evidence = bool(
+            explicit_required_skills
+            or (
+                has_required_skills
+                and len(body_without_title) >= 40
+            )
+        )
+
+        confidence = (
+            0.92
+            if has_title and has_requirement_evidence
+            else (
+                0.62
+                if has_title or has_requirement_evidence
+                else 0.35
+            )
         )
 
         warnings: list[str] = []
@@ -421,7 +469,7 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
         if not has_title:
             warnings.append("job_title_missing")
 
-        if not required_skills:
+        if not has_requirement_evidence:
             warnings.append("required_skills_not_identified")
 
         records.append(
