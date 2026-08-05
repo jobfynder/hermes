@@ -21,7 +21,11 @@ def _extract_addresses(value: Any) -> list[str]:
             cleaned = item.strip().lower()
 
             if "<" in cleaned and ">" in cleaned:
-                cleaned = cleaned.split("<", 1)[1].split(">", 1)[0].strip()
+                cleaned = (
+                    cleaned.split("<", 1)[1]
+                    .split(">", 1)[0]
+                    .strip()
+                )
 
             if "@" in cleaned:
                 addresses.append(cleaned)
@@ -49,22 +53,16 @@ def _extract_addresses(value: Any) -> list[str]:
 
 def classify_recipient_mailbox(value: Any) -> str:
     addresses = _extract_addresses(value)
+    matched_kinds: set[str] = set()
 
     for address in addresses:
-        local_part = address.split("@", 1)[0]
+        if address == HOTLIST_MAILBOX:
+            matched_kinds.add("hotlist")
 
-        if address == HOTLIST_MAILBOX or local_part in {
-            "hotlist",
-            "hotlists",
-            "consultants",
-        }:
-            return "hotlist"
+        if address == REQUIREMENTS_MAILBOX:
+            matched_kinds.add("job_description")
 
-        if address == REQUIREMENTS_MAILBOX or local_part in {
-            "requirement",
-            "requirements",
-            "jobs",
-        }:
-            return "job_description"
+    if len(matched_kinds) == 1:
+        return matched_kinds.pop()
 
     return "unknown"
