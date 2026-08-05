@@ -4,6 +4,10 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.sessions.service import (
+    get_or_create_session,
+    start_waiting_for_action,
+)
 
 
 client = TestClient(app)
@@ -78,31 +82,93 @@ def test_text_intake_and_duplicate() -> None:
 
 
 def test_telegram_webhook_intake() -> None:
+    telegram_user_id = str(
+        int(RUN_ID.replace("-", "")[:10], 16)
+    )
+    telegram_chat_id = f"test-chat-{RUN_ID}"
+
+    session = get_or_create_session(
+        channel="telegram",
+        external_user_id=telegram_user_id,
+        chat_id=telegram_chat_id,
+    )
+
+    transition = start_waiting_for_action(
+        session=session,
+        role="recruiter",
+        action="post_job_requirement",
+    )
+
+    assert_ok(
+        transition.session.action == "post_job_requirement",
+        "telegram recruiter workflow should be active",
+    )
+    assert_ok(
+        transition.should_parse is False,
+        "telegram action selection should wait for input",
+    )
+
     payload = {
-        "update_id": 450001,
+        "update_id": int(
+            RUN_ID.replace("-", "")[:8],
+            16,
+        ) % 100000000,
         "message": {
-            "message_id": int(RUN_ID.replace("-", "")[:8], 16) % 100000000,
+            "message_id": int(
+                RUN_ID.replace("-", "")[8:16],
+                16,
+            ) % 100000000,
             "from": {
-                "id": 12345,
+                "id": int(telegram_user_id),
                 "first_name": "Pavan",
                 "last_name": "Kumar",
                 "username": "pavan",
             },
             "chat": {
-                "id": 999,
+                "id": telegram_chat_id,
                 "type": "private",
             },
-            "text": "Required skills: Python developer with FastAPI and PostgreSQL. Location Dallas.",
+            "text": (
+                "Job Title: Python Developer\n"
+                "Required Skills: Python, FastAPI, PostgreSQL\n"
+                "Location: Dallas, TX\n"
+                "Employment Type: Contract"
+            ),
         },
     }
 
-    response = client.post("/channels/telegram/webhook", json=payload)
-    assert_ok(response.status_code == 200, f"telegram webhook should return 200: {response.text}")
+    response = client.post(
+        "/channels/telegram/webhook",
+        json=payload,
+    )
+
+    assert_ok(
+        response.status_code == 200,
+        f"telegram webhook should return 200: {response.text}",
+    )
+
     data = response.json()
 
-    assert_ok(data["channel"] == "telegram", "telegram channel should be set")
-    assert_ok(data["intake_status"] == "parsed", "telegram intake should parse")
-    assert_ok("Python" in data["normalized_skills"], "Python should be normalized")
+    assert_ok(
+        data["channel"] == "telegram",
+        "telegram channel should be set",
+    )
+    assert_ok(
+        data["intake_status"] == "parsed",
+        f"telegram intake should parse: {data}",
+    )
+    assert_ok(
+        data["document_kind"] == "job_description",
+        "telegram workflow should create a job requirement",
+    )
+    assert_ok(
+        data["draft_object_type"] == "draft_job_requirement",
+        "telegram workflow should create a requirement draft",
+    )
+    assert_ok(
+        "Python" in data["normalized_skills"],
+        "Python should be normalized",
+    )
 
 
 def test_file_intake() -> None:
