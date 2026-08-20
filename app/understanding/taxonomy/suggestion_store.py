@@ -32,6 +32,10 @@ def _suggestion_id(suggestion_type: SuggestionType, observed_key: str) -> str:
     return f'{suggestion_type}__{_slug(observed_key)}'
 
 
+def suggestion_id_for(suggestion_type: SuggestionType, observed_key: str) -> str:
+    return _suggestion_id(suggestion_type, observed_key)
+
+
 def _suggestion_path(suggestion_id: str):
     return runtime_path('taxonomy_suggestions', f'{suggestion_id}.json')
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from rapidfuzz import fuzz, process
 
 from app.understanding.taxonomy.loader import (
@@ -18,6 +20,15 @@ from app.understanding.taxonomy.loader import (
 # HERMES-400 doc's own safety rules.
 HINT_THRESHOLD = 82.0
 
+# Above this score, a term is treated as the same skill/title spelled or
+# formatted differently (e.g. "React Js" vs "React"), not a genuinely new
+# taxonomy entry - safe to auto-add as an alias with no human review.
+# Product decision 2026-08-20: confirmed after explicitly weighing the
+# alternative (auto-approve everything) against the risk of a misparse
+# becoming a permanent, silently-trusted taxonomy entry that feeds
+# normalize_skill()/matching. Env-overridable without a redeploy.
+AUTO_APPROVE_THRESHOLD = float(os.getenv('HERMES_TAXONOMY_AUTO_APPROVE_THRESHOLD', '92.0'))
+
 
 def _fuzzy_match(term: str, index: dict[str, str]) -> dict[str, object] | None:
     key = normalize_taxonomy_key(term)
@@ -25,7 +36,14 @@ def _fuzzy_match(term: str, index: dict[str, str]) -> dict[str, object] | None:
     if not key or not index:
         return None
 
-    match = process.extractOne(key, index.keys(), scorer=fuzz.WRatio)
+    # fuzz.ratio (plain Levenshtein-based), not fuzz.WRatio - WRatio inflates
+    # scores for strings sharing a common word (e.g. it scored "Prompt
+    # Engineer" vs "Site Reliability Engineer" at 85.5% on shared
+    # "Engineer", which is wrong - they are different roles). Verified
+    # empirically before choosing: fuzz.ratio scores that same pair at 55.0
+    # while still scoring real variants like "React Js"/"reactjs" at 93.3
+    # and "Postgre SQL"/"postgresql" at 95.2.
+    match = process.extractOne(key, index.keys(), scorer=fuzz.ratio)
 
     if not match:
         return None

@@ -18,18 +18,23 @@ def require(condition: bool, message: str) -> None:
 
 
 def test_fuzzy_hint_attached_without_skipping_review() -> None:
+    # 'Reaact' scores ~91 against 'React' - above HINT_THRESHOLD (82) but
+    # below AUTO_APPROVE_THRESHOLD (92, added 2026-08-20) - so it must
+    # still land in the review queue with a hint attached, not get
+    # auto-approved. See hermes-400-taxonomy-auto-approve-check.py for the
+    # auto-approval path itself.
     result = build_taxonomy_suggestions(
-        skills=['React Js'],
+        skills=['Reaact'],
         job_titles=[],
         source_context='fuzzy-test',
     )
 
     suggestions = result['suggestions']
-    require(len(suggestions) == 1, 'React Js should still create exactly one suggestion')
+    require(len(suggestions) == 1, 'Reaact should still create exactly one suggestion')
 
     suggestion = suggestions[0]
     require(suggestion['status'] == 'review_required', 'fuzzy-matched term must still require review')
-    require(suggestion['fuzzy_match'] is not None, 'React Js should get a fuzzy_match hint against React/ReactJS')
+    require(suggestion['fuzzy_match'] is not None, 'Reaact should get a fuzzy_match hint against React')
     require(
         suggestion['fuzzy_match']['candidate_canonical_value'] == 'React',
         f"expected fuzzy hint to point at React, got {suggestion['fuzzy_match']}",
