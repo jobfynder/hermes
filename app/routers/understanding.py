@@ -17,6 +17,8 @@ from app.understanding.taxonomy.loader import (
 from app.understanding.taxonomy.normalizer import normalize_job_title, normalize_skill
 from app.understanding.taxonomy.signals import extract_taxonomy_signals
 from app.understanding.taxonomy.suggestions import build_taxonomy_suggestions
+from app.understanding.taxonomy import suggestion_store
+from app.understanding.taxonomy.suggestion_models import TaxonomySuggestionReviewRequest
 from app.understanding.taxonomy.versioning import build_taxonomy_snapshot
 
 router = APIRouter(prefix="/understanding", tags=["Understanding"])
@@ -123,3 +125,43 @@ def create_taxonomy_suggestions(request: TaxonomySuggestionRequest):
         job_titles=request.job_titles,
         source_context=request.source_context,
     )
+
+
+@router.get("/taxonomy/suggestions/queue")
+def read_taxonomy_suggestion_queue(status: str | None = None):
+    suggestions = suggestion_store.list_suggestions(status=status)
+
+    return {
+        "result_version": "hermes_taxonomy_suggestion_queue_persisted_v1",
+        "count": len(suggestions),
+        "suggestions": [item.model_dump() for item in suggestions],
+    }
+
+
+@router.post("/taxonomy/suggestions/{suggestion_id}/approve")
+def approve_taxonomy_suggestion(suggestion_id: str, request: TaxonomySuggestionReviewRequest):
+    suggestion = suggestion_store.approve_suggestion(
+        suggestion_id,
+        canonical_value=request.canonical_value,
+        reviewed_by=request.reviewed_by,
+        note=request.note,
+    )
+
+    if not suggestion:
+        return {"status": "not_found", "suggestion_id": suggestion_id}
+
+    return suggestion.model_dump()
+
+
+@router.post("/taxonomy/suggestions/{suggestion_id}/reject")
+def reject_taxonomy_suggestion(suggestion_id: str, request: TaxonomySuggestionReviewRequest):
+    suggestion = suggestion_store.reject_suggestion(
+        suggestion_id,
+        reviewed_by=request.reviewed_by,
+        note=request.note,
+    )
+
+    if not suggestion:
+        return {"status": "not_found", "suggestion_id": suggestion_id}
+
+    return suggestion.model_dump()

@@ -105,8 +105,12 @@ def get_canonical_job_titles() -> list[str]:
     ]
 
 
-@lru_cache(maxsize=1)
 def build_skill_alias_index() -> dict[str, str]:
+    # Not lru_cached (unlike the seed-file loaders above) - this must
+    # reflect newly approved taxonomy suggestions immediately, without a
+    # restart. Cost is negligible at this taxonomy size.
+    from app.understanding.taxonomy.overlay import load_overlay
+
     index: dict[str, str] = {}
 
     for entry in get_canonical_skill_entries():
@@ -129,11 +133,30 @@ def build_skill_alias_index() -> dict[str, str]:
         if alias_key and canonical:
             index[alias_key] = canonical
 
+    overlay = load_overlay()
+
+    for entry in overlay.get("canonical_skills", []):
+        name = entry.get("name")
+        if not name:
+            continue
+
+        canonical_key = normalize_taxonomy_key(name)
+        index.setdefault(canonical_key, name)
+
+    for entry in overlay.get("skill_aliases", []):
+        alias = entry.get("alias")
+        canonical = entry.get("canonical_skill")
+        alias_key = normalize_taxonomy_key(alias)
+        if alias_key and canonical:
+            index[alias_key] = canonical
+
     return index
 
 
-@lru_cache(maxsize=1)
 def build_title_alias_index() -> dict[str, str]:
+    # Not lru_cached - see build_skill_alias_index() above.
+    from app.understanding.taxonomy.overlay import load_overlay
+
     index: dict[str, str] = {}
 
     for entry in get_job_title_entries():
@@ -150,6 +173,23 @@ def build_title_alias_index() -> dict[str, str]:
                 index[alias_key] = title
 
     for entry in get_title_alias_entries():
+        alias = entry.get("alias")
+        canonical = entry.get("canonical_title")
+        alias_key = normalize_taxonomy_key(alias)
+        if alias_key and canonical:
+            index[alias_key] = canonical
+
+    overlay = load_overlay()
+
+    for entry in overlay.get("job_titles", []):
+        title = entry.get("title")
+        if not title:
+            continue
+
+        canonical_key = normalize_taxonomy_key(title)
+        index.setdefault(canonical_key, title)
+
+    for entry in overlay.get("title_aliases", []):
         alias = entry.get("alias")
         canonical = entry.get("canonical_title")
         alias_key = normalize_taxonomy_key(alias)

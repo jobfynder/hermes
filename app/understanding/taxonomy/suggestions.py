@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from app.understanding.taxonomy import suggestion_store
+from app.understanding.taxonomy.fuzzy import fuzzy_match_skill, fuzzy_match_title
+from app.understanding.taxonomy.loader import normalize_taxonomy_key
 from app.understanding.taxonomy.normalizer import normalize_job_title, normalize_skill
 
 
@@ -27,10 +30,22 @@ def build_skill_suggestion(value: str, source_context: str | None = None) -> dic
     if normalized.get("matched") is True:
         return None
 
+    fuzzy_match = fuzzy_match_skill(cleaned)
+
+    suggestion_store.upsert_suggestion(
+        suggestion_type="skill",
+        observed_term=cleaned,
+        observed_key=normalize_taxonomy_key(cleaned),
+        fuzzy_match=fuzzy_match,
+        confidence="low",
+        source_context=source_context,
+    )
+
     return {
         "observed_term": cleaned,
         "suggestion_type": "skill",
         "suggested_canonical_value": _safe_suggested_value(cleaned),
+        "fuzzy_match": fuzzy_match,
         "confidence": "low",
         "status": "review_required",
         "source_context": source_context,
@@ -47,10 +62,22 @@ def build_job_title_suggestion(value: str, source_context: str | None = None) ->
     if normalized.get("matched") is True:
         return None
 
+    fuzzy_match = fuzzy_match_title(cleaned)
+
+    suggestion_store.upsert_suggestion(
+        suggestion_type="job_title",
+        observed_term=cleaned,
+        observed_key=normalize_taxonomy_key(cleaned),
+        fuzzy_match=fuzzy_match,
+        confidence="low",
+        source_context=source_context,
+    )
+
     return {
         "observed_term": cleaned,
         "suggestion_type": "job_title",
         "suggested_canonical_value": _safe_suggested_value(cleaned),
+        "fuzzy_match": fuzzy_match,
         "confidence": "low",
         "status": "review_required",
         "source_context": source_context,
