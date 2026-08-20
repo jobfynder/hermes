@@ -1,4 +1,5 @@
 from app.matching.models import ResumeToJobMatchRequest
+from app.resume_builder.ats_rules import get_ats_formatting_guidance
 from app.matching.scorer import evaluate_resume_to_job
 from app.resume_builder.models import (
     ResumeTailoringOpportunity,
@@ -47,6 +48,7 @@ def analyze_resume_tailoring(
             },
         )
 
+    ats_guidance = get_ats_formatting_guidance(request.target_ats)
     match_result = evaluate_resume_to_job(
         ResumeToJobMatchRequest(
             resume=request.resume,
@@ -135,6 +137,7 @@ def analyze_resume_tailoring(
         matched_required_skills=match_result.matched_required_skills,
         missing_required_skills=match_result.missing_required_skills,
         matched_preferred_skills=match_result.matched_preferred_skills,
+        ats_guidance=ats_guidance,
         opportunities=opportunities,
         human_review_required=True,
         automatic_rewrite_allowed=False,

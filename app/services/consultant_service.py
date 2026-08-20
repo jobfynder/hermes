@@ -52,11 +52,23 @@ def extract_experience(text: str):
     return None
 
 
-def extract_location(text: str):
-    match = re.search(r"([A-Za-z\s]+,\s*[A-Z]{2})", text)
+US_STATE_CODES = {
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY",
+    "DC",
+}
 
-    if match:
-        return match.group(1).strip()
+
+def extract_location(text: str):
+    for match in re.finditer(r"([A-Za-z][A-Za-z\s]{1,30}),\s*([A-Z]{2})\b", text):
+        city = match.group(1).strip()
+        state_code = match.group(2)
+
+        if state_code in US_STATE_CODES:
+            return f"{city}, {state_code}"
 
     return None
 
@@ -125,3 +137,52 @@ def parse_consultant_text(text: str):
         "skills": extract_skills(cleaned_text),
         "summary": cleaned_text[:300],
     }
+
+
+def score_consultant_parse_confidence(text: str, parsed: dict) -> tuple[float, list[str]]:
+    reasons = []
+    score = 1.0
+
+    if len(text.strip()) < 20:
+        score -= 0.35
+        reasons.append("text_too_short")
+
+    if not parsed.get("name"):
+        score -= 0.15
+        reasons.append("name_not_found")
+
+    if not parsed.get("title"):
+        score -= 0.20
+        reasons.append("title_not_found")
+
+    if not parsed.get("skills"):
+        score -= 0.25
+        reasons.append("no_skills_found")
+
+    if parsed.get("experience_years") is None:
+        score -= 0.10
+        reasons.append("experience_not_found")
+
+    return max(0.0, round(score, 2)), reasons
+
+
+def merge_consultant_fallback_fields(parsed: dict, llm_extracted: dict) -> dict:
+    merged = dict(parsed)
+
+    if not merged.get("title") and llm_extracted.get("current_title"):
+        merged["title"] = llm_extracted["current_title"]
+
+    if not merged.get("skills") and llm_extracted.get("skills"):
+        merged["skills"] = llm_extracted["skills"]
+
+    if merged.get("experience_years") is None and llm_extracted.get("years_experience") is not None:
+        merged["experience_years"] = llm_extracted["years_experience"]
+
+    if not merged.get("work_authorization") and llm_extracted.get("work_authorization"):
+        merged["work_authorization"] = llm_extracted["work_authorization"]
+
+    merged["employers"] = llm_extracted.get("employers", [])
+    merged["education"] = llm_extracted.get("education", [])
+    merged["certifications"] = llm_extracted.get("certifications", [])
+
+    return merged

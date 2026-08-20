@@ -34,12 +34,23 @@ def _detect_duplicate_conflicts(request: SubmissionIntelligenceRequest) -> list[
     if key not in request.existing_submission_keys:
         return []
 
+    consultant_id = request.consultant.consultant_id
+    job_id = request.requirement.job_id
+
     return [
         SubmissionConflict(
             conflict_type="possible_duplicate_submission",
             severity="high",
-            message="This consultant may already be linked to this job.",
+            message=(
+                f"Consultant {consultant_id} already has a tracked submission key for job {job_id}. "
+                "Submitting again risks a duplicate-submission rejection from the client or vendor."
+            ),
             metadata={"submission_key": key},
+            resolution_steps=[
+                "Check the existing submission record for this consultant/job pair before proceeding.",
+                "If the prior submission was withdrawn or rejected, confirm that with the client/vendor before resubmitting.",
+                "If this is a genuine new attempt (e.g. different rate or resume version), note the reason in the submission record.",
+            ],
         )
     ]
 
@@ -317,6 +328,10 @@ def evaluate_submission_intelligence(
                 conflict_type="invalid_stage_transition",
                 severity="high",
                 message=f"Transition from {request.current_stage} to {recommended_stage} is not allowed.",
+                resolution_steps=[
+                    "Check the workflow policy (GET /submissions/workflow-policy) for allowed transitions from the current stage.",
+                    "Move through the required intermediate stages, or correct the stage if it was set in error.",
+                ],
                 metadata={
                     "from_stage": request.current_stage,
                     "to_stage": recommended_stage,

@@ -5,21 +5,12 @@ from pydantic import BaseModel, Field
 
 PromptRuntimeMode = Literal["dry_run", "live"]
 PromptRuntimeDecision = Literal["completed", "blocked", "failed", "needs_review"]
-PromptDomain = Literal[
-    "resume_builder",
-    "matching",
-    "submission_intelligence",
-    "agents",
-    "support",
-    "engineering",
-    "general",
-]
 
 
 class PromptDefinition(BaseModel):
     prompt_id: str
     name: str
-    domain: PromptDomain = "general"
+    domain: str = "general"
     version: str
     description: str
     required_variables: list[str] = Field(default_factory=list)
@@ -27,7 +18,7 @@ class PromptDefinition(BaseModel):
     system_template: str
     user_template: str
     safety_policy: str = "hermes_prompt_safety_v1"
-    default_model: str = "portkey-default"
+    default_model: str = "anthropic/claude-haiku-4-5"
     status: Literal["active", "draft", "deprecated"] = "active"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -41,9 +32,11 @@ class PromptHealthResponse(BaseModel):
     status: str = "healthy"
     runtime_version: str
     registry_version: str
+    registry_source: str = "langfuse"
     prompt_count: int
     dry_run_default: bool
-    portkey_configured: bool
+    litellm_configured: bool
+    langfuse_configured: bool
     provider: str
     run_log_enabled: bool
     run_log_dir: str

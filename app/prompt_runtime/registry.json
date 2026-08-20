@@ -12,7 +12,7 @@
       "system_template": "You are Hermes Resume Builder. Improve resume wording without inventing facts. Use only verified source material. Do not add employers, dates, degrees, certifications, projects, tools, clients, metrics, or work authorization unless present in the source.",
       "user_template": "Source resume text:\\n{source_text}\\n\\nTarget role: {target_role}\\nTone: {tone}\\nConstraints: {constraints}\\n\\nReturn an improved professional summary and list any missing information as questions instead of inventing it.",
       "safety_policy": "hermes_resume_no_fabrication_v1",
-      "default_model": "portkey-default",
+      "default_model": "anthropic/claude-haiku-4-5",
       "status": "active",
       "metadata": {
         "human_review_required": true,
@@ -30,7 +30,7 @@
       "system_template": "You rewrite resume bullets. Preserve truth. Do not add unsupported achievements, numbers, companies, dates, domains, tools, certifications, or leadership claims.",
       "user_template": "Original resume bullets:\\n{source_text}\\n\\nTarget role: {target_role}\\nSkills to emphasize only if present: {skills_to_emphasize}\\nConstraints: {constraints}\\n\\nRewrite the bullets. If evidence is missing, mark it as a question for the user.",
       "safety_policy": "hermes_resume_no_fabrication_v1",
-      "default_model": "portkey-default",
+      "default_model": "anthropic/claude-haiku-4-5",
       "status": "active",
       "metadata": {
         "human_review_required": true,
@@ -48,7 +48,7 @@
       "system_template": "You explain candidate-job fit using only the provided structured match evidence. Do not change the match decision or invent skills.",
       "user_template": "Match result:\\n{match_result}\\n\\nResume snapshot:\\n{resume_snapshot}\\n\\nJob snapshot:\\n{job_snapshot}\\n\\nExplain strengths, gaps, risks, and next actions.",
       "safety_policy": "hermes_prompt_safety_v1",
-      "default_model": "portkey-default",
+      "default_model": "anthropic/claude-haiku-4-5",
       "status": "active",
       "metadata": {
         "human_review_required": true
@@ -65,7 +65,7 @@
       "system_template": "You draft support replies for human review. Be accurate, clear, and do not promise actions that are not confirmed.",
       "user_template": "Issue summary:\\n{issue_summary}\\n\\nUser context:\\n{user_context}\\n\\nResolution status:\\n{resolution_status}\\n\\nDraft a concise support reply.",
       "safety_policy": "hermes_prompt_safety_v1",
-      "default_model": "portkey-default",
+      "default_model": "anthropic/claude-haiku-4-5",
       "status": "active",
       "metadata": {
         "human_review_required": true

@@ -5,6 +5,8 @@ from app.resume_builder.models import (
     ResumeBuilderResult,
     ResumeBuilderSafetyPolicy,
     ResumeBulletSuggestionRequest,
+    ResumeFeedbackRequest,
+    ResumeFeedbackResponse,
     ResumeDocumentInput,
     ResumeQualityRequest,
     ResumeQualityResponse,
@@ -24,6 +26,7 @@ from app.resume_builder.service import (
     suggest_summary,
     get_resume_builder_policy,
     normalize_resume_skills,
+    analyze_resume_feedback,
 )
 from app.security.rbac import require_permission
 
@@ -121,3 +124,16 @@ def resume_builder_quality_analyze(
     ),
 ) -> ResumeQualityResponse:
     return analyze_resume_quality(request)
+
+
+@router.post(
+    "/feedback/analyze",
+    response_model=ResumeFeedbackResponse,
+)
+def resume_builder_feedback_analyze(
+    request: ResumeFeedbackRequest,
+    _user: dict = Depends(
+        require_permission("resume_builder:analyze")
+    ),
+) -> ResumeFeedbackResponse:
+    return analyze_resume_feedback(request)

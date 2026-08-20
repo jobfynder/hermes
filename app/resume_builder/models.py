@@ -185,7 +185,10 @@ class ResumeTailoringRequest(BaseModel):
     source_references: list[ResumeSourceReference] = Field(
         default_factory=list
     )
+    target_ats: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 
 
 class ResumeTailoringOpportunity(BaseModel):
@@ -214,6 +217,7 @@ class ResumeTailoringResponse(BaseModel):
     matched_required_skills: list[str] = Field(default_factory=list)
     missing_required_skills: list[str] = Field(default_factory=list)
     matched_preferred_skills: list[str] = Field(default_factory=list)
+    ats_guidance: dict[str, Any] = Field(default_factory=dict)
     opportunities: list[ResumeTailoringOpportunity] = Field(
         default_factory=list
     )
@@ -264,6 +268,47 @@ class ResumeQualityResponse(BaseModel):
     unverified_sections: list[str] = Field(default_factory=list)
     human_review_required: bool = True
     automatic_fix_allowed: bool = False
+    external_ai_used: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeFeedbackRequest(BaseModel):
+    document: ResumeDocumentInput
+    target_job: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeFeedbackItem(BaseModel):
+    id: str
+    source: Literal["ai_analysis"] = "ai_analysis"
+    category: Literal[
+        "missing_keyword",
+        "unquantified_impact",
+        "incomplete_section",
+        "weak_language",
+    ]
+    severity: Literal["high", "medium", "low"]
+    section_id: str | None = None
+    section_type: ResumeSectionKind | None = None
+    title: str
+    current: str | None = None
+    suggested_improvement: str
+    why_it_matters: str
+    requires_user_input: bool = True
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ResumeFeedbackResponse(BaseModel):
+    result_version: str = "hermes_resume_feedback_v1"
+    decision: ResumeBuilderDecision
+    items: list[ResumeFeedbackItem] = Field(default_factory=list)
+    high_priority_count: int = 0
+    pending_count: int = 0
+    human_review_required: bool = True
+    automatic_apply_allowed: bool = False
     external_ai_used: bool = False
     reasons: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)

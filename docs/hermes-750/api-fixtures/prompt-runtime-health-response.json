@@ -4,8 +4,8 @@
   "registry_version": "hermes_prompt_registry_v1",
   "prompt_count": 4,
   "dry_run_default": true,
-  "portkey_configured": false,
-  "provider": "portkey",
+  "litellm_configured": true,
+  "provider": "litellm",
   "run_log_enabled": true,
   "run_log_dir": "/hermes-runtime/prompt-runs",
   "safety_policy": "hermes_prompt_safety_v1"

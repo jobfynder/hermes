@@ -1,8 +1,10 @@
+import base64
 import json
 import os
+import re
 import urllib.error
 import urllib.request
-from string import Formatter
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.prompt_runtime.models import (
@@ -11,13 +13,17 @@ from app.prompt_runtime.models import (
     PromptRunRequest,
     PromptRunResult,
 )
+from app.prompt_runtime.langfuse_prompts import DEFAULT_FALLBACK_MODEL
 from app.prompt_runtime.registry import get_prompt, list_prompts
 from app.prompt_runtime.run_log import append_prompt_run, prompt_run_log_dir
 from app.prompt_runtime.safety import evaluate_prompt_safety
 
 RUNTIME_VERSION = "hermes_prompt_runtime_v1"
-PROVIDER_NAME = "portkey"
-DEFAULT_PORTKEY_BASE_URL = "https://api.portkey.ai/v1/chat/completions"
+PROVIDER_NAME = "litellm"
+DEFAULT_LITELLM_BASE_URL = "https://gateway.jobfynder.com/v1/chat/completions"
+DEFAULT_LANGFUSE_BASE_URL = "https://langfuse.jobfynder.com"
+LANGFUSE_INGESTION_PATH = "/api/public/ingestion"
+TEMPLATE_VAR_PATTERN = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 
 
 def env_bool(name: str, default: bool) -> bool:
@@ -29,8 +35,12 @@ def env_bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def portkey_configured() -> bool:
-    return bool(os.getenv("PORTKEY_API_KEY"))
+def litellm_configured() -> bool:
+    return bool(os.getenv("LITELLM_API_KEY"))
+
+
+def langfuse_configured() -> bool:
+    return bool(os.getenv("LANGFUSE_SECRET_KEY") and os.getenv("LANGFUSE_PUBLIC_KEY"))
 
 
 def dry_run_default() -> bool:
@@ -38,21 +48,14 @@ def dry_run_default() -> bool:
 
 
 def _render_template(template: str, variables: dict) -> str:
-    rendered = template
-
-    field_names = [
-        field_name
-        for _, field_name, _, _ in Formatter().parse(template)
-        if field_name
-    ]
-
-    for field_name in field_names:
+    def _replace(match: "re.Match[str]") -> str:
+        field_name = match.group(1)
         value = variables.get(field_name, "")
         if isinstance(value, (dict, list)):
             value = json.dumps(value, indent=2, sort_keys=True, default=str)
-        rendered = rendered.replace("{" + field_name + "}", str(value))
+        return str(value)
 
-    return rendered
+    return TEMPLATE_VAR_PATTERN.sub(_replace, template)
 
 
 def get_prompt_health() -> PromptHealthResponse:
@@ -60,9 +63,11 @@ def get_prompt_health() -> PromptHealthResponse:
     return PromptHealthResponse(
         runtime_version=RUNTIME_VERSION,
         registry_version=registry.registry_version,
+        registry_source="langfuse",
         prompt_count=registry.prompt_count,
         dry_run_default=dry_run_default(),
-        portkey_configured=portkey_configured(),
+        litellm_configured=litellm_configured(),
+        langfuse_configured=langfuse_configured(),
         provider=PROVIDER_NAME,
         run_log_enabled=True,
         run_log_dir=str(prompt_run_log_dir()),
@@ -94,22 +99,21 @@ def _dry_run_output(prompt_id: str) -> str:
     )
 
 
-def _call_portkey(prompt, messages: list[PromptRenderedMessage]) -> tuple[str, dict]:
-    api_key = os.getenv("PORTKEY_API_KEY")
+def _call_litellm_with_model(
+    messages: list[PromptRenderedMessage],
+    model: str,
+) -> tuple[str, dict]:
+    api_key = os.getenv("LITELLM_API_KEY")
     if not api_key:
-        raise RuntimeError("portkey_api_key_missing")
+        raise RuntimeError("litellm_api_key_missing")
 
-    base_url = os.getenv("PORTKEY_BASE_URL", DEFAULT_PORTKEY_BASE_URL)
-    virtual_key = os.getenv("PORTKEY_VIRTUAL_KEY")
-    model = os.getenv("HERMES_PROMPT_DEFAULT_MODEL", prompt.default_model)
+    base_url = os.getenv("LITELLM_BASE_URL", DEFAULT_LITELLM_BASE_URL)
 
     headers = {
         "Authorization": f"Bearer {api_key}",
+        "User-Agent": "Hermes-PromptRuntime/1.0",
         "Content-Type": "application/json",
     }
-
-    if virtual_key:
-        headers["x-portkey-virtual-key"] = virtual_key
 
     body = {
         "model": model,
@@ -129,21 +133,124 @@ def _call_portkey(prompt, messages: list[PromptRenderedMessage]) -> tuple[str, d
             data = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body_text = exc.read().decode("utf-8", errors="ignore")
-        raise RuntimeError(f"portkey_http_{exc.code}:{body_text[:300]}") from exc
+        raise RuntimeError(f"litellm_http_{exc.code}:{body_text[:300]}") from exc
 
     choices = data.get("choices", [])
     if not choices:
-        raise RuntimeError("portkey_response_missing_choices")
+        raise RuntimeError("litellm_response_missing_choices")
 
     output = choices[0].get("message", {}).get("content")
     if not output:
-        raise RuntimeError("portkey_response_missing_content")
+        raise RuntimeError("litellm_response_missing_content")
 
     usage = data.get("usage", {})
     return output, usage
 
 
-def run_prompt(request: PromptRunRequest) -> PromptRunResult:
+def _call_litellm(prompt, messages: list[PromptRenderedMessage]) -> tuple[str, dict]:
+    """Try the prompt's own router alias first; fall back once to the known-working
+    default model if the router alias has no healthy deployment on LiteLLM yet."""
+    primary_model = prompt.default_model
+    fallback_model = os.getenv("HERMES_PROMPT_DEFAULT_MODEL", DEFAULT_FALLBACK_MODEL)
+
+    try:
+        output, usage = _call_litellm_with_model(messages, primary_model)
+        usage["model_requested"] = primary_model
+        usage["model_used"] = primary_model
+        return output, usage
+    except RuntimeError:
+        if primary_model == fallback_model:
+            raise
+
+        output, usage = _call_litellm_with_model(messages, fallback_model)
+        usage["model_requested"] = primary_model
+        usage["model_used"] = fallback_model
+        usage["fallback_reason"] = "primary_model_unavailable"
+        return output, usage
+
+
+def _langfuse_auth_header() -> str:
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "")
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
+    token = base64.b64encode(f"{public_key}:{secret_key}".encode("utf-8")).decode("utf-8")
+    return f"Basic {token}"
+
+
+def send_langfuse_trace(
+    result: PromptRunResult,
+    messages: list[PromptRenderedMessage],
+    request: PromptRunRequest,
+) -> None:
+    """Best-effort trace to Langfuse. Never raises - tracing must not break prompt execution."""
+    if not langfuse_configured():
+        return
+
+    try:
+        base_url = os.getenv("LANGFUSE_BASE_URL", DEFAULT_LANGFUSE_BASE_URL).rstrip("/")
+        now = datetime.now(timezone.utc).isoformat()
+
+        trace_event = {
+            "id": f"{result.run_id}-trace",
+            "type": "trace-create",
+            "timestamp": now,
+            "body": {
+                "id": result.run_id,
+                "name": result.prompt_id,
+                "input": {"variables": request.variables},
+                "output": {"output_text": result.output_text} if result.output_text else None,
+                "metadata": {
+                    "provider": result.provider,
+                    "mode_requested": result.mode_requested,
+                    "mode_effective": result.mode_effective,
+                    "decision": result.decision,
+                    "correlation_id": request.correlation_id,
+                    "actor_id": request.actor_id,
+                    "source": request.source,
+                },
+                "tags": ["hermes", "prompt_runtime", result.prompt_id],
+            },
+        }
+
+        generation_event = {
+            "id": f"{result.run_id}-generation",
+            "type": "generation-create",
+            "timestamp": now,
+            "body": {
+                "id": f"{result.run_id}-generation",
+                "traceId": result.run_id,
+                "name": f"{result.prompt_id}.{result.mode_effective}",
+                "model": result.usage.get("model_used") if result.usage else None,
+                "input": [message.model_dump() for message in messages],
+                "output": result.output_text,
+                "usage": result.usage or None,
+                "metadata": {
+                    "decision": result.decision,
+                    "reasons": result.reasons,
+                    "risks": result.risks,
+                },
+            },
+        }
+
+        body = json.dumps({"batch": [trace_event, generation_event]}).encode("utf-8")
+
+        http_request = urllib.request.Request(
+            f"{base_url}{LANGFUSE_INGESTION_PATH}",
+            data=body,
+            headers={
+                "Authorization": _langfuse_auth_header(),
+                "User-Agent": "Hermes-PromptRuntime/1.0",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+
+        with urllib.request.urlopen(http_request, timeout=10):
+            pass
+    except Exception:
+        pass
+
+
+def run_prompt(request: PromptRunRequest, force_live: bool = False) -> PromptRunResult:
     run_id = f"prompt-run-{uuid4()}"
     prompt = get_prompt(request.prompt_id)
 
@@ -162,6 +269,7 @@ def run_prompt(request: PromptRunRequest) -> PromptRunResult:
             next_actions=["Use GET /prompts/registry to inspect supported prompt ids."],
         )
         result.log_path = append_prompt_run(result.model_dump())
+        send_langfuse_trace(result, [], request)
         return result
 
     messages = render_prompt_messages(prompt.prompt_id, request.variables)
@@ -185,18 +293,19 @@ def run_prompt(request: PromptRunRequest) -> PromptRunResult:
             metadata=request.metadata,
         )
         result.log_path = append_prompt_run(result.model_dump())
+        send_langfuse_trace(result, messages, request)
         return result
 
-    effective_mode = "dry_run" if dry_run_default() or request.mode == "dry_run" else "live"
+    effective_mode = "live" if force_live else ("dry_run" if dry_run_default() or request.mode == "dry_run" else "live")
 
     try:
         if effective_mode == "live":
-            output_text, usage = _call_portkey(prompt, messages)
-            reasons = ["Prompt executed through Portkey-compatible runtime."]
+            output_text, usage = _call_litellm(prompt, messages)
+            reasons = ["Prompt executed through LiteLLM-compatible runtime."]
         else:
             output_text = _dry_run_output(prompt.prompt_id)
             usage = {"external_llm_call": False}
-            reasons = ["Dry-run mode is active; rendered prompt was validated but not sent to Portkey."]
+            reasons = ["Dry-run mode is active; rendered prompt was validated but not sent to LiteLLM."]
 
         result = PromptRunResult(
             runtime_version=RUNTIME_VERSION,
@@ -229,10 +338,11 @@ def run_prompt(request: PromptRunRequest) -> PromptRunResult:
             rendered_messages=messages,
             reasons=["Prompt execution failed."],
             risks=[str(exc)],
-            next_actions=["Check Portkey configuration, provider routing, quota, and network policy."],
+            next_actions=["Check LiteLLM configuration, model routing, quota, and network policy."],
             safety=safety,
             metadata=request.metadata,
         )
 
     result.log_path = append_prompt_run(result.model_dump())
+    send_langfuse_trace(result, messages, request)
     return result

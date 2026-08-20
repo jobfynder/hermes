@@ -1,3 +1,12 @@
+import re
+
+
+AVAILABILITY_PATTERN = re.compile(
+    r"\b(developer|engineer|consultant|candidate|resource|resources|profile|profiles)\b[^.]{0,25}\bavailable\b",
+    re.IGNORECASE,
+)
+
+
 def detect_intent(text: str) -> dict:
     cleaned_text = text.strip()
     lower_text = cleaned_text.lower()
@@ -13,6 +22,9 @@ def detect_intent(text: str) -> dict:
         "full time",
         "location",
         "job",
+        "opening",
+        "urgent requirement",
+        "client requirement",
     ]
 
     resume_keywords = [
@@ -28,8 +40,17 @@ def detect_intent(text: str) -> dict:
         "hotlist",
         "available consultant",
         "available candidates",
-        "bench",
+        "available candidate",
         "consultants available",
+        "consultant available",
+        "candidate available",
+        "resource available",
+        "resources available",
+        "bench",
+        "on the bench",
+        "on bench",
+        "rolling off",
+        "immediately available",
     ]
 
     question_keywords = [
@@ -41,7 +62,7 @@ def detect_intent(text: str) -> dict:
         "feedback",
     ]
 
-    if any(keyword in lower_text for keyword in hotlist_keywords):
+    if any(keyword in lower_text for keyword in hotlist_keywords) or AVAILABILITY_PATTERN.search(lower_text):
         return {
             "intent": "HOTLIST",
             "confidence": 0.85,

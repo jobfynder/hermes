@@ -73,6 +73,7 @@ class OnboardingProfileDraft(BaseModel):
     understanding_result: dict = Field(default_factory=dict)
     taxonomy_signals: dict = Field(default_factory=dict)
     errors: list[str] = Field(default_factory=list)
+    llm_fallback: dict = Field(default_factory=dict)
 
 
 class OnboardingVerificationDraftRequest(BaseModel):

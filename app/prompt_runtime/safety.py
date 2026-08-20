@@ -62,8 +62,11 @@ def evaluate_prompt_safety(
     if missing:
         errors.append(f"missing_required_variables:{','.join(missing)}")
 
-    if prompt.domain == "resume_builder":
-        source_keys = {"source_text", "resume_text", "parsed_resume", "verified_profile"}
+    if prompt.domain in ("resume_builder", "resume"):
+        source_keys = {
+            "source_text", "resume_text", "parsed_resume", "verified_profile",
+            "candidate_card", "raw_bullets", "structured_resume", "clean_resume",
+        }
         if not any(request.variables.get(key) for key in source_keys):
             errors.append("resume_source_text_required")
 

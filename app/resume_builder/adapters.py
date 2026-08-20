@@ -1,3 +1,5 @@
+from app.context.candidate_card import build_candidate_card
+from app.context.models import CandidateCardBuildRequest
 from app.prompt_runtime.models import PromptRunRequest
 from app.prompt_runtime.service import run_prompt
 from app.resume_builder.models import (
@@ -53,20 +55,19 @@ def _build_response(
 def suggest_summary(
     request: ResumeSummarySuggestionRequest,
 ) -> ResumeSuggestionResponse:
-    variables = {
-        "source_text": request.source_text,
-    }
+    candidate_card = build_candidate_card(
+        CandidateCardBuildRequest(source_text=request.source_text)
+    )
 
-    if request.target_role:
-        variables["target_role"] = request.target_role
-    if request.tone:
-        variables["tone"] = request.tone
-    if request.constraints:
-        variables["constraints"] = request.constraints
+    variables = {
+        "candidate_card": candidate_card.model_dump(),
+        "job_card": request.target_role or "",
+        "tone": request.tone or "professional",
+    }
 
     result = run_prompt(
         PromptRunRequest(
-            prompt_id="resume_builder.summary_improve",
+            prompt_id="jf.resume.summary.generate",
             variables=variables,
             mode="dry_run",
             correlation_id=request.correlation_id,
@@ -79,6 +80,7 @@ def suggest_summary(
                     request.source_references
                 ),
                 "forced_dry_run": True,
+                "candidate_card_confidence": candidate_card.source_confidence,
             },
         )
     )
@@ -94,21 +96,14 @@ def suggest_bullet(
     request: ResumeBulletSuggestionRequest,
 ) -> ResumeSuggestionResponse:
     variables = {
-        "source_text": request.source_text,
+        "raw_bullets": request.source_text,
+        "role": request.target_role or "",
+        "target_skills": request.skills_to_emphasize,
     }
-
-    if request.target_role:
-        variables["target_role"] = request.target_role
-    if request.skills_to_emphasize:
-        variables["skills_to_emphasize"] = (
-            request.skills_to_emphasize
-        )
-    if request.constraints:
-        variables["constraints"] = request.constraints
 
     result = run_prompt(
         PromptRunRequest(
-            prompt_id="resume_builder.bullet_rewrite",
+            prompt_id="jf.resume.experience.rewrite",
             variables=variables,
             mode="dry_run",
             correlation_id=request.correlation_id,

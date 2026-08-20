@@ -1,3 +1,6 @@
+from app.resume_builder.feedback import (
+    analyze_resume_feedback,
+)
 from app.resume_builder.quality import (
     analyze_resume_quality,
 )

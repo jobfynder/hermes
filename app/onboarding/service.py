@@ -9,8 +9,20 @@ from app.onboarding.models import (
     OnboardingSession,
     OnboardingSessionRequest,
 )
+from app.prompt_runtime.extraction_fallback import run_llm_fallback
 from app.understanding.models import RawDocument
 from app.understanding.service import understand_document
+import json
+
+PROFILE_IMPORT_CONFIDENCE_THRESHOLD = 0.70
+PROFILE_SCHEMA_HINT = json.dumps({
+    "display_name": "string|null",
+    "headline": "string|null",
+    "location": "string|null",
+    "skills": ["string"],
+    "specializations": ["string"],
+    "summary": "string|null",
+})
 
 
 _sessions: dict[str, OnboardingSession] = {}
@@ -118,8 +130,9 @@ def create_profile_draft(request: OnboardingProfileDraftRequest) -> OnboardingPr
             content=request.profile_text,
             filename=None,
             content_type="text/plain",
-            document_kind="recruiter_profile" if request.role in {"bench_sales", "recruiter"} else "consultant_profile",
-        )
+            document_kind="resume",
+        ),
+        skip_llm_fallback=True,
     )
 
     understanding_dict = understanding.model_dump()
@@ -155,6 +168,38 @@ def create_profile_draft(request: OnboardingProfileDraftRequest) -> OnboardingPr
         taxonomy_signals=taxonomy_signals,
         errors=[],
     )
+
+    if confidence < PROFILE_IMPORT_CONFIDENCE_THRESHOLD:
+        llm_outcome = run_llm_fallback(
+            prompt_id="jf.onboarding.profile-import.extract",
+            variables={
+                "clean_text": request.profile_text,
+                "profile_schema": PROFILE_SCHEMA_HINT,
+                "source_type": request.source,
+            },
+            source="onboarding_profile_draft",
+            cache_ttl_seconds=86400,
+        )
+        draft.llm_fallback = llm_outcome
+
+        if llm_outcome.get("used"):
+            extracted = llm_outcome["extracted"]
+
+            if not draft.display_name and extracted.get("display_name"):
+                draft.display_name = extracted["display_name"]
+            if draft.headline == "Jobfynder Member" and extracted.get("headline"):
+                draft.headline = extracted["headline"]
+            if not draft.location and extracted.get("location"):
+                draft.location = extracted["location"]
+            if extracted.get("skills"):
+                draft.skills = list(dict.fromkeys(draft.skills + extracted["skills"]))
+            if extracted.get("specializations"):
+                draft.specializations = list(
+                    dict.fromkeys(draft.specializations + extracted["specializations"])
+                )
+
+            confidence = max(confidence, 0.75)
+            draft.confidence = confidence
 
     draft_object = create_draft_object(
         draft_type="draft_bench_sales_profile" if request.role == "bench_sales" else (

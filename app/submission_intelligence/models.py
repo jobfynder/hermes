@@ -120,6 +120,7 @@ class SubmissionConflict(BaseModel):
     severity: Literal["low", "medium", "high"] = "medium"
     message: str
     metadata: dict[str, Any] = Field(default_factory=dict)
+    resolution_steps: list[str] = Field(default_factory=list)
 
 
 class Outcome(BaseModel):
@@ -175,3 +176,31 @@ class SubmissionHandoffEvaluationRequest(BaseModel):
     resume_id: str | None = None
     existing_submission_keys: list[str] = Field(default_factory=list)
 
+
+
+class TrackerUpdateExtractRequest(BaseModel):
+    message: str
+    tracker_context: dict[str, Any] = Field(default_factory=dict)
+    allowed_stages: list[str] = Field(default_factory=list)
+
+
+class TrackerUpdateExtractResponse(BaseModel):
+    result_version: str = "hermes_tracker_update_extract_v1"
+    proposed_stage: str | None = None
+    confidence: float
+    reasons: list[str] = Field(default_factory=list)
+    llm_fallback: dict[str, Any] | None = None
+
+
+class SubmissionStatusExtractRequest(BaseModel):
+    message: str
+    submission_context: dict[str, Any] = Field(default_factory=dict)
+    statuses: list[str] = Field(default_factory=list)
+
+
+class SubmissionStatusExtractResponse(BaseModel):
+    result_version: str = "hermes_submission_status_extract_v1"
+    proposed_status: str | None = None
+    confidence: float
+    reasons: list[str] = Field(default_factory=list)
+    llm_fallback: dict[str, Any] | None = None

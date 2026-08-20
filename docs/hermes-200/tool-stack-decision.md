@@ -39,7 +39,7 @@ Input file or text
 -> confidence scoring
 -> duplicate detection
 -> Headroom compression before LLM fallback
--> Portkey LLM fallback only when needed
+-> LiteLLM fallback only when needed
 -> validation again
 -> handoff to Jobfynder API, Postgres, Typesense, or human review
 
