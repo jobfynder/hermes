@@ -26,6 +26,8 @@ from app.routers.providers import router as providers_router
 from app.routers.linkedin_provider import router as linkedin_provider_router
 from app.routers.brightdata_provider import router as brightdata_provider_router
 from app.routers.email_provider import router as email_provider_router
+from app.routers.gmail_provider import router as gmail_provider_router
+from app.routers.microsoft_graph_provider import router as microsoft_graph_provider_router
 from app.routers.provider_contracts import router as provider_contracts_router
 from app.routers.comm_intake import router as comm_intake_router
 from app.routers.prompts import router as prompts_router
@@ -61,6 +63,8 @@ app.include_router(providers_router)
 app.include_router(linkedin_provider_router)
 app.include_router(brightdata_provider_router)
 app.include_router(email_provider_router)
+app.include_router(gmail_provider_router)
+app.include_router(microsoft_graph_provider_router)
 app.include_router(provider_contracts_router)
 app.include_router(comm_intake_router)
 app.include_router(prompts_router)
