@@ -1,9 +1,10 @@
 from pathlib import Path
 import tempfile
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 from pydantic import BaseModel, Field
 
+from app.security.rbac import require_permission
 from app.understanding.extractors.local_file import extract_local_file
 from app.understanding.models import DocumentKind, RawDocument, UnderstandingResult
 from app.understanding.service import build_understanding_result, understand_document
@@ -38,7 +39,10 @@ class TaxonomySuggestionRequest(BaseModel):
 
 
 @router.post("/parse-text", response_model=UnderstandingResult)
-def parse_text(document: RawDocument) -> UnderstandingResult:
+def parse_text(
+    document: RawDocument,
+    user: dict = Depends(require_permission("understanding:parse")),
+) -> UnderstandingResult:
     return understand_document(document)
 
 
@@ -46,6 +50,7 @@ def parse_text(document: RawDocument) -> UnderstandingResult:
 async def parse_file(
     file: UploadFile = File(...),
     document_kind: DocumentKind = Form("unknown"),
+    user: dict = Depends(require_permission("understanding:parse")),
 ) -> UnderstandingResult:
     suffix = Path(file.filename or "uploaded.txt").suffix or ".txt"
 
@@ -67,37 +72,40 @@ async def parse_file(
 
 
 @router.get("/taxonomy/skills")
-def get_skills_taxonomy():
+def get_skills_taxonomy(user: dict = Depends(require_permission("understanding:read"))):
     return load_skills_taxonomy()
 
 
 @router.get("/taxonomy/skills/canonical")
-def get_canonical_skills_taxonomy():
+def get_canonical_skills_taxonomy(user: dict = Depends(require_permission("understanding:read"))):
     return load_canonical_skills_taxonomy()
 
 
 @router.get("/taxonomy/skills/aliases")
-def get_skill_aliases_taxonomy():
+def get_skill_aliases_taxonomy(user: dict = Depends(require_permission("understanding:read"))):
     return load_skill_aliases_taxonomy()
 
 
 @router.get("/taxonomy/job-titles")
-def get_job_titles_taxonomy():
+def get_job_titles_taxonomy(user: dict = Depends(require_permission("understanding:read"))):
     return load_job_titles_taxonomy()
 
 
 @router.get("/taxonomy/job-title-aliases")
-def get_title_aliases_taxonomy():
+def get_title_aliases_taxonomy(user: dict = Depends(require_permission("understanding:read"))):
     return load_title_aliases_taxonomy()
 
 
 @router.get("/taxonomy/snapshot")
-def get_taxonomy_snapshot():
+def get_taxonomy_snapshot(user: dict = Depends(require_permission("understanding:read"))):
     return build_taxonomy_snapshot(validation_status="passed")
 
 
 @router.post("/taxonomy/normalize")
-def normalize_taxonomy_terms(request: TaxonomyNormalizeRequest):
+def normalize_taxonomy_terms(
+    request: TaxonomyNormalizeRequest,
+    user: dict = Depends(require_permission("understanding:parse")),
+):
     return {
         "result_version": "hermes_taxonomy_normalization_result_v1",
         "normalized_skills": [
@@ -112,12 +120,18 @@ def normalize_taxonomy_terms(request: TaxonomyNormalizeRequest):
 
 
 @router.post("/taxonomy/extract-signals")
-def extract_taxonomy_signal_terms(request: TaxonomySignalExtractionRequest):
+def extract_taxonomy_signal_terms(
+    request: TaxonomySignalExtractionRequest,
+    user: dict = Depends(require_permission("understanding:parse")),
+):
     return extract_taxonomy_signals(request.text)
 
 
 @router.post("/taxonomy/suggestions")
-def create_taxonomy_suggestions(request: TaxonomySuggestionRequest):
+def create_taxonomy_suggestions(
+    request: TaxonomySuggestionRequest,
+    user: dict = Depends(require_permission("understanding:parse")),
+):
     return build_taxonomy_suggestions(
         skills=request.skills,
         job_titles=request.job_titles,
