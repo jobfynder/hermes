@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -8,6 +9,18 @@ from app.sessions.service import (
     get_or_create_session,
     start_waiting_for_action,
 )
+
+# Real secret, read the same way the app reads it - never hardcode it here.
+# This test previously sent no secret at all and expected 200, which the
+# route (app/routers/channels.py) has correctly rejected since Telegram
+# went live with webhook-secret verification (HERMES-450 closure). That made
+# the test permanently red for the right reason - which is just as bad as
+# permanently green, since nobody could tell a real auth regression from
+# this known-stale gap. Fixed 2026-08-21: send the real secret on the
+# positive-path test, and added a dedicated negative test that verifies a
+# wrong/missing secret is still rejected, so removing or breaking the check
+# in app/routers/channels.py itself would show up as a test failure.
+TELEGRAM_WEBHOOK_SECRET = os.getenv("HERMES_TELEGRAM_WEBHOOK_SECRET")
 
 
 client = TestClient(app)
@@ -137,14 +150,21 @@ def test_telegram_webhook_intake() -> None:
         },
     }
 
+    headers = (
+        {"X-Telegram-Bot-Api-Secret-Token": TELEGRAM_WEBHOOK_SECRET}
+        if TELEGRAM_WEBHOOK_SECRET
+        else {}
+    )
+
     response = client.post(
         "/channels/telegram/webhook",
         json=payload,
+        headers=headers,
     )
 
     assert_ok(
         response.status_code == 200,
-        f"telegram webhook should return 200: {response.text}",
+        f"telegram webhook should return 200 with the correct secret: {response.text}",
     )
 
     data = response.json()
@@ -168,6 +188,43 @@ def test_telegram_webhook_intake() -> None:
     assert_ok(
         "Python" in data["normalized_skills"],
         "Python should be normalized",
+    )
+
+
+def test_telegram_webhook_rejects_wrong_secret() -> None:
+    # Guards against a real regression: if HERMES_TELEGRAM_WEBHOOK_SECRET
+    # enforcement in app/routers/channels.py is ever removed, weakened, or
+    # bypassed, this test fails. Without this, only the positive-path test
+    # existed, and a broken auth check would look identical to a passing one.
+    assert_ok(
+        bool(TELEGRAM_WEBHOOK_SECRET),
+        "HERMES_TELEGRAM_WEBHOOK_SECRET must be configured for this check to mean anything",
+    )
+
+    payload = {
+        "update_id": 1,
+        "message": {
+            "message_id": 1,
+            "from": {"id": 999999, "first_name": "Regression", "username": "regression"},
+            "chat": {"id": "regression-chat", "type": "private"},
+            "text": "Job Title: Should Not Parse",
+        },
+    }
+
+    missing_secret = client.post("/channels/telegram/webhook", json=payload)
+    assert_ok(
+        missing_secret.status_code == 403,
+        f"telegram webhook must reject a missing secret, got {missing_secret.status_code}: {missing_secret.text}",
+    )
+
+    wrong_secret = client.post(
+        "/channels/telegram/webhook",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "definitely-not-the-real-secret"},
+    )
+    assert_ok(
+        wrong_secret.status_code == 403,
+        f"telegram webhook must reject a wrong secret, got {wrong_secret.status_code}: {wrong_secret.text}",
     )
 
 
@@ -280,6 +337,7 @@ def main() -> None:
     test_supported_channels()
     test_text_intake_and_duplicate()
     test_telegram_webhook_intake()
+    test_telegram_webhook_rejects_wrong_secret()
     test_file_intake()
 
     print("HERMES-450 combined channel and file intake verification passed")
