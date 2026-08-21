@@ -60,8 +60,11 @@ def main() -> None:
         **load_fixture("summary-suggest-request.json")
     )
     summary_result = suggest_summary(summary_request)
+    # jf.resume.summary.generate as of 2026-08-21 -- app/resume_builder/
+    # adapters.py already used the current ID, only this assertion was
+    # stale (confirmed against adapters.py source, not guessed).
     assert summary_result.prompt_id == (
-        "resume_builder.summary_improve"
+        "jf.resume.summary.generate"
     )
     assert summary_result.mode_effective == "dry_run"
     assert summary_result.human_review_required is True
@@ -71,8 +74,9 @@ def main() -> None:
         **load_fixture("bullet-suggest-request.json")
     )
     bullet_result = suggest_bullet(bullet_request)
+    # jf.resume.experience.rewrite as of 2026-08-21 -- same as above.
     assert bullet_result.prompt_id == (
-        "resume_builder.bullet_rewrite"
+        "jf.resume.experience.rewrite"
     )
     assert bullet_result.mode_effective == "dry_run"
     assert bullet_result.human_review_required is True

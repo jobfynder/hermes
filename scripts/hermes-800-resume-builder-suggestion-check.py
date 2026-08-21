@@ -30,8 +30,10 @@ def main() -> None:
         )
     )
 
+    # jf.resume.summary.generate as of 2026-08-21 -- adapters.py already
+    # used the current ID, only this assertion was stale.
     assert summary.prompt_id == (
-        "resume_builder.summary_improve"
+        "jf.resume.summary.generate"
     )
     assert summary.mode_requested == "dry_run"
     assert summary.mode_effective == "dry_run"
@@ -55,8 +57,9 @@ def main() -> None:
         )
     )
 
+    # jf.resume.experience.rewrite as of 2026-08-21 -- same as above.
     assert bullet.prompt_id == (
-        "resume_builder.bullet_rewrite"
+        "jf.resume.experience.rewrite"
     )
     assert bullet.mode_requested == "dry_run"
     assert bullet.mode_effective == "dry_run"
