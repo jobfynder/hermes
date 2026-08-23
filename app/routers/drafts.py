@@ -1,12 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.drafts.models import DraftObject, DraftPublishResult
 from app.drafts.service import (
     get_draft_object,
     list_draft_objects,
     publish_draft_object,
+    reject_draft_object,
 )
 from app.security.rbac import require_permission
+
+
+class RejectDraftRequest(BaseModel):
+    reason: str | None = None
 
 router = APIRouter(prefix="/drafts", tags=["Drafts"])
 
@@ -37,3 +43,12 @@ def publish_draft(
     _user: dict = Depends(require_permission("drafts:publish")),
 ) -> DraftPublishResult:
     return publish_draft_object(draft_id)
+
+
+@router.post("/{draft_id}/reject", response_model=DraftPublishResult)
+def reject_draft(
+    draft_id: str,
+    body: RejectDraftRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> DraftPublishResult:
+    return reject_draft_object(draft_id, body.reason)
