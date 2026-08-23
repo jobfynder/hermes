@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.drafts.models import DraftObject, DraftPublishResult
 from app.drafts.service import (
@@ -6,17 +6,23 @@ from app.drafts.service import (
     list_draft_objects,
     publish_draft_object,
 )
+from app.security.rbac import require_permission
 
 router = APIRouter(prefix="/drafts", tags=["Drafts"])
 
 
 @router.get("", response_model=list[DraftObject])
-def list_drafts() -> list[DraftObject]:
+def list_drafts(
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> list[DraftObject]:
     return list_draft_objects()
 
 
 @router.get("/{draft_id}", response_model=DraftObject)
-def read_draft(draft_id: str) -> DraftObject:
+def read_draft(
+    draft_id: str,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> DraftObject:
     draft = get_draft_object(draft_id)
 
     if not draft:
@@ -26,5 +32,8 @@ def read_draft(draft_id: str) -> DraftObject:
 
 
 @router.post("/{draft_id}/publish", response_model=DraftPublishResult)
-def publish_draft(draft_id: str) -> DraftPublishResult:
+def publish_draft(
+    draft_id: str,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> DraftPublishResult:
     return publish_draft_object(draft_id)

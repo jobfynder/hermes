@@ -2,7 +2,13 @@ import json
 
 from fastapi import APIRouter, Request, Response
 
-from app.providers.microsoft_graph.service import microsoft_graph_provider_status
+from app.channels.models import ChannelIntakeRequest
+from app.channels.service import process_channel_intake
+from app.providers.microsoft_graph.service import (
+    fetch_graph_message,
+    microsoft_graph_provider_status,
+    normalize_graph_message,
+)
 
 router = APIRouter(prefix='/providers/microsoft-graph', tags=['Microsoft Graph Provider'])
 
@@ -22,10 +28,13 @@ async def microsoft_graph_webhook(request: Request) -> Response:
     happen before any auth/signature check, per Graph's own contract -
     Graph will not create the subscription otherwise.
 
-    Actual change notifications only carry a resource reference (message
-    ID), not the message body - fetching the message requires an
-    authenticated Graph client (HERMES_MS_GRAPH_* credentials), not yet
-    configured.
+    Actual change notifications carry a `resource` reference per item in
+    `value[]`; each is fetched via fetch_graph_message() (app-only Graph
+    auth) and, if the fetch succeeds, normalized and passed through the
+    same process_channel_intake() pipeline every other email source uses.
+    A notification whose fetch fails (or when Graph credentials aren't
+    configured) is simply skipped -- still acknowledged, so Graph doesn't
+    retry a fetch that will fail again for the same reason.
     '''
     validation_token = request.query_params.get('validationToken')
 
@@ -38,17 +47,36 @@ async def microsoft_graph_webhook(request: Request) -> Response:
 
     status = microsoft_graph_provider_status()
 
+    processed: list[dict] = []
+    if status['configured']:
+        for notification in notifications:
+            message = fetch_graph_message(notification.get('resource'))
+            if not message:
+                continue
+
+            normalized = normalize_graph_message(message)
+            channel_request = ChannelIntakeRequest(**normalized)
+            result = process_channel_intake(channel_request)
+            processed.append({
+                'source_message_id': result.source_message_id,
+                'intake_status': result.intake_status,
+                'document_kind': result.document_kind,
+                'draft_object_type': result.draft_object_type,
+            })
+
     return Response(
         content=json.dumps({
             'acknowledged': True,
             'configured': status['configured'],
             'notification_count': len(notifications),
+            'processed_count': len(processed),
+            'processed': processed,
             'note': (
                 'Notifications received but not fetched - Microsoft Graph '
                 'credentials not configured. See HERMES_MS_GRAPH_* in '
                 '.env.example.'
                 if not status['configured']
-                else 'configured=True but the fetch-and-normalize path is not implemented yet'
+                else None
             ),
         }),
         media_type='application/json',

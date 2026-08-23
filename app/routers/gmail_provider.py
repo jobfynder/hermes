@@ -2,7 +2,14 @@ import json
 
 from fastapi import APIRouter, Request
 
-from app.providers.gmail.service import gmail_provider_status, parse_pubsub_push_envelope
+from app.channels.models import ChannelIntakeRequest
+from app.channels.service import process_channel_intake
+from app.providers.gmail.service import (
+    fetch_new_gmail_messages,
+    gmail_provider_status,
+    normalize_gmail_message,
+    parse_pubsub_push_envelope,
+)
 
 router = APIRouter(prefix='/providers/gmail', tags=['Gmail Provider'])
 
@@ -16,12 +23,11 @@ def gmail_status() -> dict:
 async def gmail_push(request: Request) -> dict:
     '''Cloud Pub/Sub push endpoint for Gmail mailbox change notifications.
 
-    Always acknowledges receipt (Pub/Sub redelivers on non-2xx). Cannot
-    fetch or parse the actual message yet - that requires HERMES_GMAIL_*
-    credentials, not yet configured. Once configured, this handler should
-    call the Gmail API to fetch the new message(s) and pass each through
-    normalize_gmail_message() -> process_channel_intake(), the same path
-    /providers/email/webhook already uses for other email sources.
+    No auth dependency here on purpose -- this is called by Google Cloud
+    Pub/Sub, not by an authenticated Hermes client, matching
+    /providers/email/webhook's use of signature verification instead of a
+    bearer token. Always acknowledges receipt (Pub/Sub redelivers on
+    non-2xx) even when nothing could be fetched/processed.
     '''
     body = await request.body()
     envelope = json.loads(body.decode('utf-8')) if body else {}
@@ -29,15 +35,30 @@ async def gmail_push(request: Request) -> dict:
 
     status = gmail_provider_status()
 
+    processed: list[dict] = []
+    if status['configured']:
+        for message in fetch_new_gmail_messages(parsed.get('history_id')):
+            normalized = normalize_gmail_message(message)
+            channel_request = ChannelIntakeRequest(**normalized)
+            result = process_channel_intake(channel_request)
+            processed.append({
+                'source_message_id': result.source_message_id,
+                'intake_status': result.intake_status,
+                'document_kind': result.document_kind,
+                'draft_object_type': result.draft_object_type,
+            })
+
     return {
         'acknowledged': True,
         'configured': status['configured'],
         'history_id': parsed.get('history_id'),
         'email_address': parsed.get('email_address'),
+        'processed_count': len(processed),
+        'processed': processed,
         'note': (
             'Notification received but not fetched - Gmail API credentials '
             'not configured. See HERMES_GMAIL_* in .env.example.'
             if not status['configured']
-            else 'configured=True but the fetch-and-normalize path is not implemented yet'
+            else None
         ),
     }
