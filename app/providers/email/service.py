@@ -1,6 +1,7 @@
 from typing import Any
 
 from app.email_parsing.routing import classify_recipient_mailbox
+from app.email_parsing.sender_resolver import looks_forwarded, resolve_original_sender
 
 
 def email_provider_status() -> dict[str, Any]:
@@ -30,6 +31,13 @@ def normalize_email_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(sender, str):
         sender = {"email": sender}
 
+    reply_to = payload.get("reply_to") or {}
+
+    if isinstance(reply_to, str):
+        reply_to = {"email": reply_to}
+
+    reply_to_email = reply_to.get("email") or reply_to.get("address")
+
     subject = payload.get("subject") or ""
     body = (
         payload.get("text")
@@ -40,6 +48,18 @@ def normalize_email_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     recipients = payload.get("to")
     intended_document_kind = classify_recipient_mailbox(recipients)
+
+    # Some sources forward a posting rather than sending or CC'ing it
+    # directly (e.g. a recruiter mailing list) -- the visible From is the
+    # forwarder, not the recruiter who actually wrote it. Any downstream
+    # claim-and-verify step that emails the "sender" back needs the real
+    # recruiter, so recover it deterministically here, before the body is
+    # cleaned/summarized downstream. See app/email_parsing/sender_resolver.py.
+    original_sender_candidate = (
+        resolve_original_sender(body, reply_to_email=reply_to_email)
+        if looks_forwarded(body)
+        else None
+    )
 
     return {
         "channel": "email",
@@ -65,5 +85,6 @@ def normalize_email_payload(payload: dict[str, Any]) -> dict[str, Any]:
             "intended_document_kind": intended_document_kind,
             "parser_mode": "deterministic",
             "uses_llm": False,
+            "original_sender_candidate": original_sender_candidate,
         },
     }
