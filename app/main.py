@@ -25,6 +25,7 @@ from app.routers.telegram_provider import router as telegram_provider_router
 from app.routers.providers import router as providers_router
 from app.routers.linkedin_provider import router as linkedin_provider_router
 from app.routers.brightdata_provider import router as brightdata_provider_router
+from app.routers.claim import router as claim_router
 from app.routers.email_provider import router as email_provider_router
 from app.routers.gmail_provider import router as gmail_provider_router
 from app.routers.microsoft_graph_provider import router as microsoft_graph_provider_router
@@ -57,6 +58,7 @@ app.include_router(broadcast_router)
 app.include_router(channels_router)
 app.include_router(onboarding_router)
 app.include_router(drafts_router)
+app.include_router(claim_router)
 app.include_router(access_router)
 app.include_router(telegram_provider_router)
 app.include_router(providers_router)

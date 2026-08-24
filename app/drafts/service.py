@@ -183,3 +183,21 @@ def reject_draft_object(draft_id: str, reason: str | None = None) -> DraftPublis
         draft_type=draft.draft_type,
         errors=[],
     )
+
+
+def update_draft_metadata(draft_id: str, extra_metadata: dict) -> DraftObject | None:
+    """Merge additional keys into a draft's metadata without touching its
+    status. Used by the claim-and-verify loop (app/claim/service.py) to
+    attach a recruiter's corrected fields onto the draft before it is
+    published, so the published record reflects what the recruiter
+    actually confirmed rather than the raw parse.
+    """
+    draft = get_draft_object(draft_id)
+
+    if not draft:
+        return None
+
+    draft.metadata = {**draft.metadata, **extra_metadata}
+    _drafts[draft.draft_id] = draft
+    write_json(_draft_path(draft.draft_id), draft.model_dump())
+    return draft

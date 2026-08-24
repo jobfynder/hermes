@@ -132,3 +132,10 @@ def looks_forwarded(text: str) -> bool:
     mail instead of scanning every message body for a forward marker.'''
 
     return bool(_FORWARD_MARKER_RE.search(text or ''))
+
+
+def find_body_contact_email(text: str) -> str | None:
+    """Public wrapper so other modules (e.g. app/claim/service.py) can
+    reuse the same non-infra email search without reaching into a private
+    function."""
+    return _find_body_contact_email(text or '')
