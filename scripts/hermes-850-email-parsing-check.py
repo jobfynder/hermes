@@ -1,4 +1,5 @@
 from app.email_parsing.parsers import (
+    classify_email_by_confidence,
     parse_hotlist_email,
     parse_requirement_email,
 )
@@ -164,10 +165,58 @@ Need a senior Python developer for a long-term project.
     )
 
 
+def test_confidence_based_classification() -> None:
+    # Same fixtures as test_hotlist_parser/test_requirement_parser -- a
+    # single shared mailbox (see .env.example's HERMES_MS_GRAPH_MAILBOXES
+    # note) has no recipient-address signal, so this is what actually
+    # resolves hotlist vs. job_description for real inbound mail.
+    hotlist_text = """
+Name | Title | Skills | Experience | Location | Visa | Availability | Rate
+John Smith | Java Developer | Java, AWS, Spring Boot | 8 years | Dallas, TX | H1B | Immediate | $75/hr
+Mary Jones | Python Developer | Python, FastAPI, PostgreSQL | 6 years | Austin, TX | Green Card | 2 Weeks | $70/hr
+"""
+    requirement_text = """
+Job Title: Senior Python Developer
+Location: Dallas, TX
+Required Skills: Python, FastAPI, PostgreSQL, AWS
+Preferred Skills: Docker, Kubernetes
+Experience: 7 years
+Employment Type: Contract
+Rate: $80/hr
+Work Authorization: USC or Green Card
+
+Need a senior Python developer for a long-term project.
+"""
+
+    hotlist_classification = classify_email_by_confidence(hotlist_text)
+    require(
+        hotlist_classification is not None
+        and hotlist_classification["document_kind"] == "hotlist",
+        "A clear hotlist email must classify as hotlist by confidence",
+    )
+
+    requirement_classification = classify_email_by_confidence(requirement_text)
+    require(
+        requirement_classification is not None
+        and requirement_classification["document_kind"] == "job_description",
+        "A clear requirement email must classify as job_description by confidence",
+    )
+
+    require(
+        classify_email_by_confidence("") is None,
+        "Empty text must return None (nothing to guess from), not a fabricated classification",
+    )
+    require(
+        classify_email_by_confidence("Hi, just checking in on last week's call.") is None,
+        "Ordinary correspondence with no hotlist/requirement structure must return None",
+    )
+
+
 def main() -> None:
     test_mailbox_routing()
     test_hotlist_parser()
     test_requirement_parser()
+    test_confidence_based_classification()
 
     print("PASS: exact mailbox routing")
     print("PASS: foreign-domain aliases rejected")
@@ -178,6 +227,7 @@ def main() -> None:
     print("PASS: title-only requirement requires review")
     print("PASS: empty requirement creates no record")
     print("PASS: deterministic parser uses_llm=false")
+    print("PASS: confidence-based hotlist/requirement classification (shared mailbox)")
     print("PASS: HERMES-850 parser guardrails")
 
 

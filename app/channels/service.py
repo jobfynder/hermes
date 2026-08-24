@@ -2,7 +2,10 @@ from app.access.models import ActionAccessRequest
 from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
 from app.drafts.service import create_draft_object
-from app.email_parsing.parsers import parse_email_business_records
+from app.email_parsing.parsers import (
+    classify_email_by_confidence,
+    parse_email_business_records,
+)
 from app.runtime.events import emit_event
 from app.runtime.intake_log import (
     load_idempotency_keys,
@@ -28,6 +31,19 @@ def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
 
         if intended_document_kind in {"hotlist", "job_description"}:
             return intended_document_kind
+
+        # Recipient-address routing couldn't resolve this (ambiguous or a
+        # single shared mailbox receiving both kinds -- see
+        # app/email_parsing/routing.py). Before falling through to the
+        # generic keyword-marker classification below, try the two
+        # purpose-built parsers directly: each already does real
+        # structural analysis to produce its own confidence score, which
+        # is a stronger signal than a body-keyword list. Only fall
+        # through if that's inconclusive too (both score 0, or an exact
+        # tie).
+        confidence_classification = classify_email_by_confidence(request.text or "")
+        if confidence_classification is not None:
+            return confidence_classification["document_kind"]
 
     text = (request.text or "").lower()
 

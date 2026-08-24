@@ -544,3 +544,64 @@ def parse_email_business_records(
         "requires_review": True,
         "warnings": ["unsupported_email_document_kind"],
     }
+
+
+#: Both parsers' fallback paths assign a low-but-nonzero confidence to
+#: almost any non-empty text (they always emit *a* record, just one
+#: flagged requires_review, rather than refusing to guess) -- so two
+#: junk-text confidences landing a few hundredths apart is normal noise,
+#: not a real signal. CLASSIFICATION_MIN_CONFIDENCE reuses the same 0.70
+#: threshold the parsers themselves use for requires_review (see
+#: parse_requirement_email/parse_hotlist_email), and
+#: CLASSIFICATION_MIN_MARGIN requires the winner to clear the loser by
+#: enough that it isn't just noise -- calibrated against this module's own
+#: fixtures: a real hotlist/requirement email scores ~0.90 on its own
+#: parser vs. ~0.60 on the other (margin ~0.30), while unrelated text
+#: scores ~0.30-0.35 on both (margin ~0.05).
+CLASSIFICATION_MIN_CONFIDENCE = 0.70
+CLASSIFICATION_MIN_MARGIN = 0.15
+
+
+def classify_email_by_confidence(text: str) -> dict[str, Any] | None:
+    """Deterministic hotlist-vs-requirement classification for a mailbox
+    that receives both kinds of email with no distinguishing recipient
+    address (see app/email_parsing/routing.py -- this is what
+    classify_recipient_mailbox() can't resolve when
+    HERMES_HOTLIST_MAILBOX and HERMES_REQUIREMENTS_MAILBOX are the same
+    address, or when only one is configured).
+
+    Runs both parse_hotlist_email() and parse_requirement_email() and
+    keeps whichever scored higher on ITS OWN confidence metric -- both
+    already do real structural/content analysis (table-row detection,
+    labeled-field extraction, required-skill presence) to arrive at that
+    score, so this is strictly more informed than a generic keyword-list
+    fallback, while staying fully deterministic (no LLM, same
+    PARSER_METADATA["uses_llm"] = False guarantee as everything else in
+    this module).
+
+    Returns None -- not a guess -- unless the winner clears BOTH
+    CLASSIFICATION_MIN_CONFIDENCE on its own and
+    CLASSIFICATION_MIN_MARGIN over the other parser's score: the caller
+    should fall back to its own generic classification rather than trust
+    a low-confidence or narrow-margin result, since (per the module-level
+    comment above) both parsers' fallback paths score *something* for
+    almost any input, not just for actual hotlist/requirement content.
+    """
+    hotlist_result = parse_hotlist_email(text)
+    requirement_result = parse_requirement_email(text)
+
+    hotlist_confidence = hotlist_result.get("confidence", 0.0)
+    requirement_confidence = requirement_result.get("confidence", 0.0)
+    margin = abs(hotlist_confidence - requirement_confidence)
+
+    if margin < CLASSIFICATION_MIN_MARGIN:
+        return None
+
+    if hotlist_confidence > requirement_confidence:
+        if hotlist_confidence < CLASSIFICATION_MIN_CONFIDENCE:
+            return None
+        return {"document_kind": "hotlist", "result": hotlist_result}
+
+    if requirement_confidence < CLASSIFICATION_MIN_CONFIDENCE:
+        return None
+    return {"document_kind": "job_description", "result": requirement_result}
