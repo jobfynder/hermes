@@ -10,6 +10,7 @@ import io
 import json
 import os
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 from urllib.request import Request
 
 import app.providers.gmail.service as gmail_service
@@ -202,6 +203,141 @@ def test_graph_fetch_swallows_missing_resource() -> None:
     require(result is None, 'A notification with no resource field must return None, not raise')
 
 
+GRAPH_SUBSCRIPTION_ENV = dict(
+    HERMES_MS_GRAPH_CLIENT_ID='id',
+    HERMES_MS_GRAPH_CLIENT_SECRET='secret',
+    HERMES_MS_GRAPH_TENANT_ID='tenant-1',
+    HERMES_MS_GRAPH_MAILBOXES='requirements@jobfynder.com',
+    HERMES_MS_GRAPH_CLIENT_STATE='super-secret',
+    HERMES_PUBLIC_WEBHOOK_BASE_URL='https://hermes.example.com',
+)
+
+
+def _reset_graph_subscriptions() -> None:
+    path = runtime_path('microsoft_graph', 'subscriptions.json')
+    if path.exists():
+        path.unlink()
+
+
+def test_graph_sync_blocked_without_notification_url() -> None:
+    env = {**GRAPH_SUBSCRIPTION_ENV, 'HERMES_PUBLIC_WEBHOOK_BASE_URL': ''}
+    with env_vars(**env):
+        result = graph_service.sync_graph_subscriptions()
+    require(result['status'] == 'blocked', 'Sync must be blocked without a public webhook base URL')
+
+
+def test_graph_sync_blocked_without_client_state() -> None:
+    env = {**GRAPH_SUBSCRIPTION_ENV, 'HERMES_MS_GRAPH_CLIENT_STATE': ''}
+    with env_vars(**env):
+        result = graph_service.sync_graph_subscriptions()
+    require(result['status'] == 'blocked', 'Sync must be blocked without a clientState secret')
+
+
+def test_graph_sync_blocked_without_mailboxes() -> None:
+    env = {**GRAPH_SUBSCRIPTION_ENV, 'HERMES_MS_GRAPH_MAILBOXES': ''}
+    with env_vars(**env):
+        result = graph_service.sync_graph_subscriptions()
+    require(result['status'] == 'blocked', 'Sync must be blocked with no mailboxes configured')
+
+
+def test_graph_sync_creates_missing_subscription() -> None:
+    _reset_graph_subscriptions()
+    responses = {
+        'login.microsoftonline.com/tenant-1': {'access_token': 'tok'},
+        'graph.microsoft.com/v1.0/subscriptions': {
+            'id': 'sub-1',
+            'expirationDateTime': '2099-01-01T00:00:00.0000000Z',
+        },
+    }
+    with env_vars(**GRAPH_SUBSCRIPTION_ENV):
+        with patched_urlopen(responses):
+            result = graph_service.sync_graph_subscriptions()
+
+    require(result['status'] == 'completed', 'Sync must complete when fully configured')
+    mailbox_result = result['mailboxes']['requirements@jobfynder.com']
+    require(mailbox_result['status'] == 'created', f'Expected a created subscription, got {mailbox_result}')
+    require(
+        graph_service.list_stored_subscriptions()['requirements@jobfynder.com']['id'] == 'sub-1',
+        'The created subscription id must be persisted for future renewal',
+    )
+
+
+def test_graph_sync_leaves_still_valid_subscription_untouched() -> None:
+    _reset_graph_subscriptions()
+    graph_service._store_subscriptions({
+        'requirements@jobfynder.com': {
+            'id': 'sub-1',
+            'expirationDateTime': '2099-01-01T00:00:00.0000000Z',
+        }
+    })
+
+    def fail_if_called(request, timeout=None):
+        raise AssertionError('No HTTP call should happen for an already-fresh subscription')
+
+    with env_vars(**GRAPH_SUBSCRIPTION_ENV):
+        original = graph_service.urlopen
+        graph_service.urlopen = fail_if_called
+        try:
+            result = graph_service.sync_graph_subscriptions()
+        finally:
+            graph_service.urlopen = original
+
+    require(
+        result['mailboxes']['requirements@jobfynder.com']['status'] == 'still_valid',
+        'A subscription expiring far in the future must not be renewed early',
+    )
+
+
+def test_graph_sync_renews_expiring_subscription() -> None:
+    _reset_graph_subscriptions()
+    graph_service._store_subscriptions({
+        'requirements@jobfynder.com': {
+            'id': 'sub-1',
+            # Expires in 1 hour -- inside the 24h renewal window.
+            'expirationDateTime': (
+                datetime.now(timezone.utc) + timedelta(hours=1)
+            ).strftime('%Y-%m-%dT%H:%M:%S.0000000Z'),
+        }
+    })
+
+    responses = {
+        'login.microsoftonline.com/tenant-1': {'access_token': 'tok'},
+        'graph.microsoft.com/v1.0/subscriptions/sub-1': {
+            'expirationDateTime': '2099-01-01T00:00:00.0000000Z',
+        },
+    }
+    with env_vars(**GRAPH_SUBSCRIPTION_ENV):
+        with patched_urlopen(responses):
+            result = graph_service.sync_graph_subscriptions()
+
+    require(
+        result['mailboxes']['requirements@jobfynder.com']['status'] == 'renewed',
+        f"Expected a renewal, got {result['mailboxes']['requirements@jobfynder.com']}",
+    )
+
+
+def test_graph_client_state_verification() -> None:
+    with env_vars(HERMES_MS_GRAPH_CLIENT_STATE='super-secret'):
+        require(
+            graph_service.verify_notification_client_state({'clientState': 'super-secret'}) is True,
+            'A matching clientState must verify',
+        )
+        require(
+            graph_service.verify_notification_client_state({'clientState': 'wrong'}) is False,
+            'A mismatched clientState must not verify',
+        )
+        require(
+            graph_service.verify_notification_client_state({}) is False,
+            'A missing clientState must not verify',
+        )
+
+    with env_vars(HERMES_MS_GRAPH_CLIENT_STATE=''):
+        require(
+            graph_service.verify_notification_client_state({'clientState': 'anything'}) is False,
+            'An unconfigured secret must never verify, even against a plausible-looking value',
+        )
+
+
 def run() -> None:
     tests = [
         test_gmail_fetch_returns_empty_without_credentials,
@@ -211,6 +347,13 @@ def run() -> None:
         test_graph_fetch_returns_none_without_credentials,
         test_graph_fetch_acquires_token_and_fetches_message,
         test_graph_fetch_swallows_missing_resource,
+        test_graph_sync_blocked_without_notification_url,
+        test_graph_sync_blocked_without_client_state,
+        test_graph_sync_blocked_without_mailboxes,
+        test_graph_sync_creates_missing_subscription,
+        test_graph_sync_leaves_still_valid_subscription_untouched,
+        test_graph_sync_renews_expiring_subscription,
+        test_graph_client_state_verification,
     ]
 
     for test in tests:

@@ -1,14 +1,18 @@
 import json
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 
 from app.channels.models import ChannelIntakeRequest
 from app.channels.service import process_channel_intake
 from app.providers.microsoft_graph.service import (
     fetch_graph_message,
+    list_stored_subscriptions,
     microsoft_graph_provider_status,
     normalize_graph_message,
+    sync_graph_subscriptions,
+    verify_notification_client_state,
 )
+from app.security.rbac import require_permission
 
 router = APIRouter(prefix='/providers/microsoft-graph', tags=['Microsoft Graph Provider'])
 
@@ -16,6 +20,27 @@ router = APIRouter(prefix='/providers/microsoft-graph', tags=['Microsoft Graph P
 @router.get('/status')
 def microsoft_graph_status() -> dict:
     return microsoft_graph_provider_status()
+
+
+@router.get('/subscriptions')
+def list_subscriptions(
+    _user: dict = Depends(require_permission('providers:manage')),
+) -> dict:
+    return {'mailboxes': list_stored_subscriptions()}
+
+
+@router.post('/subscriptions/sync')
+def sync_subscriptions(
+    _user: dict = Depends(require_permission('providers:manage')),
+) -> dict:
+    '''Creates or renews the Graph change-notification subscription for
+    every mailbox in HERMES_MS_GRAPH_MAILBOXES. Required operational
+    infrastructure, not a one-time setup step -- Graph subscriptions for
+    mail expire after ~3 days max, so this must be called on a recurring
+    schedule (see scripts/hermes-850-graph-subscription-renew.py, meant to
+    run from a daily host cron) or notifications silently stop arriving.
+    '''
+    return sync_graph_subscriptions()
 
 
 @router.post('/webhook')
@@ -28,13 +53,17 @@ async def microsoft_graph_webhook(request: Request) -> Response:
     happen before any auth/signature check, per Graph's own contract -
     Graph will not create the subscription otherwise.
 
-    Actual change notifications carry a `resource` reference per item in
-    `value[]`; each is fetched via fetch_graph_message() (app-only Graph
-    auth) and, if the fetch succeeds, normalized and passed through the
-    same process_channel_intake() pipeline every other email source uses.
-    A notification whose fetch fails (or when Graph credentials aren't
-    configured) is simply skipped -- still acknowledged, so Graph doesn't
-    retry a fetch that will fail again for the same reason.
+    Actual change notifications carry a `resource` reference and a
+    `clientState` per item in `value[]`. Each notification's clientState
+    is checked against HERMES_MS_GRAPH_CLIENT_STATE
+    (verify_notification_client_state) before anything is fetched --
+    this endpoint is necessarily unauthenticated (Graph calls it directly,
+    no bearer token), so clientState is the only defense against a forged
+    notification making Hermes fetch and ingest an attacker-chosen
+    message using this app's own Mail.Read grant. A notification that
+    fails this check, or whose message fetch fails, is skipped -- still
+    acknowledged, so Graph doesn't retry a fetch that will fail again for
+    the same reason.
     '''
     validation_token = request.query_params.get('validationToken')
 
@@ -48,8 +77,13 @@ async def microsoft_graph_webhook(request: Request) -> Response:
     status = microsoft_graph_provider_status()
 
     processed: list[dict] = []
+    rejected_count = 0
     if status['configured']:
         for notification in notifications:
+            if not verify_notification_client_state(notification):
+                rejected_count += 1
+                continue
+
             message = fetch_graph_message(notification.get('resource'))
             if not message:
                 continue
@@ -69,6 +103,7 @@ async def microsoft_graph_webhook(request: Request) -> Response:
             'acknowledged': True,
             'configured': status['configured'],
             'notification_count': len(notifications),
+            'rejected_count': rejected_count,
             'processed_count': len(processed),
             'processed': processed,
             'note': (

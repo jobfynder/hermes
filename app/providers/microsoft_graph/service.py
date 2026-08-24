@@ -1,15 +1,23 @@
 import json
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.email_parsing.routing import classify_recipient_mailbox
+from app.runtime.jsonl_store import read_json, runtime_path, write_json
 
 
 GRAPH_TOKEN_URL_TEMPLATE = 'https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token'
 GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0'
+
+# Graph's own documented max subscription lifetime for Outlook mail
+# resources is 4230 minutes (~2.94 days). Renewing at 24h remaining gives
+# a wide safety margin for a daily renewal job to catch it.
+MAX_MESSAGE_SUBSCRIPTION_MINUTES = 4230
+RENEW_WITHIN = timedelta(hours=24)
 
 
 def microsoft_graph_provider_status() -> dict[str, Any]:
@@ -17,6 +25,12 @@ def microsoft_graph_provider_status() -> dict[str, Any]:
         os.getenv('HERMES_MS_GRAPH_CLIENT_ID')
         and os.getenv('HERMES_MS_GRAPH_CLIENT_SECRET')
         and os.getenv('HERMES_MS_GRAPH_TENANT_ID')
+    )
+    subscriptions_configured = bool(
+        configured
+        and _notification_url()
+        and _client_state()
+        and configured_mailboxes()
     )
 
     return {
@@ -30,12 +44,22 @@ def microsoft_graph_provider_status() -> dict[str, Any]:
         'parser_mode': 'deterministic',
         'uses_llm': False,
         'notification_mode': 'graph_change_notifications',
+        'subscriptions_configured': subscriptions_configured,
+        'mailboxes': configured_mailboxes(),
     }
 
 
 def _strip_html(html: str) -> str:
     text = re.sub(r'<[^>]+>', ' ', html or '')
     return re.sub(r'\s+', ' ', text).strip()
+
+
+def _graph_credentials_configured() -> bool:
+    return bool(
+        os.getenv('HERMES_MS_GRAPH_CLIENT_ID')
+        and os.getenv('HERMES_MS_GRAPH_CLIENT_SECRET')
+        and os.getenv('HERMES_MS_GRAPH_TENANT_ID')
+    )
 
 
 def _get_graph_access_token() -> str | None:
@@ -103,6 +127,167 @@ def fetch_graph_message(resource: str | None) -> dict[str, Any] | None:
             return json.loads(response.read().decode('utf-8'))
     except Exception:
         return None
+
+
+def configured_mailboxes() -> list[str]:
+    raw = os.getenv('HERMES_MS_GRAPH_MAILBOXES', '')
+    return [mailbox.strip() for mailbox in raw.split(',') if mailbox.strip()]
+
+
+def _client_state() -> str | None:
+    return os.getenv('HERMES_MS_GRAPH_CLIENT_STATE') or None
+
+
+def _notification_url() -> str | None:
+    # Read dynamically (not via app.config's module-level constant) so
+    # this stays consistent with every other env var this module reads,
+    # and so it can be set/unset per-test without reloading modules.
+    base_url = os.getenv('HERMES_PUBLIC_WEBHOOK_BASE_URL')
+    if not base_url:
+        return None
+    return f"{base_url.rstrip('/')}/providers/microsoft-graph/webhook"
+
+
+def verify_notification_client_state(notification: dict[str, Any]) -> bool:
+    '''Graph's own anti-spoofing mechanism: every subscription is created
+    with a clientState value, and every change notification Graph sends
+    for it echoes that value back. Without checking this, anyone who finds
+    the (unauthenticated, necessarily-public) webhook URL could POST a
+    forged notification and make Hermes fetch and ingest whatever message
+    they choose, using this app's own Mail.Read grant. Returns False (do
+    not process) if no clientState is configured at all, not just on a
+    mismatch -- an unconfigured secret is not an open invitation.
+    '''
+    expected = _client_state()
+    return bool(expected) and notification.get('clientState') == expected
+
+
+def _subscriptions_path():
+    return runtime_path('microsoft_graph', 'subscriptions.json')
+
+
+def _load_stored_subscriptions() -> dict[str, Any]:
+    return read_json(_subscriptions_path()) or {}
+
+
+def _store_subscriptions(data: dict[str, Any]) -> None:
+    write_json(_subscriptions_path(), data)
+
+
+def _graph_api_request(
+    method: str,
+    path: str,
+    access_token: str,
+    body: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    data = json.dumps(body).encode('utf-8') if body is not None else None
+    request = Request(f'{GRAPH_API_BASE}{path}', data=data, method=method)
+    request.add_header('Authorization', f'Bearer {access_token}')
+    if data is not None:
+        request.add_header('Content-Type', 'application/json')
+
+    with urlopen(request, timeout=15) as response:
+        raw = response.read()
+        return json.loads(raw) if raw else {}
+
+
+def sync_graph_subscriptions() -> dict[str, Any]:
+    '''Creates a Graph change-notification subscription for every mailbox
+    in HERMES_MS_GRAPH_MAILBOXES that doesn't have one yet, and renews
+    (PATCH expirationDateTime) any that expire within RENEW_WITHIN.
+    Already-fresh subscriptions are left untouched. Idempotent -- safe to
+    call repeatedly, e.g. from a daily host cron running
+    scripts/hermes-850-graph-subscription-renew.py, which is required
+    infrastructure here, not optional: without it, notifications silently
+    stop arriving once the subscription expires (~3 days for mail) and
+    nothing else in this codebase would re-create it.
+
+    Returns {'status': 'blocked', 'reason': ...} without calling Graph at
+    all if credentials, the notification URL, the clientState secret, or
+    the mailbox list aren't all configured.
+    '''
+    notification_url = _notification_url()
+    client_state = _client_state()
+    mailboxes = configured_mailboxes()
+
+    if not _graph_credentials_configured():
+        return {'status': 'blocked', 'reason': 'graph_credentials_not_configured'}
+    if not notification_url:
+        return {'status': 'blocked', 'reason': 'HERMES_PUBLIC_WEBHOOK_BASE_URL_not_set'}
+    if not client_state:
+        return {'status': 'blocked', 'reason': 'HERMES_MS_GRAPH_CLIENT_STATE_not_set'}
+    if not mailboxes:
+        return {'status': 'blocked', 'reason': 'HERMES_MS_GRAPH_MAILBOXES_not_set'}
+
+    stored = _load_stored_subscriptions()
+    results: dict[str, Any] = {}
+    now = datetime.now(timezone.utc)
+    expiration = (
+        now + timedelta(minutes=MAX_MESSAGE_SUBSCRIPTION_MINUTES)
+    ).strftime('%Y-%m-%dT%H:%M:%S.0000000Z')
+
+    # Acquired lazily, once, only if at least one mailbox actually needs an
+    # API call this run -- avoids a pointless token exchange when every
+    # subscription is already fresh.
+    access_token: str | None = None
+
+    for mailbox in mailboxes:
+        existing = stored.get(mailbox)
+
+        if existing and existing.get('id'):
+            expires_at = datetime.fromisoformat(
+                existing['expirationDateTime'].replace('Z', '+00:00')
+            )
+            if expires_at - now > RENEW_WITHIN:
+                results[mailbox] = {'status': 'still_valid', **existing}
+                continue
+
+        if access_token is None:
+            access_token = _get_graph_access_token()
+            if not access_token:
+                results[mailbox] = {'status': 'failed', 'error': 'token_acquisition_failed'}
+                continue
+
+        try:
+            if existing and existing.get('id'):
+                updated = _graph_api_request(
+                    'PATCH',
+                    f"/subscriptions/{existing['id']}",
+                    access_token,
+                    {'expirationDateTime': expiration},
+                )
+                stored[mailbox] = {
+                    'id': existing['id'],
+                    'expirationDateTime': updated.get('expirationDateTime', expiration),
+                }
+                results[mailbox] = {'status': 'renewed', **stored[mailbox]}
+            else:
+                created = _graph_api_request(
+                    'POST',
+                    '/subscriptions',
+                    access_token,
+                    {
+                        'changeType': 'created',
+                        'notificationUrl': notification_url,
+                        'resource': f"users/{mailbox}/mailFolders('Inbox')/messages",
+                        'expirationDateTime': expiration,
+                        'clientState': client_state,
+                    },
+                )
+                stored[mailbox] = {
+                    'id': created.get('id'),
+                    'expirationDateTime': created.get('expirationDateTime', expiration),
+                }
+                results[mailbox] = {'status': 'created', **stored[mailbox]}
+        except Exception as exc:
+            results[mailbox] = {'status': 'failed', 'error': str(exc)}
+
+    _store_subscriptions(stored)
+    return {'status': 'completed', 'mailboxes': results}
+
+
+def list_stored_subscriptions() -> dict[str, Any]:
+    return _load_stored_subscriptions()
 
 
 def normalize_graph_message(message: dict[str, Any]) -> dict[str, Any]:
