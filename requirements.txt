@@ -9,3 +9,4 @@ rapidfuzz
 tiktoken
 python-multipart
 spacy
+pika
