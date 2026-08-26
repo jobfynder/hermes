@@ -20,3 +20,24 @@ services:
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  # Reads Microsoft Graph mail notifications off RabbitMQ and hands them
+  # to the same fetch/parse pipeline hermes-api already has. Separate
+  # process from hermes-api on purpose: it's a blocking consume loop, not
+  # a request handler, and a crash/restart here shouldn't take the web
+  # app down with it (or vice versa).
+  hermes-graph-consumer:
+    build: .
+    container_name: hermes-graph-consumer
+    restart: unless-stopped
+    command: python scripts/hermes-850-graph-notification-consumer.py
+
+    env_file:
+      - .env
+
+    volumes:
+      - /opt/jobfynder-docs:/jobfynder-docs
+      - /opt/hermes-runtime:/hermes-runtime
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
