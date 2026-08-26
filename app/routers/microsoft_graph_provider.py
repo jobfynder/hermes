@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 
 from fastapi import APIRouter, Depends, Request, Response
 
@@ -14,7 +16,29 @@ from app.providers.microsoft_graph.service import (
 )
 from app.security.rbac import require_permission
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix='/providers/microsoft-graph', tags=['Microsoft Graph Provider'])
+
+# Kill switch for the OLD synchronous webhook path below, now that Graph
+# notifications are meant to arrive via jobfynder-infra's COMM gateway
+# (hooks.jobfynder.com/microsoft-graph/mail -> RabbitMQ ->
+# scripts/hermes-850-graph-notification-consumer.py) instead of calling
+# this route directly. Defaults to "still enabled" on purpose -- flipping
+# it off is only safe once patch-hermes-graph-subscription.py has been run
+# (so Graph is actually registered against the new URL, not this one) and
+# the new consumer is confirmed processing mail. Until both of those are
+# true, this route may still be the one Graph is actually calling.
+#
+# Once confirmed, set HERMES_MS_GRAPH_LEGACY_WEBHOOK_ENABLED=false. Leaving
+# this route silently live and reachable after the migration is a second,
+# forgotten front door into Hermes's Mail.Read-scoped fetch-and-parse path,
+# defended by nothing but clientState.
+_LEGACY_WEBHOOK_DISABLED_VALUES = {"0", "false", "no", "off", "disabled"}
+LEGACY_WEBHOOK_ENABLED = (
+    os.getenv("HERMES_MS_GRAPH_LEGACY_WEBHOOK_ENABLED", "true").strip().lower()
+    not in _LEGACY_WEBHOOK_DISABLED_VALUES
+)
 
 
 @router.get('/status')
@@ -36,7 +60,7 @@ def sync_subscriptions(
     '''Creates or renews the Graph change-notification subscription for
     every mailbox in HERMES_MS_GRAPH_MAILBOXES. Required operational
     infrastructure, not a one-time setup step -- Graph subscriptions for
-    mail expire after ~3 days max, so this must be called on a recurring
+    mail expire after up to 7 days, so this must be called on a recurring
     schedule (see scripts/hermes-850-graph-subscription-renew.py, meant to
     run from a daily host cron) or notifications silently stop arriving.
     '''
@@ -45,13 +69,24 @@ def sync_subscriptions(
 
 @router.post('/webhook')
 async def microsoft_graph_webhook(request: Request) -> Response:
-    '''Microsoft Graph change-notification webhook.
+    '''Microsoft Graph change-notification webhook -- LEGACY PATH.
+
+    This is the original synchronous implementation: fetch and parse
+    happen inline, in the same request Graph is waiting on. The current
+    architecture moves that off this route entirely -- see
+    LEGACY_WEBHOOK_ENABLED above. This handler is kept working (not
+    deleted) so it still exists as a fallback and so its logic remains the
+    reference implementation scripts/hermes-850-graph-notification-
+    consumer.py's queue-based version was built to match, but it should
+    not be the route Graph actually calls once the migration is complete.
 
     Subscription validation handshake: when a subscription is created or
     renewed, Graph sends a POST with ?validationToken=<token> and expects
     the raw token echoed back as text/plain within 10 seconds. This must
     happen before any auth/signature check, per Graph's own contract -
-    Graph will not create the subscription otherwise.
+    Graph will not create the subscription otherwise. Answered
+    unconditionally, even while the legacy path is disabled below, since a
+    stale subscription still pointed here could otherwise wedge a renewal.
 
     Actual change notifications carry a `resource` reference and a
     `clientState` per item in `value[]`. Each notification's clientState
@@ -69,6 +104,25 @@ async def microsoft_graph_webhook(request: Request) -> Response:
 
     if validation_token is not None:
         return Response(content=validation_token, media_type='text/plain')
+
+    if not LEGACY_WEBHOOK_ENABLED:
+        logger.warning(
+            "Received a Microsoft Graph notification on the legacy "
+            "synchronous webhook route (/providers/microsoft-graph/webhook) "
+            "while HERMES_MS_GRAPH_LEGACY_WEBHOOK_ENABLED is disabled. "
+            "Nothing should be calling this route once subscriptions point "
+            "at hooks.jobfynder.com/microsoft-graph/mail -- if this keeps "
+            "happening, something (a stale subscription, DNS, cached "
+            "config) still points here and needs to be found."
+        )
+        return Response(
+            status_code=410,
+            content=json.dumps({
+                'acknowledged': False,
+                'reason': 'legacy_webhook_disabled',
+            }),
+            media_type='application/json',
+        )
 
     body = await request.body()
     envelope = json.loads(body.decode('utf-8')) if body else {}
