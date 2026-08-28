@@ -89,6 +89,37 @@ def build_hotlist_provenance(record: dict[str, Any], extractor: str) -> list[dic
     ]
 
 
+def build_signature_provenance(signature: dict[str, Any]) -> list[dict[str, Any]]:
+    '''Field-level provenance for app/email_parsing/signature.py's output,
+    one row per extracted contact field -- same shape as
+    build_job_requirement_provenance/build_hotlist_provenance above, keyed
+    under "signature.<field>" instead of "job."/"consultant.<n>.".
+    '''
+    if not signature.get('detected'):
+        return []
+
+    extractor = signature.get('parser', {}).get('name', 'hermes_email_signature_parser')
+    entries: list[dict[str, Any]] = []
+
+    for field_name, field_data in signature.get('contact', {}).items():
+        if not isinstance(field_data, dict):
+            continue
+
+        entries.append(
+            _entry(
+                f'signature.{field_name}',
+                field_data.get('raw'),
+                extractor=extractor,
+                extraction_method=field_data.get('method', 'deterministic'),
+                confidence=float(field_data.get('confidence', 0.0)),
+                source_region=field_data.get('source'),
+            )
+        )
+        entries[-1]['normalized_value'] = field_data.get('value')
+
+    return entries
+
+
 def build_email_parsing_provenance(email_parsing: dict[str, Any]) -> list[dict[str, Any]]:
     '''Fan out one parse_email_business_records() result into field-level
     provenance entries across all of its records (spec section 10).

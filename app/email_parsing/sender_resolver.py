@@ -134,6 +134,17 @@ def looks_forwarded(text: str) -> bool:
     return bool(_FORWARD_MARKER_RE.search(text or ''))
 
 
+def forwarded_marker_span(text: str) -> tuple[int, int] | None:
+    '''Character span of the "---- Forwarded message ----" / "---- Original
+    message ----" marker, or None. Public so other modules that need to
+    bound "current message only" text (e.g. app/email_parsing/signature.py,
+    which must not scan quoted/forwarded history for a signature) can reuse
+    the same marker definition instead of duplicating the regex.'''
+
+    match = _FORWARD_MARKER_RE.search(text or '')
+    return match.span() if match else None
+
+
 def find_body_contact_email(text: str) -> str | None:
     """Public wrapper so other modules (e.g. app/claim/service.py) can
     reuse the same non-infra email search without reaching into a private

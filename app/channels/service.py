@@ -1,3 +1,5 @@
+from time import perf_counter
+
 from app.access.models import ActionAccessRequest
 from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
@@ -7,8 +9,13 @@ from app.email_parsing.parsers import (
     classify_email_by_confidence,
     parse_email_business_records,
 )
-from app.email_parsing.provenance import build_email_parsing_provenance, record_field_provenance
+from app.email_parsing.provenance import (
+    build_email_parsing_provenance,
+    build_signature_provenance,
+    record_field_provenance,
+)
 from app.email_parsing.sender_resolver import looks_forwarded, resolve_original_sender
+from app.email_parsing.signature import parse_email_signature
 from app.runtime.events import emit_event
 from app.runtime.intake_log import (
     load_idempotency_keys,
@@ -278,6 +285,7 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
     )
 
     email_parsing: dict = {}
+    signature: dict = {}
 
     if request.channel == "email":
         email_parsing = parse_email_business_records(
@@ -290,6 +298,69 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
 
         if isinstance(email_confidence, int | float):
             confidence = float(email_confidence)
+
+        # Deterministic signature extraction (no LLM -- see
+        # app/email_parsing/signature.py PARSER_METADATA). Additive to
+        # structured_data, never overrides document_kind/email_parsing
+        # confidence above: a signature is metadata about the sender, not
+        # the business record the email is classified as.
+        signature_started_at = perf_counter()
+        signature = parse_email_signature(
+            text=request.text or "",
+            sender_email=request.sender.email if request.sender else None,
+        )
+        structured_data["signature"] = signature
+
+        emit_event(
+            "signature.parser_latency",
+            {
+                "duplicate_key": duplicate_key,
+                "latency_ms": round((perf_counter() - signature_started_at) * 1000, 3),
+            },
+        )
+
+        emit_event(
+            "signature.detected" if signature["detected"] else "signature.not_detected",
+            {
+                "duplicate_key": duplicate_key,
+                "channel": request.channel,
+                "source_message_id": request.source_message_id,
+                "confidence": signature["confidence"],
+                "fields_extracted": sorted(signature.get("contact", {}).keys()),
+                "llm_calls": 0,
+            },
+        )
+
+        if signature["detected"] and signature["requires_review"]:
+            emit_event(
+                "signature.low_confidence",
+                {
+                    "duplicate_key": duplicate_key,
+                    "confidence": signature["confidence"],
+                    "warnings": signature.get("warnings", []),
+                },
+            )
+
+        if signature.get("quoted_signature_ignored"):
+            emit_event(
+                "signature.quoted_signature_ignored",
+                {"duplicate_key": duplicate_key},
+            )
+
+        for warning in signature.get("warnings", []):
+            if warning == "disclaimer_removed":
+                emit_event("signature.disclaimer_removed", {"duplicate_key": duplicate_key})
+            elif warning.endswith("_not_detected") and signature["detected"]:
+                emit_event(
+                    "signature.extraction_failure_by_field",
+                    {"duplicate_key": duplicate_key, "field": warning.removesuffix("_not_detected")},
+                )
+
+        for field_name in signature.get("contact", {}):
+            emit_event(
+                "signature.extraction_success_by_field",
+                {"duplicate_key": duplicate_key, "field": field_name},
+            )
 
     requires_review = (
         confidence < 0.7
@@ -385,6 +456,12 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         record_field_provenance(
             parse_run_id=draft.draft_id,
             entries=build_email_parsing_provenance(email_parsing),
+        )
+
+    if signature.get("detected"):
+        record_field_provenance(
+            parse_run_id=draft.draft_id,
+            entries=build_signature_provenance(signature),
         )
 
     return ChannelIntakeResponse(
