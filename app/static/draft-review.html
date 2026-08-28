@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Hermes Draft Review</title>
+  <style>
+    :root{color-scheme:dark;--bg:#08111f;--panel:#101c2e;--line:#26364d;--text:#e7eef8;--muted:#94a5bd;--accent:#55d6be;--warn:#ffcc66;--bad:#ff7b85}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif}header{padding:24px 28px;border-bottom:1px solid var(--line);display:flex;gap:20px;align-items:center;justify-content:space-between}h1,h2{margin:0}h1{font-size:22px}main{display:grid;grid-template-columns:minmax(300px,38%) 1fr;min-height:calc(100vh - 84px)}aside,article{padding:22px;overflow:auto}aside{border-right:1px solid var(--line)}.auth,.toolbar{display:flex;gap:8px;margin-bottom:16px}input,select,button{border:1px solid var(--line);background:#0b1728;color:var(--text);border-radius:7px;padding:9px 11px}input{min-width:0;flex:1}button{cursor:pointer}button:hover{border-color:var(--accent)}.draft{display:block;width:100%;text-align:left;margin:8px 0;padding:13px;background:var(--panel)}.draft.active{border-color:var(--accent)}.meta{color:var(--muted);font-size:13px}.badge{display:inline-block;margin-right:6px;padding:2px 7px;border-radius:999px;background:#20324a;font-size:12px}.review{color:var(--warn)}.error{color:var(--bad);white-space:pre-wrap}.empty{color:var(--muted);padding:28px 0}dl{display:grid;grid-template-columns:150px 1fr;gap:8px 16px}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}section{margin-top:22px}pre{background:#07101d;border:1px solid var(--line);border-radius:8px;padding:15px;white-space:pre-wrap;overflow-wrap:anywhere;max-height:44vh;overflow:auto}@media(max-width:800px){main{display:block}aside{border-right:0;border-bottom:1px solid var(--line)}}
+  </style>
+</head>
+<body>
+  <header><div><h1>Hermes Draft Review</h1><div class="meta">Read-only inspection of parsed email drafts</div></div><div id="count" class="meta"></div></header>
+  <main>
+    <aside>
+      <div class="auth"><input id="token" type="password" autocomplete="off" placeholder="Hermes API access token"><button id="connect">Connect</button></div>
+      <div class="toolbar"><input id="search" placeholder="Search drafts"><select id="status"><option value="">All statuses</option><option>needs_review</option><option>draft</option><option>published</option><option>rejected</option></select><button id="refresh">Refresh</button></div>
+      <div id="message" class="empty">Enter an access token to load drafts.</div><div id="list"></div>
+    </aside>
+    <article id="detail"><div class="empty">Select a draft to inspect its parsed content.</div></article>
+  </main>
+  <script>
+    const $=id=>document.getElementById(id); let drafts=[],selected=null;
+    $('token').value=sessionStorage.getItem('hermesReviewToken')||'';
+    const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function filtered(){const q=$('search').value.toLowerCase(),s=$('status').value;return drafts.filter(d=>(!s||d.status===s)&&(!q||JSON.stringify(d).toLowerCase().includes(q)))}
+    function renderList(){const rows=filtered();$('count').textContent=`${rows.length} of ${drafts.length} drafts`;$('message').hidden=rows.length>0;$('message').textContent=drafts.length?'No matching drafts.':'No drafts found.';$('list').innerHTML=rows.map(d=>`<button class="draft ${selected===d.draft_id?'active':''}" data-id="${esc(d.draft_id)}"><strong>${esc(d.title||d.draft_type)}</strong><br><span class="badge ${d.requires_review?'review':''}">${esc(d.status)}</span><span class="badge">${esc(d.draft_type)}</span><br><span class="meta">${esc(d.draft_id)}</span></button>`).join('');document.querySelectorAll('.draft').forEach(b=>b.onclick=()=>show(b.dataset.id))}
+    function show(id){const d=drafts.find(x=>x.draft_id===id);if(!d)return;selected=id;renderList();$('detail').innerHTML=`<h2>${esc(d.title||'Untitled draft')}</h2><dl><dt>Draft ID</dt><dd>${esc(d.draft_id)}</dd><dt>Type</dt><dd>${esc(d.draft_type)}</dd><dt>Status</dt><dd>${esc(d.status)}</dd><dt>Confidence</dt><dd>${esc(d.confidence)}</dd><dt>Needs review</dt><dd>${esc(d.requires_review)}</dd><dt>Source</dt><dd>${esc(d.source)}</dd><dt>Channel</dt><dd>${esc(d.channel)}</dd><dt>Message ID</dt><dd>${esc(d.source_message_id)}</dd></dl><section><h2>Summary</h2><p>${esc(d.summary||'No summary')}</p></section><section><h2>Normalized fields</h2><pre>${esc(JSON.stringify({job_titles:d.normalized_job_titles,skills:d.normalized_skills,taxonomy:d.taxonomy_signals},null,2))}</pre></section><section><h2>Parsed payload</h2><pre>${esc(JSON.stringify(d.payload,null,2))}</pre></section><section><h2>Validation errors</h2><pre>${esc(JSON.stringify(d.errors,null,2))}</pre></section>`}
+    async function load(){const token=$('token').value.trim();if(!token){$('message').hidden=false;$('message').textContent='Enter an access token to load drafts.';return}sessionStorage.setItem('hermesReviewToken',token);$('message').hidden=false;$('message').className='empty';$('message').textContent='Loading…';try{const r=await fetch('/drafts',{headers:{Authorization:`Bearer ${token}`}});if(!r.ok)throw new Error(r.status===401?'Invalid or missing access token.':`Request failed (${r.status}).`);drafts=(await r.json()).sort((a,b)=>String(b.draft_id).localeCompare(String(a.draft_id)));$('message').hidden=true;renderList();if(selected&&drafts.some(d=>d.draft_id===selected))show(selected)}catch(e){drafts=[];$('list').innerHTML='';$('count').textContent='';$('message').hidden=false;$('message').className='error';$('message').textContent=e.message}}
+    $('connect').onclick=load;$('refresh').onclick=load;$('search').oninput=renderList;$('status').onchange=renderList;$('token').onkeydown=e=>{if(e.key==='Enter')load()};if($('token').value)load();
+  </script>
+</body>
+</html>
