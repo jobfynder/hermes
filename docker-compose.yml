@@ -15,6 +15,7 @@ services:
       - /opt/hermes-runtime:/hermes-runtime
 
     environment:
+      - PYTHONPATH=/app
       - HERMES_RBAC_ENFORCEMENT=enabled
       - HERMES_ACCESS_CONTROL_FILE=/hermes-runtime/access-control/users.json
 
@@ -34,6 +35,9 @@ services:
 
     env_file:
       - .env
+
+    environment:
+      - PYTHONPATH=/app
 
     volumes:
       - /opt/jobfynder-docs:/jobfynder-docs
