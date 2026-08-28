@@ -184,9 +184,88 @@ Need a senior Python developer for a long-term project.
     return result.understanding_result["draft_id"]
 
 
+def shared_mailbox_check() -> None:
+    """Jobfynder's real setup: hotlist and requirement email both arrive
+    at jobs@jobfynder.com, not the two separate addresses the other
+    checks in this file use. There's no recipient-address signal here --
+    this exercises the full path through classify_email_by_confidence()
+    (app/email_parsing/parsers.py) via detect_document_kind()
+    (app/channels/service.py), not just the unit-level parser check in
+    hermes-850-email-parsing-check.py.
+    """
+    hotlist_payload = {
+        "message_id": f"hermes-850-shared-hotlist-{uuid4()}",
+        "from": {"name": "Bench Sales Recruiter", "email": "bsr@example.com"},
+        "to": [{"name": "Jobfynder Jobs", "email": "jobs@jobfynder.com"}],
+        "subject": "Available Consultants Hotlist",
+        "text": """
+Name | Title | Skills | Experience | Location | Visa | Availability | Rate
+John Smith | Java Developer | Java, AWS, Spring Boot | 8 years | Dallas, TX | H1B | Immediate | $75/hr
+Mary Jones | Python Developer | Python, FastAPI, PostgreSQL | 6 years | Austin, TX | Green Card | 2 Weeks | $70/hr
+""",
+        "attachments": [],
+        "provider": "integration_test",
+    }
+    normalized = normalize_email_payload(hotlist_payload)
+
+    require(
+        normalized["metadata"]["intended_document_kind"] == "unknown",
+        "A shared mailbox must NOT resolve via recipient address -- if this "
+        "assertion fails, HERMES_HOTLIST_MAILBOX/HERMES_REQUIREMENTS_MAILBOX "
+        "were probably set to jobs@jobfynder.com, which defeats the "
+        "confidence-based fallback this test is actually checking",
+    )
+
+    result = process_channel_intake(ChannelIntakeRequest(**normalized))
+    require(
+        result.document_kind == "hotlist",
+        f"Shared-mailbox hotlist email misclassified as {result.document_kind}",
+    )
+    require(
+        result.draft_object_type == "draft_hotlist",
+        f"Unexpected draft type for shared-mailbox hotlist: {result.draft_object_type}",
+    )
+
+    requirement_payload = {
+        "message_id": f"hermes-850-shared-requirement-{uuid4()}",
+        "from": {"name": "Technical Recruiter", "email": "recruiter@example.com"},
+        "to": "jobs@jobfynder.com",
+        "subject": "Senior Python Developer Requirement",
+        "text": """
+Job Title: Senior Python Developer
+Location: Dallas, TX
+Required Skills: Python, FastAPI, PostgreSQL, AWS
+Preferred Skills: Docker, Kubernetes
+Experience: 7 years
+Employment Type: Contract
+Rate: $80/hr
+Work Authorization: USC or Green Card
+
+Need a senior Python developer for a long-term project.
+""",
+        "attachments": [],
+        "provider": "integration_test",
+    }
+    normalized = normalize_email_payload(requirement_payload)
+    result = process_channel_intake(ChannelIntakeRequest(**normalized))
+
+    require(
+        result.document_kind == "job_description",
+        f"Shared-mailbox requirement email misclassified as {result.document_kind}",
+    )
+    require(
+        result.draft_object_type == "draft_job_requirement",
+        f"Unexpected draft type for shared-mailbox requirement: {result.draft_object_type}",
+    )
+
+    print("PASS: shared-mailbox hotlist classified by confidence, not recipient address")
+    print("PASS: shared-mailbox requirement classified by confidence, not recipient address")
+
+
 def main() -> None:
     hotlist_draft_id = hotlist_check()
     requirement_draft_id = requirement_check()
+    shared_mailbox_check()
 
     print(f"hotlist_draft_id={hotlist_draft_id}")
     print(f"requirement_draft_id={requirement_draft_id}")

@@ -2,7 +2,13 @@ from app.access.models import ActionAccessRequest
 from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
 from app.drafts.service import create_draft_object
-from app.email_parsing.parsers import parse_email_business_records
+from app.email_parsing.dedupe import register_and_check
+from app.email_parsing.parsers import (
+    classify_email_by_confidence,
+    parse_email_business_records,
+)
+from app.email_parsing.provenance import build_email_parsing_provenance, record_field_provenance
+from app.email_parsing.sender_resolver import looks_forwarded, resolve_original_sender
 from app.runtime.events import emit_event
 from app.runtime.intake_log import (
     load_idempotency_keys,
@@ -28,6 +34,19 @@ def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
 
         if intended_document_kind in {"hotlist", "job_description"}:
             return intended_document_kind
+
+        # Recipient-address routing couldn't resolve this (ambiguous or a
+        # single shared mailbox receiving both kinds -- see
+        # app/email_parsing/routing.py). Before falling through to the
+        # generic keyword-marker classification below, try the two
+        # purpose-built parsers directly: each already does real
+        # structural analysis to produce its own confidence score, which
+        # is a stronger signal than a body-keyword list. Only fall
+        # through if that's inconclusive too (both score 0, or an exact
+        # tie).
+        confidence_classification = classify_email_by_confidence(request.text or "")
+        if confidence_classification is not None:
+            return confidence_classification["document_kind"]
 
     text = (request.text or "").lower()
 
@@ -204,6 +223,24 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         },
     )
 
+    # Exact-content dedupe (spec 12.1, layer 2): a different
+    # provider_message_id carrying the identical body -- e.g. the same
+    # email forwarded to two aliases, or re-delivered by the provider
+    # under a new id. Transport dedupe above already caught a retry of
+    # the *same* id; this catches the same content arriving as a "new"
+    # message. Never blocks intake -- every source message is preserved
+    # and still becomes its own draft, just linked to the canonical one.
+    content_dedupe = register_and_check(request.text or "", duplicate_key)
+    if content_dedupe["is_exact_content_duplicate"]:
+        emit_event(
+            "intake.exact_content_duplicate",
+            {
+                "duplicate_key": duplicate_key,
+                "canonical_duplicate_key": content_dedupe["canonical_duplicate_key"],
+                "duplicate_group_id": content_dedupe["duplicate_group_id"],
+            },
+        )
+
     document_kind = detect_document_kind(request)
 
     if not request.text and not request.attachments:
@@ -287,6 +324,21 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
 
     draft_type = draft_object_for(document_kind)
 
+    # Forwarded-sender resolution (spec 4.1). normalize_email_payload()
+    # (app/providers/email/service.py) already computes this ahead of time
+    # for the webhook path, where a Reply-To header may be available --
+    # reuse that if present. Recomputed here from request.text as a
+    # channel-level fallback so the same guarantee holds regardless of
+    # entry point (webhook, Gmail/Graph connector, or a direct call),
+    # since ChannelIntakeRequest itself carries no reply_to field.
+    original_sender_candidate = request.metadata.get("original_sender_candidate")
+    if (
+        not original_sender_candidate
+        and request.channel == "email"
+        and looks_forwarded(request.text or "")
+    ):
+        original_sender_candidate = resolve_original_sender(request.text or "")
+
     draft = create_draft_object(
         draft_type=draft_type,
         source="channel_text_intake",
@@ -306,8 +358,34 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         metadata={
             "duplicate_key": duplicate_key,
             "content_type": request.content_type,
+            "sender": request.sender.model_dump() if request.sender else None,
+            "original_sender_candidate": original_sender_candidate,
+            "exact_content_duplicate_of": (
+                content_dedupe["canonical_duplicate_key"]
+                if content_dedupe["is_exact_content_duplicate"]
+                else None
+            ),
+            "duplicate_group_id": content_dedupe["duplicate_group_id"],
+            **{
+                # Carries any other channel-specific extras set upstream
+                # through to the draft without hardcoding channel-specific
+                # keys here.
+                key: value
+                for key, value in request.metadata.items()
+                if key not in {"duplicate_key", "content_type", "original_sender_candidate"}
+            },
         },
     )
+
+    if email_parsing:
+        # Field-level provenance (spec section 10): one entry per extracted
+        # field, keyed by this draft's id as the parse_run_id (this
+        # codebase creates exactly one parse per intake, so the draft
+        # already is the parse-run record -- no separate id needed).
+        record_field_provenance(
+            parse_run_id=draft.draft_id,
+            entries=build_email_parsing_provenance(email_parsing),
+        )
 
     return ChannelIntakeResponse(
         channel=request.channel,

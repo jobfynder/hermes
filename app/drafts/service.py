@@ -143,3 +143,61 @@ def publish_draft_object(draft_id: str) -> DraftPublishResult:
         },
         errors=[],
     )
+
+
+def reject_draft_object(draft_id: str, reason: str | None = None) -> DraftPublishResult:
+    """The reviewer decided a draft shouldn't become a real record (e.g. a
+    hotlist/profile draft with no Core-side auto-creation path, or a
+    requirement draft judged not worth acting on). Mirrors
+    publish_draft_object's shape/behavior -- sets a terminal status so the
+    draft stops showing up as pending review, but never deletes the
+    record, keeping it available for audit.
+    """
+    draft = get_draft_object(draft_id)
+
+    if not draft:
+        return DraftPublishResult(
+            status="blocked",
+            draft_id=draft_id,
+            draft_type="draft_channel_note",
+            errors=["draft_not_found"],
+        )
+
+    draft.status = "rejected"
+    if reason:
+        draft.metadata = {**draft.metadata, "rejection_reason": reason}
+    _drafts[draft.draft_id] = draft
+    write_json(_draft_path(draft.draft_id), draft.model_dump())
+    emit_event(
+        "draft.rejected",
+        {
+            "draft_id": draft.draft_id,
+            "draft_type": draft.draft_type,
+            "reason": reason,
+        },
+    )
+
+    return DraftPublishResult(
+        status="rejected",
+        draft_id=draft.draft_id,
+        draft_type=draft.draft_type,
+        errors=[],
+    )
+
+
+def update_draft_metadata(draft_id: str, extra_metadata: dict) -> DraftObject | None:
+    """Merge additional keys into a draft's metadata without touching its
+    status. Used by the claim-and-verify loop (app/claim/service.py) to
+    attach a recruiter's corrected fields onto the draft before it is
+    published, so the published record reflects what the recruiter
+    actually confirmed rather than the raw parse.
+    """
+    draft = get_draft_object(draft_id)
+
+    if not draft:
+        return None
+
+    draft.metadata = {**draft.metadata, **extra_metadata}
+    _drafts[draft.draft_id] = draft
+    write_json(_draft_path(draft.draft_id), draft.model_dump())
+    return draft
