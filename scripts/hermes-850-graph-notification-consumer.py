@@ -79,7 +79,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("hermes.graph_consumer")
 
-RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://rabbitmq:5672/")
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "").strip()
 
 INTAKE_EXCHANGE = "comm.intake"
 RETRY_EXCHANGE = "comm.intake.retry"
@@ -96,6 +96,22 @@ GRAPH_DEAD_LETTER_ROUTING_KEY = "microsoft_graph.dead"
 
 GRAPH_RETRY_BACKOFF_MS = [5_000, 15_000, 60_000, 300_000, 900_000]
 GRAPH_MAX_RETRIES = len(GRAPH_RETRY_BACKOFF_MS)
+
+REQUIRED_ENVIRONMENT = (
+    "RABBITMQ_URL",
+    "HERMES_MS_GRAPH_TENANT_ID",
+    "HERMES_MS_GRAPH_CLIENT_ID",
+    "HERMES_MS_GRAPH_CLIENT_SECRET",
+    "HERMES_MS_GRAPH_CLIENT_STATE",
+)
+
+
+def _validate_startup_config() -> None:
+    missing = sorted(name for name in REQUIRED_ENVIRONMENT if not os.getenv(name, "").strip())
+    if missing:
+        raise RuntimeError(
+            "Missing required environment variables: " + ", ".join(missing)
+        )
 
 
 def _declare_topology(channel) -> None:
@@ -170,11 +186,25 @@ def _publish(channel, exchange: str, routing_key: str, envelope: dict, expiratio
     if expiration_ms is not None:
         properties_kwargs["expiration"] = str(expiration_ms)
 
-    channel.basic_publish(
+    confirmed = channel.basic_publish(
         exchange=exchange,
         routing_key=routing_key,
         body=json.dumps(envelope).encode("utf-8"),
         properties=pika.BasicProperties(**properties_kwargs),
+        mandatory=True,
+    )
+    if confirmed is False:
+        raise RuntimeError(
+            f"RabbitMQ did not confirm publish exchange={exchange} routing_key={routing_key}"
+        )
+
+
+def _publish_dead_letter(channel, envelope: dict, reason: str) -> None:
+    _publish(
+        channel,
+        DEAD_LETTER_EXCHANGE,
+        GRAPH_DEAD_LETTER_ROUTING_KEY,
+        {**envelope, "dead_letter_reason": reason},
     )
 
 
@@ -182,13 +212,25 @@ def _on_message(channel, method, _properties, body: bytes) -> None:
     try:
         envelope = json.loads(body)
     except (json.JSONDecodeError, UnicodeDecodeError):
-        logger.error("Dropping unparseable queue message: %r", body[:200])
+        logger.error("Dead-lettering unparseable queue message")
+        _publish_dead_letter(
+            channel,
+            {"raw_body_preview": body[:200].decode("utf-8", errors="replace")},
+            "invalid_json",
+        )
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        return
+
+    if not isinstance(envelope, dict):
+        logger.error("Dead-lettering queue message whose JSON root is not an object")
+        _publish_dead_letter(channel, {"original_payload": envelope}, "invalid_envelope")
         channel.basic_ack(delivery_tag=method.delivery_tag)
         return
 
     notification = envelope.get("notification")
     if not isinstance(notification, dict):
-        logger.error("Dropping envelope with no notification object: %r", envelope)
+        logger.error("Dead-lettering envelope with no notification object")
+        _publish_dead_letter(channel, envelope, "missing_notification_object")
         channel.basic_ack(delivery_tag=method.delivery_tag)
         return
 
@@ -206,12 +248,19 @@ def _on_message(channel, method, _properties, body: bytes) -> None:
         return
 
     retry_count = envelope.get("retry_count", 0)
-    channel.basic_ack(delivery_tag=method.delivery_tag)
+    if not isinstance(retry_count, int) or isinstance(retry_count, bool) or retry_count < 0:
+        _publish_dead_letter(channel, envelope, "invalid_retry_count")
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        return
 
     if retry_count < GRAPH_MAX_RETRIES:
         envelope["retry_count"] = retry_count + 1
         delay_ms = GRAPH_RETRY_BACKOFF_MS[retry_count]
         _publish(channel, RETRY_EXCHANGE, GRAPH_RETRY_ROUTING_KEY, envelope, expiration_ms=delay_ms)
+        # Ack only after the retry publish is broker-confirmed. If publish
+        # raises, the delivery remains unacked and is requeued on connection
+        # close when the supervisor restarts this process.
+        channel.basic_ack(delivery_tag=method.delivery_tag)
         logger.warning(
             "Queued Graph notification for retry in %dms (attempt %d/%d) resource=%s",
             delay_ms,
@@ -220,8 +269,8 @@ def _on_message(channel, method, _properties, body: bytes) -> None:
             notification.get("resource"),
         )
     else:
-        dead_envelope = {**envelope, "dead_letter_reason": outcome}
-        _publish(channel, DEAD_LETTER_EXCHANGE, GRAPH_DEAD_LETTER_ROUTING_KEY, dead_envelope)
+        _publish_dead_letter(channel, envelope, outcome)
+        channel.basic_ack(delivery_tag=method.delivery_tag)
         logger.error(
             "Dead-lettered Graph notification after %d failed attempts, "
             "resource=%s -- see %s. If this is happening often, something "
@@ -236,8 +285,11 @@ def _on_message(channel, method, _properties, body: bytes) -> None:
 def main() -> None:
     logger.info("hermes-graph-consumer starting, queue=%s", QUEUE_NAME)
 
+    _validate_startup_config()
+
     connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
     channel = connection.channel()
+    channel.confirm_delivery()
     _declare_topology(channel)
     channel.basic_qos(prefetch_count=10)
     channel.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_message)
