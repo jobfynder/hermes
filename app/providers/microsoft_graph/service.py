@@ -13,10 +13,10 @@ from app.runtime.jsonl_store import read_json, runtime_path, write_json
 GRAPH_TOKEN_URL_TEMPLATE = 'https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token'
 GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0'
 
-# Graph's documented maximum for Outlook message subscriptions is 10,080
-# minutes (under seven days). Renewing with 24 hours remaining leaves a wide
-# margin for the 12-hour systemd timer to recover from a failed attempt.
-MAX_MESSAGE_SUBSCRIPTION_MINUTES = 10080
+# This tenant's Graph endpoint rejects values above 10,070 minutes even
+# though the general Outlook limit is commonly documented as seven days.
+# Keeping the observed ten-minute safety margin avoids renewal-time HTTP 400s.
+MAX_MESSAGE_SUBSCRIPTION_MINUTES = 10070
 RENEW_WITHIN = timedelta(hours=24)
 
 
