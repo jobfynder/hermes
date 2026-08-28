@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import re
@@ -159,7 +160,17 @@ def verify_notification_client_state(notification: dict[str, Any]) -> bool:
     mismatch -- an unconfigured secret is not an open invitation.
     '''
     expected = _client_state()
-    return bool(expected) and notification.get('clientState') == expected
+    supplied = notification.get('clientState')
+
+    if not expected or not isinstance(supplied, str):
+        return False
+
+    # Constant-time comparison, matching the COMM gateway's own check
+    # (communication/comm_gateway/main.py) -- this is a defense-in-depth
+    # re-check, not the primary boundary, but it guards the same secret
+    # and should not leak timing information any more than the primary
+    # check does.
+    return hmac.compare_digest(supplied, expected)
 
 
 def _subscriptions_path():
