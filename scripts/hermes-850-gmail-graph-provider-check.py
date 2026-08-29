@@ -92,7 +92,7 @@ def test_graph_message_normalization_plain_text() -> None:
         'subject': 'Requirement - Senior .NET Developer',
         'receivedDateTime': '2026-08-20T10:00:00Z',
         'from': {'emailAddress': {'address': 'client@example.com', 'name': 'Client Recruiter'}},
-        'toRecipients': [{'emailAddress': {'address': 'requirements@jobfynder.com'}}],
+        'toRecipients': [{'emailAddress': {'address': 'jobs@jobfynder.com'}}],
         'body': {
             'contentType': 'text',
             'content': (

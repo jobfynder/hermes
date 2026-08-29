@@ -21,7 +21,7 @@ def test_mailbox_routing() -> None:
 
     require(
         classify_recipient_mailbox(
-            [{"email": "requirements@jobfynder.com"}]
+            [{"email": "jobs@jobfynder.com"}]
         ) == "job_description",
         "Requirements mailbox routing failed",
     )
@@ -51,7 +51,7 @@ def test_mailbox_routing() -> None:
         classify_recipient_mailbox(
             [
                 "hotlists@jobfynder.com",
-                "requirements@jobfynder.com",
+                "jobs@jobfynder.com",
             ]
         ) == "unknown",
         "Ambiguous mailbox routing must require review",

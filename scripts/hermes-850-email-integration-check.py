@@ -110,7 +110,7 @@ def requirement_check() -> str:
             "name": "Technical Recruiter",
             "email": "recruiter@example.com",
         },
-        "to": "requirements@jobfynder.com",
+        "to": "jobs@jobfynder.com",
         "subject": "Senior Python Developer Requirement",
         "text": """
 Job Title: Senior Python Developer
@@ -185,18 +185,24 @@ Need a senior Python developer for a long-term project.
 
 
 def shared_mailbox_check() -> None:
-    """Jobfynder's real setup: hotlist and requirement email both arrive
-    at jobs@jobfynder.com, not the two separate addresses the other
-    checks in this file use. There's no recipient-address signal here --
-    this exercises the full path through classify_email_by_confidence()
-    (app/email_parsing/parsers.py) via detect_document_kind()
-    (app/channels/service.py), not just the unit-level parser check in
-    hermes-850-email-parsing-check.py.
+    """Jobfynder actually runs two dedicated mailboxes -- jobs@jobfynder.com
+    for requirements, hotlists@jobfynder.com for hotlists (see
+    HERMES_REQUIREMENTS_MAILBOX / HERMES_HOTLIST_MAILBOX) -- so recipient
+    routing resolves those cleanly on its own. The genuinely ambiguous case
+    is a message addressed to *both* mailboxes at once (a broadcast CC, a
+    forwarded thread with both addresses still on it): classify_recipient_
+    mailbox() then can't pick a single winner and must fall through to
+    classify_email_by_confidence() (app/email_parsing/parsers.py) via
+    detect_document_kind() (app/channels/service.py), not just the
+    unit-level parser check in hermes-850-email-parsing-check.py.
     """
     hotlist_payload = {
         "message_id": f"hermes-850-shared-hotlist-{uuid4()}",
         "from": {"name": "Bench Sales Recruiter", "email": "bsr@example.com"},
-        "to": [{"name": "Jobfynder Jobs", "email": "jobs@jobfynder.com"}],
+        "to": [
+            {"name": "Jobfynder Jobs", "email": "jobs@jobfynder.com"},
+            {"name": "Jobfynder Hotlists", "email": "hotlists@jobfynder.com"},
+        ],
         "subject": "Available Consultants Hotlist",
         "text": """
 Name | Title | Skills | Experience | Location | Visa | Availability | Rate
@@ -210,10 +216,11 @@ Mary Jones | Python Developer | Python, FastAPI, PostgreSQL | 6 years | Austin, 
 
     require(
         normalized["metadata"]["intended_document_kind"] == "unknown",
-        "A shared mailbox must NOT resolve via recipient address -- if this "
-        "assertion fails, HERMES_HOTLIST_MAILBOX/HERMES_REQUIREMENTS_MAILBOX "
-        "were probably set to jobs@jobfynder.com, which defeats the "
-        "confidence-based fallback this test is actually checking",
+        "A message addressed to both mailboxes at once must NOT resolve via "
+        "recipient address -- classify_recipient_mailbox() should see two "
+        "different matched kinds and give up, falling through to "
+        "confidence-based classification, which this test is actually "
+        "checking",
     )
 
     result = process_channel_intake(ChannelIntakeRequest(**normalized))
@@ -229,7 +236,7 @@ Mary Jones | Python Developer | Python, FastAPI, PostgreSQL | 6 years | Austin, 
     requirement_payload = {
         "message_id": f"hermes-850-shared-requirement-{uuid4()}",
         "from": {"name": "Technical Recruiter", "email": "recruiter@example.com"},
-        "to": "jobs@jobfynder.com",
+        "to": ["jobs@jobfynder.com", "hotlists@jobfynder.com"],
         "subject": "Senior Python Developer Requirement",
         "text": """
 Job Title: Senior Python Developer
@@ -258,8 +265,8 @@ Need a senior Python developer for a long-term project.
         f"Unexpected draft type for shared-mailbox requirement: {result.draft_object_type}",
     )
 
-    print("PASS: shared-mailbox hotlist classified by confidence, not recipient address")
-    print("PASS: shared-mailbox requirement classified by confidence, not recipient address")
+    print("PASS: dual-recipient hotlist classified by confidence, not ambiguous recipient routing")
+    print("PASS: dual-recipient requirement classified by confidence, not ambiguous recipient routing")
 
 
 def main() -> None:
