@@ -4,6 +4,7 @@ from app.access.models import ActionAccessRequest
 from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
 from app.drafts.service import create_draft_object
+from app.email_parsing.classification_learning import get_domain_bias
 from app.email_parsing.dedupe import register_and_check
 from app.email_parsing.llm_fallback import apply_hotlist_fallback, apply_job_requirement_fallback
 from app.email_parsing.parsers import (
@@ -51,6 +52,24 @@ def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
         confidence_classification = classify_email_by_confidence(request.text or "")
         if confidence_classification is not None:
             return confidence_classification["document_kind"]
+
+        # Content alone couldn't decide. Before falling through to a
+        # generic keyword-marker guess, check whether *this sender's own
+        # correction history* leans one way -- a real per-sender pattern
+        # (app/email_parsing/classification_learning.py) beats a
+        # content-blind keyword list, but never overrides a confident
+        # content-based read above.
+        domain_bias = get_domain_bias(request.sender.email if request.sender else None)
+        if domain_bias is not None:
+            emit_event(
+                "intake.classification.domain_bias_applied",
+                {
+                    "sender_email": request.sender.email if request.sender else None,
+                    "favored_document_kind": domain_bias["favored_document_kind"],
+                    "correction_count": domain_bias["correction_count"],
+                },
+            )
+            return domain_bias["favored_document_kind"]
 
     text = (request.text or "").lower()
 

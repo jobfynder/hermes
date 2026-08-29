@@ -1,10 +1,21 @@
 import json
 from uuid import uuid4
 
+from app.email_parsing.classification_learning import record_classification_correction
 from app.runtime.db import cursor
 from app.runtime.events import emit_event
 
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
+
+# The two draft types classify_email_by_confidence() actually distinguishes
+# between (app/email_parsing/parsers.py) -- reclassify_draft_object() only
+# feeds the self-learning loop (app/email_parsing/classification_learning.py)
+# when a correction moves between these two, since that classifier never
+# chooses any of the others.
+_LEARNABLE_DRAFT_TYPES: dict[DraftObjectType, str] = {
+    "draft_hotlist": "hotlist",
+    "draft_job_requirement": "job_description",
+}
 
 
 def _title_from_payload(draft_type: DraftObjectType, payload: dict) -> str:
@@ -248,3 +259,52 @@ def reject_draft_object(draft_id: str, reason: str | None = None) -> DraftPublis
     )
 
     return DraftPublishResult(status="rejected", draft_id=draft.draft_id, draft_type=draft.draft_type, errors=[])
+
+
+def reclassify_draft_object(draft_id: str, corrected_draft_type: DraftObjectType) -> DraftObject | None:
+    """A reviewer determined this draft's document kind was wrong (e.g.
+    parsed as a job requirement but is actually a hotlist, or vice versa).
+    Updates draft_type in place -- this corrects an existing record, it
+    does not create a second draft for the same email.
+
+    When both the original and corrected type are one of the two kinds
+    classify_email_by_confidence() actually distinguishes between (hotlist
+    vs job requirement), also records the correction for
+    app/email_parsing/classification_learning.py to learn from. A
+    correction into/out of any other draft type (resume, vendor list,
+    etc.) is still applied but not fed into that loop -- the classifier
+    it teaches never chooses those.
+    """
+    draft = get_draft_object(draft_id)
+    if not draft:
+        return None
+
+    original_draft_type = draft.draft_type
+
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE drafts SET draft_type = %s, updated_at = now() WHERE draft_id = %s RETURNING *",
+            (corrected_draft_type, draft_id),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return None
+
+    updated = _row_to_draft(row)
+    emit_event(
+        "draft.reclassified",
+        {"draft_id": draft_id, "from": original_draft_type, "to": corrected_draft_type},
+    )
+
+    if original_draft_type in _LEARNABLE_DRAFT_TYPES and corrected_draft_type in _LEARNABLE_DRAFT_TYPES:
+        sender = (updated.metadata or {}).get("sender") or {}
+        record_classification_correction(
+            draft_id=draft_id,
+            sender_email=sender.get("email"),
+            predicted_document_kind=_LEARNABLE_DRAFT_TYPES[original_draft_type],
+            corrected_document_kind=_LEARNABLE_DRAFT_TYPES[corrected_draft_type],
+            predicted_confidence=updated.confidence,
+        )
+
+    return updated
