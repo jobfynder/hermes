@@ -66,6 +66,7 @@ import sys
 import pika
 
 from app.channels.models import ChannelIntakeRequest
+from app.runtime.db import init_schema
 from app.channels.service import process_channel_intake
 from app.providers.microsoft_graph.service import (
     fetch_graph_message,
@@ -286,6 +287,7 @@ def main() -> None:
     logger.info("hermes-graph-consumer starting, queue=%s", QUEUE_NAME)
 
     _validate_startup_config()
+    init_schema()  # idempotent; hermes-api also calls this at its own startup
 
     connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
     channel = connection.channel()

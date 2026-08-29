@@ -1,16 +1,10 @@
+import json
 from uuid import uuid4
 
+from app.runtime.db import cursor
 from app.runtime.events import emit_event
-from app.runtime.jsonl_store import read_json, runtime_path, write_json
 
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
-
-
-_drafts: dict[str, DraftObject] = {}
-
-
-def _draft_path(draft_id: str):
-    return runtime_path("drafts", f"{draft_id}.json")
 
 
 def _title_from_payload(draft_type: DraftObjectType, payload: dict) -> str:
@@ -33,6 +27,28 @@ def _title_from_payload(draft_type: DraftObjectType, payload: dict) -> str:
     return payload.get("title") or "Draft Channel Note"
 
 
+def _row_to_draft(row: dict) -> DraftObject:
+    return DraftObject(
+        draft_id=str(row["draft_id"]),
+        draft_type=row["draft_type"],
+        status=row["status"],
+        source=row["source"],
+        source_ref=row["source_ref"],
+        channel=row["channel"],
+        source_message_id=row["source_message_id"],
+        title=row["title"],
+        summary=row["summary"],
+        payload=row["payload"],
+        normalized_skills=row["normalized_skills"],
+        normalized_job_titles=row["normalized_job_titles"],
+        taxonomy_signals=row["taxonomy_signals"],
+        confidence=row["confidence"],
+        requires_review=row["requires_review"],
+        errors=row["errors"],
+        metadata=row["metadata"],
+    )
+
+
 def create_draft_object(
     draft_type: DraftObjectType,
     source: str,
@@ -48,16 +64,58 @@ def create_draft_object(
     errors: list[str] | None = None,
     metadata: dict | None = None,
 ) -> DraftObject:
+    draft_id = str(uuid4())
+    status = "needs_review" if requires_review else "draft"
+    title = _title_from_payload(draft_type, payload)
+    summary = payload.get("summary") or payload.get("text") or payload.get("description")
+
+    with cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO drafts (
+                draft_id, draft_type, status, source, source_ref, channel,
+                source_message_id, title, summary, payload, normalized_skills,
+                normalized_job_titles, taxonomy_signals, confidence,
+                requires_review, errors, metadata
+            ) VALUES (
+                %(draft_id)s, %(draft_type)s, %(status)s, %(source)s, %(source_ref)s,
+                %(channel)s, %(source_message_id)s, %(title)s, %(summary)s,
+                %(payload)s, %(normalized_skills)s, %(normalized_job_titles)s,
+                %(taxonomy_signals)s, %(confidence)s, %(requires_review)s,
+                %(errors)s, %(metadata)s
+            )
+            """,
+            {
+                "draft_id": draft_id,
+                "draft_type": draft_type,
+                "status": status,
+                "source": source,
+                "source_ref": source_ref,
+                "channel": channel,
+                "source_message_id": source_message_id,
+                "title": title,
+                "summary": summary,
+                "payload": json.dumps(payload, default=str),
+                "normalized_skills": json.dumps(normalized_skills or [], default=str),
+                "normalized_job_titles": json.dumps(normalized_job_titles or [], default=str),
+                "taxonomy_signals": json.dumps(taxonomy_signals or {}, default=str),
+                "confidence": confidence,
+                "requires_review": requires_review,
+                "errors": json.dumps(errors or [], default=str),
+                "metadata": json.dumps(metadata or {}, default=str),
+            },
+        )
+
     draft = DraftObject(
-        draft_id=str(uuid4()),
+        draft_id=draft_id,
         draft_type=draft_type,
-        status="needs_review" if requires_review else "draft",
+        status=status,
         source=source,
         source_ref=source_ref,
         channel=channel,
         source_message_id=source_message_id,
-        title=_title_from_payload(draft_type, payload),
-        summary=payload.get("summary") or payload.get("text") or payload.get("description"),
+        title=title,
+        summary=summary,
         payload=payload,
         normalized_skills=normalized_skills or [],
         normalized_job_titles=normalized_job_titles or [],
@@ -67,8 +125,6 @@ def create_draft_object(
         errors=errors or [],
         metadata=metadata or {},
     )
-    _drafts[draft.draft_id] = draft
-    write_json(_draft_path(draft.draft_id), draft.model_dump())
     emit_event(
         "draft.created",
         {
@@ -83,35 +139,53 @@ def create_draft_object(
 
 
 def get_draft_object(draft_id: str) -> DraftObject | None:
-    if draft_id in _drafts:
-        return _drafts[draft_id]
+    with cursor() as cur:
+        cur.execute("SELECT * FROM drafts WHERE draft_id = %s", (draft_id,))
+        row = cur.fetchone()
 
-    record = read_json(_draft_path(draft_id))
-    if not record:
-        return None
-
-    draft = DraftObject(**record)
-    _drafts[draft_id] = draft
-    return draft
+    return _row_to_draft(row) if row else None
 
 
 def list_draft_objects() -> list[DraftObject]:
-    drafts_dir = runtime_path("drafts", ".keep").parent
+    with cursor() as cur:
+        cur.execute("SELECT * FROM drafts ORDER BY created_at DESC")
+        rows = cur.fetchall()
 
-    for file_path in drafts_dir.glob("*.json"):
-        draft_id = file_path.stem
-        if draft_id not in _drafts:
-            record = read_json(file_path)
-            if record:
-                _drafts[draft_id] = DraftObject(**record)
+    return [_row_to_draft(row) for row in rows]
 
-    return list(_drafts.values())
+
+def update_draft_metadata(draft_id: str, extra_metadata: dict) -> DraftObject | None:
+    """Merge additional keys into a draft's metadata without touching its
+    status. Used by the claim-and-verify loop (app/claim/service.py) to
+    attach a recruiter's corrected fields onto the draft before it is
+    published, so the published record reflects what the recruiter
+    actually confirmed rather than the raw parse.
+    """
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE drafts
+            SET metadata = metadata || %(extra)s::jsonb, updated_at = now()
+            WHERE draft_id = %(draft_id)s
+            RETURNING *
+            """,
+            {"draft_id": draft_id, "extra": json.dumps(extra_metadata, default=str)},
+        )
+        row = cur.fetchone()
+
+    return _row_to_draft(row) if row else None
 
 
 def publish_draft_object(draft_id: str) -> DraftPublishResult:
-    draft = get_draft_object(draft_id)
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE drafts SET status = 'published', updated_at = now() "
+            "WHERE draft_id = %s RETURNING *",
+            (draft_id,),
+        )
+        row = cur.fetchone()
 
-    if not draft:
+    if not row:
         return DraftPublishResult(
             status="blocked",
             draft_id=draft_id,
@@ -119,16 +193,8 @@ def publish_draft_object(draft_id: str) -> DraftPublishResult:
             errors=["draft_not_found"],
         )
 
-    draft.status = "published"
-    _drafts[draft.draft_id] = draft
-    write_json(_draft_path(draft.draft_id), draft.model_dump())
-    emit_event(
-        "draft.published",
-        {
-            "draft_id": draft.draft_id,
-            "draft_type": draft.draft_type,
-        },
-    )
+    draft = _row_to_draft(row)
+    emit_event("draft.published", {"draft_id": draft.draft_id, "draft_type": draft.draft_type})
 
     return DraftPublishResult(
         status="published",
@@ -153,9 +219,21 @@ def reject_draft_object(draft_id: str, reason: str | None = None) -> DraftPublis
     draft stops showing up as pending review, but never deletes the
     record, keeping it available for audit.
     """
-    draft = get_draft_object(draft_id)
+    extra_metadata = {"rejection_reason": reason} if reason else {}
 
-    if not draft:
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE drafts
+            SET status = 'rejected', metadata = metadata || %(extra)s::jsonb, updated_at = now()
+            WHERE draft_id = %(draft_id)s
+            RETURNING *
+            """,
+            {"draft_id": draft_id, "extra": json.dumps(extra_metadata, default=str)},
+        )
+        row = cur.fetchone()
+
+    if not row:
         return DraftPublishResult(
             status="blocked",
             draft_id=draft_id,
@@ -163,41 +241,10 @@ def reject_draft_object(draft_id: str, reason: str | None = None) -> DraftPublis
             errors=["draft_not_found"],
         )
 
-    draft.status = "rejected"
-    if reason:
-        draft.metadata = {**draft.metadata, "rejection_reason": reason}
-    _drafts[draft.draft_id] = draft
-    write_json(_draft_path(draft.draft_id), draft.model_dump())
+    draft = _row_to_draft(row)
     emit_event(
         "draft.rejected",
-        {
-            "draft_id": draft.draft_id,
-            "draft_type": draft.draft_type,
-            "reason": reason,
-        },
+        {"draft_id": draft.draft_id, "draft_type": draft.draft_type, "reason": reason},
     )
 
-    return DraftPublishResult(
-        status="rejected",
-        draft_id=draft.draft_id,
-        draft_type=draft.draft_type,
-        errors=[],
-    )
-
-
-def update_draft_metadata(draft_id: str, extra_metadata: dict) -> DraftObject | None:
-    """Merge additional keys into a draft's metadata without touching its
-    status. Used by the claim-and-verify loop (app/claim/service.py) to
-    attach a recruiter's corrected fields onto the draft before it is
-    published, so the published record reflects what the recruiter
-    actually confirmed rather than the raw parse.
-    """
-    draft = get_draft_object(draft_id)
-
-    if not draft:
-        return None
-
-    draft.metadata = {**draft.metadata, **extra_metadata}
-    _drafts[draft.draft_id] = draft
-    write_json(_draft_path(draft.draft_id), draft.model_dump())
-    return draft
+    return DraftPublishResult(status="rejected", draft_id=draft.draft_id, draft_type=draft.draft_type, errors=[])

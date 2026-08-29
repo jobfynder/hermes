@@ -1,8 +1,39 @@
 services:
+  # Landing database for parsed emails: drafts, claim-and-verify state,
+  # field provenance, dedupe index, and intake history. Dedicated to
+  # Hermes -- not shared with Jobfynder Core's database -- matching the
+  # "Hermes proposes, Core executes" boundary (docs/
+  # hermes-architecture-frozen-v1.md section 2): a bad parse or a bug
+  # here can never directly corrupt Core's job board data, since nothing
+  # reaches Core until an explicit, separate push step.
+  hermes-postgres:
+    image: postgres:16
+    container_name: hermes-postgres
+    restart: unless-stopped
+
+    environment:
+      - POSTGRES_USER=hermes
+      - POSTGRES_PASSWORD=${HERMES_POSTGRES_PASSWORD}
+      - POSTGRES_DB=hermes
+
+    volumes:
+      - /opt/hermes-postgres-data:/var/lib/postgresql/data
+
+    # Not published to the host -- only reachable from other containers
+    # on this compose stack's network (hermes-api, hermes-graph-consumer).
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hermes -d hermes"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   hermes-api:
     build: .
     container_name: hermes-api
     restart: unless-stopped
+    depends_on:
+      hermes-postgres:
+        condition: service_healthy
 
     env_file:
       - .env
@@ -18,6 +49,7 @@ services:
       - PYTHONPATH=/app
       - HERMES_RBAC_ENFORCEMENT=enabled
       - HERMES_ACCESS_CONTROL_FILE=/hermes-runtime/access-control/users.json
+      - DATABASE_URL=postgresql://hermes:${HERMES_POSTGRES_PASSWORD}@hermes-postgres:5432/hermes
 
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -32,12 +64,16 @@ services:
     container_name: hermes-graph-consumer
     restart: unless-stopped
     command: python scripts/hermes-850-graph-notification-consumer.py
+    depends_on:
+      hermes-postgres:
+        condition: service_healthy
 
     env_file:
       - .env
 
     environment:
       - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://hermes:${HERMES_POSTGRES_PASSWORD}@hermes-postgres:5432/hermes
 
     volumes:
       - /opt/jobfynder-docs:/jobfynder-docs

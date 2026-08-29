@@ -1,11 +1,7 @@
-from datetime import UTC, datetime
+import json
 from typing import Any
 
-from app.runtime.jsonl_store import append_jsonl, read_jsonl, runtime_path
-
-
-def _provenance_path(parse_run_id: str):
-    return runtime_path('provenance', f'{parse_run_id}.jsonl')
+from app.runtime.db import cursor
 
 
 # Which parser-output keys become provenance rows, per document kind. Names
@@ -138,15 +134,54 @@ def build_email_parsing_provenance(email_parsing: dict[str, Any]) -> list[dict[s
 
 
 def record_field_provenance(parse_run_id: str, entries: list[dict[str, Any]]) -> None:
-    path = _provenance_path(parse_run_id)
-    now = datetime.now(UTC).isoformat()
+    if not entries:
+        return
 
-    for entry in entries:
-        append_jsonl(path, {'parse_run_id': parse_run_id, 'recorded_at': now, **entry})
+    with cursor() as cur:
+        cur.executemany(
+            '''
+            INSERT INTO field_provenance (
+                parse_run_id, field_path, raw_value, normalized_value,
+                source_region, extractor, extraction_method, confidence, value_kind
+            ) VALUES (
+                %(parse_run_id)s, %(field_path)s, %(raw_value)s, %(normalized_value)s,
+                %(source_region)s, %(extractor)s, %(extraction_method)s, %(confidence)s, %(value_kind)s
+            )
+            ''',
+            [
+                {
+                    'parse_run_id': parse_run_id,
+                    'field_path': entry['field_path'],
+                    'raw_value': (
+                        entry['raw_value'] if isinstance(entry.get('raw_value'), str) or entry.get('raw_value') is None
+                        else json.dumps(entry['raw_value'], default=str)
+                    ),
+                    'normalized_value': json.dumps(entry.get('normalized_value'), default=str),
+                    'source_region': entry.get('source_region'),
+                    'extractor': entry['extractor'],
+                    'extraction_method': entry['extraction_method'],
+                    'confidence': entry['confidence'],
+                    'value_kind': entry['value_kind'],
+                }
+                for entry in entries
+            ],
+        )
 
 
 def load_field_provenance(parse_run_id: str) -> list[dict[str, Any]]:
-    return read_jsonl(_provenance_path(parse_run_id))
+    with cursor() as cur:
+        cur.execute(
+            'SELECT parse_run_id, field_path, raw_value, normalized_value, source_region, '
+            'extractor, extraction_method, confidence, value_kind, recorded_at '
+            'FROM field_provenance WHERE parse_run_id = %s ORDER BY id',
+            (parse_run_id,),
+        )
+        rows = cur.fetchall()
+
+    for row in rows:
+        row['recorded_at'] = row['recorded_at'].isoformat()
+
+    return rows
 
 
 def record_recruiter_correction(

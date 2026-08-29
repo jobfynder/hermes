@@ -1,13 +1,7 @@
 import hashlib
-from datetime import UTC, datetime
 from typing import Any
 
-from app.runtime.jsonl_store import append_jsonl, read_jsonl, runtime_path
-
-
-CONTENT_HASH_LOG = runtime_path('intake', 'content_hashes.jsonl')
-
-_content_hash_index: dict[str, str] | None = None
+from app.runtime.db import cursor
 
 
 def compute_body_hash(text: str) -> str:
@@ -19,20 +13,6 @@ def compute_body_hash(text: str) -> str:
     return hashlib.sha256((text or '').encode('utf-8')).hexdigest()
 
 
-def _load_index() -> dict[str, str]:
-    global _content_hash_index
-
-    if _content_hash_index is None:
-        _content_hash_index = {}
-        for item in read_jsonl(CONTENT_HASH_LOG):
-            body_hash = item.get('body_hash')
-            duplicate_key = item.get('duplicate_key')
-            if body_hash and duplicate_key and body_hash not in _content_hash_index:
-                _content_hash_index[body_hash] = duplicate_key
-
-    return _content_hash_index
-
-
 def find_exact_content_duplicate(body_hash: str) -> str | None:
     '''Returns the duplicate_key of the first message seen with this exact
     body hash, or None if this is the first time this content has arrived.
@@ -41,25 +21,29 @@ def find_exact_content_duplicate(body_hash: str) -> str | None:
     check) -- this catches the same content arriving under a *different*
     provider_message_id, e.g. an email forwarded to two aliases, or
     re-sent by the provider with a new id.
+
+    Queried fresh from the database every call (no in-process cache) so
+    this is correct across hermes-api and hermes-graph-consumer, which
+    run as separate processes and would otherwise each hold a stale,
+    independent view of what has already been seen.
     '''
-    return _load_index().get(body_hash)
+    with cursor() as cur:
+        cur.execute(
+            'SELECT duplicate_key FROM content_hash_index WHERE body_hash = %s',
+            (body_hash,),
+        )
+        row = cur.fetchone()
+
+    return row['duplicate_key'] if row else None
 
 
 def record_content_hash(body_hash: str, duplicate_key: str) -> None:
-    index = _load_index()
-
-    if body_hash in index:
-        return  # first-seen record for this hash already logged; never overwritten
-
-    index[body_hash] = duplicate_key
-    append_jsonl(
-        CONTENT_HASH_LOG,
-        {
-            'recorded_at': datetime.now(UTC).isoformat(),
-            'body_hash': body_hash,
-            'duplicate_key': duplicate_key,
-        },
-    )
+    with cursor() as cur:
+        cur.execute(
+            'INSERT INTO content_hash_index (body_hash, duplicate_key) VALUES (%s, %s) '
+            'ON CONFLICT (body_hash) DO NOTHING',
+            (body_hash, duplicate_key),
+        )
 
 
 def register_and_check(text: str, duplicate_key: str) -> dict[str, Any]:

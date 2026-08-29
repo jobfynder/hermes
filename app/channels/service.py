@@ -18,15 +18,11 @@ from app.email_parsing.sender_resolver import looks_forwarded, resolve_original_
 from app.email_parsing.signature import parse_email_signature
 from app.runtime.events import emit_event
 from app.runtime.intake_log import (
-    load_idempotency_keys,
-    record_idempotency_key,
+    record_idempotency_key_if_new,
     record_intake,
 )
 from app.understanding.models import RawDocument
 from app.understanding.service import understand_document
-
-
-_seen_duplicate_keys: set[str] = load_idempotency_keys()
 
 
 def build_duplicate_key(request: ChannelIntakeRequest) -> str:
@@ -179,7 +175,14 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             duplicate_key=duplicate_key,
         )
 
-    if duplicate_key in _seen_duplicate_keys:
+    # Atomic check-and-set against the database: True only for the caller
+    # that actually inserted the key first. Correct across hermes-api and
+    # hermes-graph-consumer running as separate processes, and race-free
+    # within one -- there is no separate check-then-insert window for two
+    # near-simultaneous deliveries of the same message to both land in.
+    is_new = record_idempotency_key_if_new(duplicate_key)
+
+    if not is_new:
         record_intake(
             {
                 "duplicate_key": duplicate_key,
@@ -208,8 +211,6 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             duplicate_key=duplicate_key,
         )
 
-    _seen_duplicate_keys.add(duplicate_key)
-    record_idempotency_key(duplicate_key)
     record_intake(
         {
             "duplicate_key": duplicate_key,

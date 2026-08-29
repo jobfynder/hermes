@@ -1,3 +1,4 @@
+import json
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -7,46 +8,83 @@ from app.claim.models import ClaimConfirmResult, ClaimPrepareResult, EmailClaim
 from app.drafts.service import get_draft_object, publish_draft_object, update_draft_metadata
 from app.email_parsing.provenance import JOB_REQUIREMENT_FIELDS, record_recruiter_correction
 from app.email_parsing.sender_resolver import find_body_contact_email
+from app.runtime.db import cursor
 from app.runtime.events import emit_event
-from app.runtime.jsonl_store import read_json, runtime_path, write_json
 
 
 CLAIM_EXPIRY_DAYS = 14
 
 
-def _claim_path(claim_id: str):
-    return runtime_path("claims", "by_id", f"{claim_id}.json")
-
-
-def _token_index_path(token: str):
-    return runtime_path("claims", "token_index", f"{token}.json")
-
-
-def _draft_index_path(draft_id: str):
-    return runtime_path("claims", "draft_index", f"{draft_id}.json")
+def _row_to_claim(row: dict) -> EmailClaim:
+    return EmailClaim(
+        claim_id=str(row["claim_id"]),
+        draft_id=str(row["draft_id"]),
+        token=row["token"],
+        status=row["status"],
+        recruiter_email=row["recruiter_email"],
+        recruiter_name=row["recruiter_name"],
+        resolution_method=row["resolution_method"],
+        resolution_confidence=row["resolution_confidence"],
+        prefilled_fields=row["prefilled_fields"],
+        correction_diff=row["correction_diff"],
+        created_at=row["created_at"].isoformat(),
+        sent_at=row["sent_at"].isoformat() if row["sent_at"] else None,
+        claimed_at=row["claimed_at"].isoformat() if row["claimed_at"] else None,
+        published_at=row["published_at"].isoformat() if row["published_at"] else None,
+        expires_at=row["expires_at"].isoformat(),
+    )
 
 
 def _save_claim(claim: EmailClaim) -> None:
-    write_json(_claim_path(claim.claim_id), claim.model_dump())
+    with cursor() as cur:
+        cur.execute(
+            """
+            UPDATE email_claims SET
+                status = %(status)s,
+                correction_diff = %(correction_diff)s,
+                sent_at = %(sent_at)s,
+                claimed_at = %(claimed_at)s,
+                published_at = %(published_at)s,
+                expires_at = %(expires_at)s
+            WHERE claim_id = %(claim_id)s
+            """,
+            {
+                "claim_id": claim.claim_id,
+                "status": claim.status,
+                "correction_diff": json.dumps(claim.correction_diff, default=str) if claim.correction_diff is not None else None,
+                "sent_at": claim.sent_at,
+                "claimed_at": claim.claimed_at,
+                "published_at": claim.published_at,
+                "expires_at": claim.expires_at,
+            },
+        )
 
 
 def get_claim(claim_id: str) -> EmailClaim | None:
-    record = read_json(_claim_path(claim_id))
-    return EmailClaim(**record) if record else None
+    with cursor() as cur:
+        cur.execute("SELECT * FROM email_claims WHERE claim_id = %s", (claim_id,))
+        row = cur.fetchone()
+
+    return _row_to_claim(row) if row else None
 
 
 def get_claim_by_token(token: str) -> EmailClaim | None:
-    index = read_json(_token_index_path(token))
-    if not index:
-        return None
-    return get_claim(index["claim_id"])
+    with cursor() as cur:
+        cur.execute("SELECT * FROM email_claims WHERE token = %s", (token,))
+        row = cur.fetchone()
+
+    return _row_to_claim(row) if row else None
 
 
 def get_claim_by_draft(draft_id: str) -> EmailClaim | None:
-    index = read_json(_draft_index_path(draft_id))
-    if not index:
-        return None
-    return get_claim(index["claim_id"])
+    with cursor() as cur:
+        cur.execute(
+            "SELECT * FROM email_claims WHERE draft_id = %s ORDER BY created_at DESC LIMIT 1",
+            (draft_id,),
+        )
+        row = cur.fetchone()
+
+    return _row_to_claim(row) if row else None
 
 
 def is_expired(claim: EmailClaim) -> bool:
@@ -174,9 +212,31 @@ def prepare_claim(draft_id: str) -> ClaimPrepareResult:
         expires_at=(now + timedelta(days=CLAIM_EXPIRY_DAYS)).isoformat(),
     )
 
-    _save_claim(claim)
-    write_json(_token_index_path(claim.token), {"claim_id": claim.claim_id})
-    write_json(_draft_index_path(claim.draft_id), {"claim_id": claim.claim_id})
+    with cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO email_claims (
+                claim_id, draft_id, token, status, recruiter_email, recruiter_name,
+                resolution_method, resolution_confidence, prefilled_fields, expires_at
+            ) VALUES (
+                %(claim_id)s, %(draft_id)s, %(token)s, %(status)s, %(recruiter_email)s,
+                %(recruiter_name)s, %(resolution_method)s, %(resolution_confidence)s,
+                %(prefilled_fields)s, %(expires_at)s
+            )
+            """,
+            {
+                "claim_id": claim.claim_id,
+                "draft_id": claim.draft_id,
+                "token": claim.token,
+                "status": claim.status,
+                "recruiter_email": claim.recruiter_email,
+                "recruiter_name": claim.recruiter_name,
+                "resolution_method": claim.resolution_method,
+                "resolution_confidence": claim.resolution_confidence,
+                "prefilled_fields": json.dumps(claim.prefilled_fields, default=str),
+                "expires_at": claim.expires_at,
+            },
+        )
 
     emit_event(
         "claim.prepared",

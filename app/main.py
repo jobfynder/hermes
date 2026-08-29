@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+
+from app.runtime.db import init_schema
 from app.routers import submissions
 from app.routers import integrations
 from app.routers import agents
@@ -40,6 +42,14 @@ app = FastAPI(
     title=HERMES_SERVICE_NAME,
     version=HERMES_VERSION,
 )
+
+
+@app.on_event("startup")
+def _init_landing_database() -> None:
+    # Idempotent (CREATE TABLE IF NOT EXISTS / CREATE INDEX IF NOT EXISTS)
+    # -- safe to run on every process start, including every replica in a
+    # multi-instance deployment.
+    init_schema()
 
 app.include_router(health_router)
 app.include_router(jobs_router)
