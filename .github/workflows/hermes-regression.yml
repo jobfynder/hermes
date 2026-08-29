@@ -1,0 +1,99 @@
+name: Hermes regression suite
+
+# Runs the same checks every deploy has run manually all along (see
+# scripts/hermes-8*/-4*-*.py) as a required GitHub check instead, so a PR
+# that breaks parsing, dedupe, taxonomy, or the review workflow fails
+# before it ever reaches main -- not after it's already deployed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hermes
+          POSTGRES_PASSWORD: ci_test_password
+          POSTGRES_DB: hermes
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hermes -d hermes"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://hermes:ci_test_password@localhost:5432/hermes
+      HERMES_REQUIREMENTS_MAILBOX: jobs@jobfynder.com
+      HERMES_HOTLIST_MAILBOX: hotlists@jobfynder.com
+      HERMES_LLM_FALLBACK_ENABLED: "true"
+      HERMES_PROMPT_RUNTIME_DRY_RUN: "true"
+      CORE_API_BASE_URL: https://uat.jobfynder.com/api
+      HERMES_SERVICE_TOKEN: ci-test-token
+      PYTHONPATH: ${{ github.workspace }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Initialize schema
+        run: python3 -c "from app.runtime.db import init_schema; init_schema()"
+
+      - name: Run regression suite
+        run: |
+          set -e
+          for f in \
+            scripts/hermes-850-claim-check.py \
+            scripts/hermes-850-core-job-push-check.py \
+            scripts/hermes-850-dedupe-check.py \
+            scripts/hermes-850-email-integration-check.py \
+            scripts/hermes-850-email-llm-fallback-check.py \
+            scripts/hermes-850-email-parsing-check.py \
+            scripts/hermes-850-email-signature-check.py \
+            scripts/hermes-850-gmail-graph-provider-check.py \
+            scripts/hermes-850-live-fetch-check.py \
+            scripts/hermes-850-provenance-check.py \
+            scripts/hermes-850-review-endpoints-check.py \
+            scripts/hermes-850-self-learning-classification-check.py \
+            scripts/hermes-850-sender-resolution-check.py \
+            scripts/hermes-400-taxonomy-validation.py \
+            scripts/hermes-400-signal-extraction-check.py \
+            scripts/hermes-450-channel-intake-check.py \
+            scripts/hermes-900-spam-taxonomy-check.py \
+          ; do
+            echo "=== $f ==="
+            python3 "$f"
+          done
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type-check and build
+        working-directory: frontend
+        run: npm run build

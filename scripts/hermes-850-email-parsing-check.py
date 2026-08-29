@@ -426,6 +426,39 @@ def test_location_does_not_swallow_next_blank_label() -> None:
     )
 
 
+def test_security_gateway_banner_is_stripped() -> None:
+    # Corporate email-security gateways (Microsoft Defender, Proofpoint,
+    # Mimecast) inject a banner ahead of any externally-sourced email --
+    # which is *all* recruiter/vendor mail by definition, so this shows
+    # up constantly in real inbound requirements. Left unstripped, this
+    # was exactly the same class of bug as the jobs.nvoids.com preamble:
+    # sitting right at the top, where a title/company guess looks first.
+    text = (
+        "[EXTERNAL]\n"
+        "\n"
+        "CAUTION: This email originated from outside the organization. "
+        "Do not click links or open attachments unless you recognize the sender.\n"
+        "\n"
+        "Job Title: Senior Java Developer\n"
+        "Company: Acme Staffing\n"
+        "Location: Dallas, TX\n"
+        "Required Skills: Java, Spring Boot, AWS\n\n"
+        "Please share updated resumes for this role.\n"
+    )
+
+    result = parse_requirement_email(text)
+    record = result["records"][0]
+
+    require(
+        record["job_title"] == "Senior Java Developer",
+        f"Expected the banner to not interfere with job_title extraction, got {record['job_title']!r}",
+    )
+    require(
+        "CAUTION" not in record["job_description"] and "[EXTERNAL]" not in record["job_description"],
+        "The security-gateway banner must be stripped from job_description",
+    )
+
+
 def main() -> None:
     test_mailbox_routing()
     test_hotlist_parser()
@@ -434,6 +467,7 @@ def main() -> None:
     test_forwarded_requirement_with_end_client()
     test_nvoids_java_posting_regression()
     test_location_does_not_swallow_next_blank_label()
+    test_security_gateway_banner_is_stripped()
 
     print("PASS: exact mailbox routing")
     print("PASS: foreign-domain aliases rejected")
@@ -446,6 +480,7 @@ def main() -> None:
     print("PASS: deterministic parser uses_llm=false")
     print("PASS: confidence-based hotlist/requirement classification (shared mailbox)")
     print("PASS: company/work-authorization/LinkedIn/taxonomy-driven skills on a real forwarded posting")
+    print("PASS: security-gateway banner ([EXTERNAL]/CAUTION) is stripped from job_description")
     print("PASS: HERMES-850 parser guardrails")
 
 

@@ -378,6 +378,23 @@ _VENDOR_PREAMBLE_LINE_PATTERN = re.compile(
     r"^\s*please check the email id\b.*$"
 )
 
+# Corporate email-security-gateway banners (Microsoft Defender, Proofpoint,
+# Mimecast, and similar all use near-identical phrasing) injected at the
+# very top of any email arriving from outside the recipient's own
+# organization. Real recruiter/vendor mail is *always* external by
+# definition, so this banner shows up constantly -- left unstripped it
+# was exactly the kind of noise the jobs.nvoids.com preamble above turned
+# out to be: not part of the posting, but sitting right where a title/
+# company-name guess would look first.
+_SECURITY_BANNER_LINE_PATTERN = re.compile(
+    r"(?im)^\s*\[?external\]?\s*$|"
+    r"^\s*external\s+email\b.*$|"
+    r"^\s*caution\s*[:\-].*(?:external|outside).*$|"
+    r"^\s*this\s+(?:email|message)\s+originated\s+(?:from\s+)?outside\b.*$|"
+    r"^\s*you\s+don.t\s+often\s+get\s+email\s+from\b.*$|"
+    r"^\s*report\s+this\s+email\b.*$"
+)
+
 # Generic markers for the SEO-keyword-dump / call-to-action tail that
 # broadcast job boards commonly append after the real posting. Kept
 # short and generic on purpose -- this is not an attempt to strip every
@@ -394,10 +411,10 @@ _JOB_DESCRIPTION_FOOTER_MARKERS = (
 
 def _strip_forwarded_header_block(text: str) -> str:
     """Drops a contiguous run of From:/Sent:/To:/Subject: lines, job-board
-    relay boilerplate, and blank lines at the very top of the text -- the
-    standard Outlook forwarded-message preamble plus common vendor relay
-    noise. Only strips at the top, on purpose: a "To:" appearing mid-body
-    is real content, not header noise.
+    relay boilerplate, security-gateway banners, and blank lines at the
+    very top of the text -- the standard Outlook forwarded-message
+    preamble plus common vendor/gateway noise. Only strips at the top, on
+    purpose: a "To:" appearing mid-body is real content, not header noise.
     """
     lines = text.splitlines()
     cursor = 0
@@ -407,6 +424,7 @@ def _strip_forwarded_header_block(text: str) -> str:
             not line.strip()
             or _FORWARDED_HEADER_LINE_PATTERN.match(line)
             or _VENDOR_PREAMBLE_LINE_PATTERN.match(line)
+            or _SECURITY_BANNER_LINE_PATTERN.match(line)
         ):
             cursor += 1
             continue
