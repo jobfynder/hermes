@@ -231,6 +231,37 @@ def test_empty_text_returns_not_detected() -> None:
     require(sig["contact"] == {}, "Empty text must produce an empty contact dict")
 
 
+def test_long_skills_paragraph_is_not_mistaken_for_company() -> None:
+    # Real production regression: "MUST HAVE: ... MESSAGING SERVICES
+    # EXPERIENCE SUCH AS KAFKA ..." contains the word "services", which
+    # COMPANY_SUFFIX_RE also matches -- the whole multi-line skills dump
+    # was coming back as company_name. Real company names/titles in a
+    # signature are short; this line is not one.
+    text = """From:
+
+Jigi,
+
+Paramount software solutions
+
+jigyansh@paramountsoft.net
+
+Reply to: jigyansh@paramountsoft.net
+
+MUST HAVE:
+JAVA 8,21 , ANGULAR 8, 21 , SPRING BOOT, APACHE SPARK, MONGODB, MYSQL, REST APIS, MESSAGING SERVICES EXPERIENCE SUCH AS KAFKA, AWS SDK BASIC, AZURE SDK BASIC , oracle database
+DOCKER, IOT, ETL TOOLS, LINUX BASIC, DATA ANALYTICS (TABLEAU), AZURE IOT HUB AND AZURE EVENT HUB IS A PLUS AND INTEGRATION TESTING. ENTERPRISE JAVA 8. 21 must
+"""
+
+    sig = parse_email_signature(text=text, sender_email="jigyansh@paramountsoft.net")
+    contact = contact_values(sig)
+
+    company_name = contact.get("company_name")
+    require(
+        company_name is None or "MUST HAVE" not in company_name,
+        f"The MUST HAVE skills paragraph must never be read as a company name, got {company_name!r}",
+    )
+
+
 def main() -> int:
     print("HERMES-850 email signature check started")
 
@@ -254,6 +285,9 @@ def main() -> int:
 
     test_empty_text_returns_not_detected()
     print("PASS: empty text does not fabricate a signature")
+
+    test_long_skills_paragraph_is_not_mistaken_for_company()
+    print("PASS: a long skills paragraph is not mistaken for a company name")
 
     print("HERMES-850 email signature check PASSED")
     return 0

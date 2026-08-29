@@ -365,6 +365,15 @@ def _extract_title_and_company(
         if stripped == (name_line or "").strip():
             continue
 
+        # A real title or company name in a signature is short -- a line
+        # this long is a skills/requirements dump that happens to contain
+        # a word TITLE_KEYWORDS_RE/COMPANY_SUFFIX_RE also matches (e.g.
+        # "...MESSAGING SERVICES EXPERIENCE..." matching "services"), not
+        # an actual signature line. Confirmed in production: this is what
+        # was turning "MUST HAVE: JAVA, ANGULAR, ..." into a company name.
+        if len(stripped) > 80:
+            continue
+
         has_title = bool(TITLE_KEYWORDS_RE.search(stripped))
         has_company = bool(COMPANY_SUFFIX_RE.search(stripped))
 

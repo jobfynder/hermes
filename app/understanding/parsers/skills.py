@@ -37,12 +37,20 @@ def skill_match_terms(skill_entry: dict[str, Any]) -> list[str]:
 
 
 def fuzzy_match_terms(skill_entry: dict[str, Any]) -> list[str]:
-    # Short aliases like js/ts/py are useful for exact matching,
-    # but unsafe for fuzzy matching because they match inside words like nodejs.
+    # Short aliases like js/ts/py are useful for exact matching, but unsafe
+    # for fuzzy matching: fuzz.partial_ratio scores a short needle against
+    # the best-matching substring of the whole email body, and the shorter
+    # the needle, the more likely some coincidental substring elsewhere in
+    # a long email scores >=94 by pure chance. Confirmed in production:
+    # ".NET" (normalized "net", 3-4 chars) scored a spurious 100% match on
+    # an email that never mentions .NET at all. Raising the floor to 6
+    # excludes exactly this class of short/generic terms while leaving
+    # fuzzy matching for what it's actually for: catching typos in longer,
+    # more distinctive terms like "Kubernetes"/"Kubernets".
     return [
         term
         for term in skill_match_terms(skill_entry)
-        if len(normalize_text(term)) >= 4
+        if len(normalize_text(term)) >= 6
     ]
 
 

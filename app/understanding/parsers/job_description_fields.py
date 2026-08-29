@@ -1,9 +1,32 @@
 import re
 
 
+# The separator between the label and the value is deliberately [ \t]*, not
+# \s* -- \s* matches a newline, which let "Location:" with no value on its
+# own line (a blank template field some recruiter emails ask the reader to
+# fill in, immediately followed by the next label on the next line, e.g.
+# "Location:\nLinkedIn:\n...") swallow that next label's name as if it were
+# the location. Requiring the value to start with a letter on the same line
+# makes an empty "Location:" fail to match here so search() keeps looking
+# for a real one instead.
 LOCATION_PATTERN = re.compile(
-    r"(?:location|loc)\s*[:\-]\s*([A-Za-z0-9 ,./\-]+)",
+    r"(?:location|loc)\s*[:\-][ \t]*([A-Za-z][A-Za-z0-9 ,./\-]*)",
     flags=re.IGNORECASE,
+)
+
+# A trailing "- 100" / "- 100%" left over from a line like
+# "Location: Omaha, NE- 100% onsite" -- the location regex's character
+# class has to include digits and dashes for values like "I-95 corridor",
+# so it can't simply exclude them; strip a trailing dash-number(-percent)
+# tail after the fact instead.
+_TRAILING_PERCENT_TAIL = re.compile(r"\s*-\s*\d+%?\s*$")
+
+# A trailing "- onsite"/"- hybrid"/"- remote" qualifier, e.g.
+# "Location: San Jose, CA - HYBRID" -- redundant once extract_location's
+# own Remote/Hybrid branches already say so, and otherwise just onsite/
+# on-site noise that isn't part of the place name.
+_TRAILING_MODE_TAIL = re.compile(
+    r"\s*-\s*(?:onsite|on-site|hybrid|remote)\s*$", flags=re.IGNORECASE
 )
 
 RATE_PATTERN = re.compile(
@@ -35,6 +58,18 @@ def clean_field(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _clean_location_value(raw: str | None) -> str | None:
+    value = clean_field(raw)
+
+    if not value:
+        return None
+
+    value = _TRAILING_PERCENT_TAIL.sub("", value)
+    value = _TRAILING_MODE_TAIL.sub("", value).strip(" .,-")
+
+    return value or None
+
+
 def extract_location(text: str) -> str | None:
     clean_text = text or ""
 
@@ -43,13 +78,13 @@ def extract_location(text: str) -> str | None:
 
     if re.search(r"\bhybrid\b", clean_text, flags=re.IGNORECASE):
         match = LOCATION_PATTERN.search(clean_text)
-        location = clean_field(match.group(1)) if match else None
+        location = _clean_location_value(match.group(1)) if match else None
         return f"Hybrid - {location}" if location else "Hybrid"
 
     match = LOCATION_PATTERN.search(clean_text)
 
     if match:
-        return clean_field(match.group(1))
+        return _clean_location_value(match.group(1))
 
     city_state_match = re.search(
         r"\b([A-Z][A-Za-z .]+,\s*[A-Z]{2})\b",

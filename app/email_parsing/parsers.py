@@ -367,6 +367,17 @@ _FORWARDED_HEADER_LINE_PATTERN = re.compile(
     r"(?im)^\s*(?:from|sent|to|subject|cc|bcc)\s*:.*$"
 )
 
+# Job-board relay boilerplate ("You received this email from X via
+# https://jobs.example.com. Please check the email id in the signature to
+# reply to the correct email id.") that vendors like jobs.nvoids.com inject
+# at the very top of every posting, ahead of the real content. Matched on
+# the generic sentence shape rather than a hardcoded domain, since more
+# than one relay uses the same phrasing.
+_VENDOR_PREAMBLE_LINE_PATTERN = re.compile(
+    r"(?im)^\s*you received this email from\b.*$|"
+    r"^\s*please check the email id\b.*$"
+)
+
 # Generic markers for the SEO-keyword-dump / call-to-action tail that
 # broadcast job boards commonly append after the real posting. Kept
 # short and generic on purpose -- this is not an attempt to strip every
@@ -382,16 +393,21 @@ _JOB_DESCRIPTION_FOOTER_MARKERS = (
 
 
 def _strip_forwarded_header_block(text: str) -> str:
-    """Drops a contiguous run of From:/Sent:/To:/Subject: lines (and
-    blank lines) at the very top of the text -- the standard Outlook
-    forwarded-message preamble. Only strips at the top, on purpose: a
-    "To:" appearing mid-body is real content, not header noise.
+    """Drops a contiguous run of From:/Sent:/To:/Subject: lines, job-board
+    relay boilerplate, and blank lines at the very top of the text -- the
+    standard Outlook forwarded-message preamble plus common vendor relay
+    noise. Only strips at the top, on purpose: a "To:" appearing mid-body
+    is real content, not header noise.
     """
     lines = text.splitlines()
     cursor = 0
 
     for line in lines:
-        if not line.strip() or _FORWARDED_HEADER_LINE_PATTERN.match(line):
+        if (
+            not line.strip()
+            or _FORWARDED_HEADER_LINE_PATTERN.match(line)
+            or _VENDOR_PREAMBLE_LINE_PATTERN.match(line)
+        ):
             cursor += 1
             continue
         break
@@ -535,14 +551,34 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
                 and len(body_without_title) >= 40
             )
         )
+        has_company = bool(structured.get("company"))
 
+        # A posting with a clear title and a real skills list used to score
+        # 0.92 -- comfortably above FALLBACK_CONFIDENCE_THRESHOLD (0.70) --
+        # even when company came back empty, because confidence only ever
+        # looked at title/skills. That silently skipped the LLM fallback
+        # (app/email_parsing/llm_fallback.py) on exactly the emails it
+        # exists for: real-world recruiter/vendor prose ("Hi, this is
+        # Francis from Indus River Technologies...") that COMPANY_PATTERN's
+        # label-based regex (app/understanding/parsers/job_description_
+        # fields.py) can't reasonably generalize across dozens of vendor
+        # templates. Measured against production: 94 of the last 105 job
+        # postings (90%) had a null company field, all scoring >=0.92 and
+        # never reaching the fallback. Capping at 0.65 when company is the
+        # only gap routes these into the already-enabled, already-
+        # credentialed Haiku fallback without changing behavior for
+        # postings that are actually incomplete on title/skills too.
         confidence = (
             0.92
-            if has_title and has_requirement_evidence
+            if has_title and has_requirement_evidence and has_company
             else (
-                0.62
-                if has_title or has_requirement_evidence
-                else 0.35
+                0.65
+                if has_title and has_requirement_evidence
+                else (
+                    0.62
+                    if has_title or has_requirement_evidence
+                    else 0.35
+                )
             )
         )
 
@@ -553,6 +589,9 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
 
         if not has_requirement_evidence:
             warnings.append("required_skills_not_identified")
+
+        if not has_company:
+            warnings.append("company_missing")
 
         records.append(
             {

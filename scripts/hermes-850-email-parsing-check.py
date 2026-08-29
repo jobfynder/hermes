@@ -103,6 +103,7 @@ Job Title: Senior Python Developer
 Location: Dallas, TX
 Required Skills: Python, FastAPI, PostgreSQL, AWS
 Preferred Skills: Docker, Kubernetes
+Company: Acme Corp
 Experience: 7 years
 Employment Type: Contract
 Rate: $80/hr
@@ -127,8 +128,46 @@ Need a senior Python developer for a long-term project.
         "Job title was not parsed",
     )
     require(
+        result["records"][0]["company"] == "Acme Corp",
+        "Company was not parsed",
+    )
+    require(
         result["requires_review"] is False,
-        "Complete requirement should not require review",
+        "Complete requirement (including company) should not require review",
+    )
+
+    # A posting with a clear title and a real skills section but no company
+    # line used to score the same 0.92 as a fully complete one -- silently
+    # skipping the LLM fallback (app/email_parsing/llm_fallback.py) on
+    # exactly the emails it exists for. Confirmed in production: 90% of
+    # real postings have no explicit "Company:" label. This must now stay
+    # below FALLBACK_CONFIDENCE_THRESHOLD (0.70) so the fallback engages.
+    missing_company = parse_requirement_email(
+        """
+Job Title: Senior Python Developer
+Location: Dallas, TX
+Required Skills: Python, FastAPI, PostgreSQL, AWS
+Experience: 7 years
+
+Need a senior Python developer for a long-term project.
+"""
+    )
+
+    require(
+        missing_company["records"][0]["company"] is None,
+        "Fixture must genuinely have no company for this case to be meaningful",
+    )
+    require(
+        missing_company["confidence"] < 0.70,
+        "Title+skills without company must fall below the fallback threshold",
+    )
+    require(
+        missing_company["requires_review"] is True,
+        "Requirement missing only company must require review",
+    )
+    require(
+        "company_missing" in missing_company["records"][0]["warnings"],
+        "Missing company warning was not generated",
     )
 
     title_only = parse_requirement_email(
@@ -177,6 +216,7 @@ Mary Jones | Python Developer | Python, FastAPI, PostgreSQL | 6 years | Austin, 
 """
     requirement_text = """
 Job Title: Senior Python Developer
+Company: Acme Corp
 Location: Dallas, TX
 Required Skills: Python, FastAPI, PostgreSQL, AWS
 Preferred Skills: Docker, Kubernetes
@@ -291,12 +331,109 @@ def test_forwarded_requirement_with_end_client() -> None:
     )
 
 
+def test_nvoids_java_posting_regression() -> None:
+    # Real production email (jobs.nvoids.com relay) reported by the user as
+    # inaccurately parsed: company came back as the entire "MUST HAVE"
+    # skills paragraph (a COMPANY_SUFFIX_RE false hit on "MESSAGING
+    # SERVICES"), location came back as "Omaha, NE- 100" (the "100%
+    # onsite" percentage bleeding into the value), and skills included a
+    # spurious ".NET" that never appears anywhere in the text (rapidfuzz
+    # partial_ratio scoring a short needle against the whole email body).
+    text = (
+        "Subject: Java Developer onsite omaha ne no\n"
+        "\n"
+        "You received this email from jigyansh@paramountsoft.net via https://jobs.nvoids.com \n"
+        "Please check the email id in the signature to reply to the correct email id.\n"
+        "\n"
+        "From:\n"
+        "\n"
+        "Jigi,\n"
+        "\n"
+        "Paramount software solutions\n"
+        "\n"
+        "jigyansh@paramountsoft.net\n"
+        "\n"
+        "Reply to: jigyansh@paramountsoft.net\n"
+        "\n"
+        "Position: Mid Level Java Full Stack Developer\n"
+        "Location: Omaha, NE- 100% onsite\n"
+        "Duration: 12+ months contract\n"
+        "50+ positions no , or F1 \n"
+        ", cpt we can try but i94 will be needed by client !!\n"
+        "\n"
+        "MUST HAVE:\n"
+        "JAVA 8,21 , ANGULAR 8, 21 , SPRING BOOT, APACHE SPARK, MONGODB, MYSQL, REST APIS, "
+        "MESSAGING SERVICES EXPERIENCE SUCH AS KAFKA, AWS SDK BASIC, AZURE SDK BASIC , oracle database \n"
+        "DOCKER, IOT, ETL TOOLS, LINUX BASIC, DATA ANALYTICS (TABLEAU), AZURE IOT HUB AND AZURE EVENT HUB "
+        "IS A PLUS AND INTEGRATION TESTING. ENTERPRISE JAVA 8. 21 must \n"
+        "\n"
+        "Keywords: information technology card Nebraska \n"
+        "Java Developer onsite omaha ne no\n"
+        "jigyansh@paramountsoft.net\n"
+        "\n"
+        "View this job online here \n"
+        "\n"
+        "Happy recruiting \n"
+        "https://jobs.nvoids.com \n"
+        "Free resume and job search portal"
+    )
+
+    result = parse_requirement_email(text)
+    record = result["records"][0]
+
+    require(
+        record["location"] == "Omaha, NE",
+        f"Expected the '100% onsite' qualifier to be trimmed from location, got {record['location']!r}",
+    )
+    require(
+        ".NET" not in record["required_skills"],
+        f"Expected no spurious fuzzy '.NET' match (never mentioned in the text), got {record['required_skills']}",
+    )
+    require(
+        "You received this email from" not in record["job_description"],
+        "The jobs.nvoids.com relay preamble must be stripped from job_description",
+    )
+    require(
+        result["confidence"] < 0.70,
+        "Missing company must keep this below the fallback threshold so the LLM fallback engages",
+    )
+
+
+def test_location_does_not_swallow_next_blank_label() -> None:
+    # A recruiter template asking the reader to fill in several blank
+    # fields ("Location:\nLinkedIn:\n...") used to have its empty
+    # "Location:" swallow the next label's own name as if it were the
+    # location value, because the regex's \s* between colon and value
+    # could cross the newline. The real location line further down the
+    # email must still be found.
+    text = (
+        "While replying back mention\n"
+        "Location:\n"
+        "LinkedIn:\n"
+        "Years of experience with Workday Extend:\n"
+        "\n"
+        "Position:- Workday Extend Developer\n"
+        "Location: San Jose, CA - HYBRID\n"
+        "Required Skills: Workday Extend, PMD Scripting, Orchestrations\n"
+    )
+
+    result = parse_requirement_email(text)
+    record = result["records"][0]
+
+    require(
+        record["location"] == "Hybrid - San Jose, CA",
+        f"Expected the blank 'Location:' template field to be skipped in favor of the real one, got {record['location']!r}",
+    )
+
+
 def main() -> None:
     test_mailbox_routing()
     test_hotlist_parser()
     test_requirement_parser()
     test_confidence_based_classification()
     test_forwarded_requirement_with_end_client()
+    test_nvoids_java_posting_regression()
+    test_location_does_not_swallow_next_blank_label()
 
     print("PASS: exact mailbox routing")
     print("PASS: foreign-domain aliases rejected")
