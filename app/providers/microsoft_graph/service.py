@@ -1,3 +1,4 @@
+import hmac
 import json
 import os
 import re
@@ -13,10 +14,10 @@ from app.runtime.jsonl_store import read_json, runtime_path, write_json
 GRAPH_TOKEN_URL_TEMPLATE = 'https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token'
 GRAPH_API_BASE = 'https://graph.microsoft.com/v1.0'
 
-# Graph's own documented max subscription lifetime for Outlook mail
-# resources is 4230 minutes (~2.94 days). Renewing at 24h remaining gives
-# a wide safety margin for a daily renewal job to catch it.
-MAX_MESSAGE_SUBSCRIPTION_MINUTES = 4230
+# This tenant's Graph endpoint rejects values above 10,070 minutes even
+# though the general Outlook limit is commonly documented as seven days.
+# Keeping the observed ten-minute safety margin avoids renewal-time HTTP 400s.
+MAX_MESSAGE_SUBSCRIPTION_MINUTES = 10070
 RENEW_WITHIN = timedelta(hours=24)
 
 
@@ -145,7 +146,7 @@ def _notification_url() -> str | None:
     base_url = os.getenv('HERMES_PUBLIC_WEBHOOK_BASE_URL')
     if not base_url:
         return None
-    return f"{base_url.rstrip('/')}/providers/microsoft-graph/webhook"
+    return f"{base_url.rstrip('/')}/microsoft-graph/mail"
 
 
 def verify_notification_client_state(notification: dict[str, Any]) -> bool:
@@ -159,7 +160,17 @@ def verify_notification_client_state(notification: dict[str, Any]) -> bool:
     mismatch -- an unconfigured secret is not an open invitation.
     '''
     expected = _client_state()
-    return bool(expected) and notification.get('clientState') == expected
+    supplied = notification.get('clientState')
+
+    if not expected or not isinstance(supplied, str):
+        return False
+
+    # Constant-time comparison, matching the COMM gateway's own check
+    # (communication/comm_gateway/main.py) -- this is a defense-in-depth
+    # re-check, not the primary boundary, but it guards the same secret
+    # and should not leak timing information any more than the primary
+    # check does.
+    return hmac.compare_digest(supplied, expected)
 
 
 def _subscriptions_path():

@@ -1,13 +1,8 @@
 '''Keeps the Microsoft Graph mailbox subscription(s) alive.
 
-Run this on a recurring schedule -- e.g. a daily host cron entry:
-
-    0 6 * * * docker exec hermes-api python scripts/hermes-850-graph-subscription-renew.py >> /var/log/hermes-graph-renew.log 2>&1
-
-Graph's own documented max subscription lifetime for Outlook mail
-resources is ~2.94 days, so running this less often than daily risks a
-gap where notifications silently stop arriving until the next run
-re-creates the subscription. Idempotent: creates any missing
+Run this from the 12-hour ``hermes-graph-renew.timer`` installed by
+jobfynder-infra. Graph's documented maximum subscription lifetime for
+Outlook messages is under seven days. Idempotent: creates any missing
 subscription, renews any expiring within 24h, leaves already-fresh ones
 alone. Requires HERMES_MS_GRAPH_CLIENT_ID/SECRET/TENANT_ID,
 HERMES_MS_GRAPH_MAILBOXES, HERMES_MS_GRAPH_CLIENT_STATE, and
@@ -18,6 +13,8 @@ from app.providers.microsoft_graph.service import sync_graph_subscriptions
 
 def run() -> None:
     result = sync_graph_subscriptions()
+    # The result contains identifiers and status only. Never print the
+    # process environment, access token, client secret, or clientState.
     print(result)
 
     if result.get('status') == 'blocked':

@@ -4,6 +4,7 @@ import time
 import urllib.error
 import urllib.request
 from base64 import b64encode
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from app.prompt_runtime.models import PromptDefinition, PromptRegistryResponse
 
@@ -11,6 +12,7 @@ PROMPTS_PATH = "/api/public/v2/prompts"
 DEFAULT_LANGFUSE_BASE_URL = "https://langfuse.jobfynder.com"
 DEFAULT_CACHE_SECONDS = 300
 DEFAULT_FALLBACK_MODEL = "anthropic/claude-haiku-4-5"
+DEFAULT_FETCH_CONCURRENCY = 8
 
 _cache: dict = {"registry": None, "prompts": {}, "fetched_at": 0.0}
 
@@ -35,6 +37,14 @@ def _cache_seconds() -> int:
         return int(os.getenv("HERMES_LANGFUSE_PROMPT_CACHE_SECONDS", str(DEFAULT_CACHE_SECONDS)))
     except ValueError:
         return DEFAULT_CACHE_SECONDS
+
+
+def _fetch_concurrency() -> int:
+    try:
+        value = int(os.getenv("HERMES_LANGFUSE_PROMPT_FETCH_CONCURRENCY", str(DEFAULT_FETCH_CONCURRENCY)))
+        return max(1, value)
+    except ValueError:
+        return DEFAULT_FETCH_CONCURRENCY
 
 
 def _get(path: str) -> dict:
@@ -111,22 +121,33 @@ def _build_prompt_definition(name: str, detail: dict) -> PromptDefinition | None
     )
 
 
+def _fetch_prompt_definition(name: str) -> PromptDefinition | None:
+    try:
+        detail = _get(f"{PROMPTS_PATH}/{name}")
+        return _build_prompt_definition(name, detail)
+    except Exception:
+        return None
+
+
 def _refresh_cache() -> None:
     listing = _get(f"{PROMPTS_PATH}?limit=100")
+    names = [item.get("name") for item in listing.get("data", []) if item.get("name")]
+
     prompts: dict[str, PromptDefinition] = {}
 
-    for item in listing.get("data", []):
-        name = item.get("name")
-        if not name:
-            continue
+    # Fetch each prompt's detail concurrently instead of one HTTP round trip
+    # at a time. Measured before this fix: ~33s for 38 prompts on a cold
+    # cache (sequential N+1) - slow enough that a normal caller timeout
+    # (10-30s) could fail even though the fetch would have succeeded given
+    # more time. A single failed fetch still only drops that one prompt,
+    # same as before - it never aborts the whole refresh.
+    with ThreadPoolExecutor(max_workers=_fetch_concurrency()) as executor:
+        futures = {executor.submit(_fetch_prompt_definition, name): name for name in names}
 
-        try:
-            detail = _get(f"{PROMPTS_PATH}/{name}")
-            definition = _build_prompt_definition(name, detail)
+        for future in as_completed(futures):
+            definition = future.result()
             if definition:
-                prompts[name] = definition
-        except Exception:
-            continue
+                prompts[definition.prompt_id] = definition
 
     if prompts:
         _cache["prompts"] = prompts

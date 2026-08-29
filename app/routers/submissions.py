@@ -1,6 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.contracts.envelope import HermesCapabilityEnvelope, build_envelope
+from app.security.rbac import require_permission
 
 from app.submission_intelligence.adapters import build_submission_intelligence_request_from_handoff
 from app.submission_intelligence.extraction import extract_submission_status, extract_tracker_update
@@ -32,12 +33,14 @@ def get_submission_workflow_policy() -> SubmissionWorkflowPolicyResponse:
 @router.post("/evaluate", response_model=SubmissionIntelligenceResult)
 def evaluate_submission(
     request: SubmissionIntelligenceRequest,
+    user: dict = Depends(require_permission("submissions:evaluate")),
 ) -> SubmissionIntelligenceResult:
     return evaluate_submission_intelligence(request)
 
 @router.post("/evaluate/from-handoff", response_model=SubmissionIntelligenceResult)
 def evaluate_submission_from_handoff(
     request: SubmissionHandoffEvaluationRequest,
+    user: dict = Depends(require_permission("submissions:evaluate")),
 ) -> SubmissionIntelligenceResult:
     submission_request = build_submission_intelligence_request_from_handoff(request)
     return evaluate_submission_intelligence(submission_request)
