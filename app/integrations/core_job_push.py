@@ -260,6 +260,13 @@ def push_job_to_core(draft: DraftObject) -> dict[str, Any]:
         headers={
             "Authorization": f"Bearer {HERMES_SERVICE_TOKEN}",
             "Content-Type": "application/json",
+            # Core sits behind Cloudflare, which blocks the default
+            # Python-urllib user agent as bot traffic (WAF error 1010) --
+            # confirmed live: identical request succeeds with this header
+            # and fails without it. Not a workaround for anything on
+            # Core's own auth (HermesAuthGuard) -- that layer is separate
+            # and was already passing before this fix.
+            "User-Agent": "Hermes-Internal-Service/1.0",
         },
     )
 
