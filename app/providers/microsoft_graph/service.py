@@ -1,4 +1,5 @@
 import hmac
+import html as html_lib
 import json
 import os
 import re
@@ -50,9 +51,26 @@ def microsoft_graph_provider_status() -> dict[str, Any]:
     }
 
 
+_BLOCK_TAG_PATTERN = re.compile(
+    r'</?(?:br|p|div|tr|li|h[1-6]|table)\b[^>]*>',
+    flags=re.IGNORECASE,
+)
+
+
 def _strip_html(html: str) -> str:
-    text = re.sub(r'<[^>]+>', ' ', html or '')
-    return re.sub(r'\s+', ' ', text).strip()
+    # Block-level tags become newlines, not spaces, before the rest of the
+    # markup is stripped -- otherwise every paragraph/line break in the
+    # original message collapses into one run-on line, and every
+    # line-anchored field extractor downstream (job title, required
+    # skills, company -- anything matching "^Label:" at the start of a
+    # line) silently stops finding its labels on real HTML mail.
+    text = _BLOCK_TAG_PATTERN.sub('\n', html or '')
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = html_lib.unescape(text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    text = re.sub(r'\n[ \t]+', '\n', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
 
 
 def _graph_credentials_configured() -> bool:

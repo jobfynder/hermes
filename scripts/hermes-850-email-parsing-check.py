@@ -212,11 +212,68 @@ Need a senior Python developer for a long-term project.
     )
 
 
+def test_forwarded_requirement_with_end_client() -> None:
+    # Regression fixture for the HERMES-850 "jobs@ mail isn't parsing
+    # right" incident: a real vendor-forwarded posting where the actual
+    # job title/JD content sits several paragraphs past a forwarded-
+    # message header block, the end client is only named inline (not
+    # under a "Job Title:" label the deterministic parser already knew
+    # about), and the source HTML used <br>/<p> for line breaks.
+    text = (
+        "Subject: FW: AWS Connect Solutions Engineer with IVR Exp : Houston, TX (onsite) - Oncor\n"
+        "\n"
+        "From: harry@itecsus.com <harry@itecsus.com>\n"
+        "Sent: Saturday, August 29, 2026 6:38 AM\n"
+        "To: Jobs Nvoids <jobs@nvoids.com>\n"
+        "Subject: AWS Connect Solutions Engineer with IVR Exp : Houston, TX (onsite) - Oncor\n"
+        "\n"
+        "You received this email from harry@itecsus.com via https://jobs.nvoids.com\n"
+        "\n"
+        "AWS Connect Solutions Engineer\n"
+        "Location: Dallas TX\n"
+        "End client: Oncor\n"
+        "Required skills: Amazon Connect, AWS Lambda\n"
+        "\n"
+        "Keywords: artificial intelligence sthree database information technology\n"
+        "View this job online here\n"
+    )
+
+    result = parse_requirement_email(text)
+    record = result["records"][0]
+
+    require(
+        record["job_title"] == "AWS Connect Solutions Engineer",
+        f"Expected the email subject to supply the job title when the body's own "
+        f"labeled title comes late, got {record['job_title']!r}",
+    )
+    require(
+        record["company"] == "Oncor",
+        f"Expected 'End client: Oncor' to be extracted as company, got {record['company']!r}",
+    )
+    require(
+        record["location"] == "Dallas TX",
+        f"Location must not bleed into the following 'End client' line, got {record['location']!r}",
+    )
+    require(
+        "From: harry@itecsus.com" not in record["job_description"],
+        "The forwarded-message header block must be stripped from job_description",
+    )
+    require(
+        "Keywords:" not in record["job_description"],
+        "The trailing keyword-dump footer must be stripped from job_description",
+    )
+    require(
+        "Oncor" in record["job_description"],
+        "Cleaning job_description must not strip real posting content",
+    )
+
+
 def main() -> None:
     test_mailbox_routing()
     test_hotlist_parser()
     test_requirement_parser()
     test_confidence_based_classification()
+    test_forwarded_requirement_with_end_client()
 
     print("PASS: exact mailbox routing")
     print("PASS: foreign-domain aliases rejected")
@@ -228,6 +285,7 @@ def main() -> None:
     print("PASS: empty requirement creates no record")
     print("PASS: deterministic parser uses_llm=false")
     print("PASS: confidence-based hotlist/requirement classification (shared mailbox)")
+    print("PASS: company extraction and job_description cleanup on a real forwarded posting")
     print("PASS: HERMES-850 parser guardrails")
 
 

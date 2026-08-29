@@ -3,6 +3,7 @@ from typing import Any
 
 from app.services.consultant_service import parse_consultant_text
 from app.understanding.models import RawDocument
+from app.understanding.parsers.basic import extract_probable_title
 from app.understanding.service import understand_document
 
 
@@ -50,6 +51,20 @@ HEADER_ALIASES = {
     "phone": "candidate_phone",
     "mobile": "candidate_phone",
 }
+
+
+def _extract_subject_line(text: str) -> str | None:
+    for line in (text or "").replace("\r\n", "\n").split("\n"):
+        stripped = line.strip()
+        if stripped.lower().startswith("subject:"):
+            subject = stripped[len("subject:"):].strip()
+            # Strip a forwarding prefix ("FW:"/"Fwd:"/"RE:", possibly
+            # doubled) so the probable-title heuristic below sees the
+            # actual subject, not forwarding chrome.
+            subject = re.sub(r"(?i)^(?:fw|fwd|re)\s*:\s*", "", subject).strip()
+            return subject or None
+
+    return None
 
 
 def _clean_email_text(text: str) -> str:
@@ -348,6 +363,63 @@ def parse_hotlist_email(text: str) -> dict[str, Any]:
     }
 
 
+_FORWARDED_HEADER_LINE_PATTERN = re.compile(
+    r"(?im)^\s*(?:from|sent|to|subject|cc|bcc)\s*:.*$"
+)
+
+# Generic markers for the SEO-keyword-dump / call-to-action tail that
+# broadcast job boards commonly append after the real posting. Kept
+# short and generic on purpose -- this is not an attempt to strip every
+# vendor's specific forwarding boilerplate (e.g. numbered submission
+# instructions), since a real JD can legitimately be written as a
+# numbered list and blindly stripping those would do more harm than
+# good.
+_JOB_DESCRIPTION_FOOTER_MARKERS = (
+    "view this job online",
+    "unsubscribe",
+    "keywords:",
+)
+
+
+def _strip_forwarded_header_block(text: str) -> str:
+    """Drops a contiguous run of From:/Sent:/To:/Subject: lines (and
+    blank lines) at the very top of the text -- the standard Outlook
+    forwarded-message preamble. Only strips at the top, on purpose: a
+    "To:" appearing mid-body is real content, not header noise.
+    """
+    lines = text.splitlines()
+    cursor = 0
+
+    for line in lines:
+        if not line.strip() or _FORWARDED_HEADER_LINE_PATTERN.match(line):
+            cursor += 1
+            continue
+        break
+
+    return "\n".join(lines[cursor:]).strip()
+
+
+def _strip_job_description_footer(text: str) -> str:
+    lowered = text.lower()
+    cut_at = len(text)
+
+    for marker in _JOB_DESCRIPTION_FOOTER_MARKERS:
+        index = lowered.find(marker)
+        if index != -1:
+            cut_at = min(cut_at, index)
+
+    return text[:cut_at].strip()
+
+
+def _clean_job_description(text: str) -> str:
+    cleaned = _strip_forwarded_header_block(text)
+    cleaned = _strip_job_description_footer(cleaned)
+
+    # Never hand back an empty description over a merely-unpolished one --
+    # an over-eager strip losing everything is worse than leaving noise in.
+    return cleaned or text.strip()
+
+
 def _split_requirement_sections(text: str) -> list[str]:
     matches = list(
         re.finditer(
@@ -391,6 +463,11 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
             "warnings": ["no_requirements_detected"],
         }
 
+    subject_line = _extract_subject_line(text)
+    subject_probable_title = (
+        extract_probable_title(subject_line) if subject_line else None
+    )
+
     sections = _split_requirement_sections(clean_text)
     records: list[dict[str, Any]] = []
 
@@ -422,6 +499,11 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
                 ["Job Title", "Position", "Role"],
             )
             or structured.get("job_title")
+            # Only the first section inherits the email's own subject as a
+            # title guess -- a multi-posting email splitting into several
+            # sections shouldn't stamp every one of them with the subject
+            # of (at most) the first job it was about.
+            or (subject_probable_title if index == 1 else None)
         )
 
         explicit_required_skills = _extract_labeled_value(
@@ -476,7 +558,8 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
             {
                 "record_type": "job_requirement",
                 "job_title": job_title,
-                "job_description": section,
+                "job_description": _clean_job_description(section),
+                "company": structured.get("company"),
                 "required_skills": required_skills,
                 "preferred_skills": preferred_skills,
                 "years_of_experience": structured.get(

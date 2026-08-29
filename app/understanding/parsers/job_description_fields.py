@@ -16,6 +16,15 @@ INLINE_RATE_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 
+# Ordered most-specific first: "End Client" beats a bare "Client" label
+# when a posting distinguishes the staffing vendor's own name from the
+# company the role is actually with -- the end client is what a
+# recruiter/candidate cares about.
+COMPANY_PATTERN = re.compile(
+    r"(?im)^\s*(?:end[\s\-]?client|client\s*name|client|company\s*name|company|employer)"
+    r"\s*[:\-]\s*([A-Za-z0-9][A-Za-z0-9 &.,'\-]{1,80}?)\s*$",
+)
+
 
 def clean_field(value: str | None) -> str | None:
     if not value:
@@ -66,6 +75,12 @@ def extract_employment_type(text: str) -> str | None:
             return label
 
     return None
+
+
+def extract_company(text: str) -> str | None:
+    match = COMPANY_PATTERN.search(text or "")
+
+    return clean_field(match.group(1)) if match else None
 
 
 def extract_rate_or_salary(text: str) -> str | None:

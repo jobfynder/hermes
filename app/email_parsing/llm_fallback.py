@@ -87,6 +87,7 @@ def _empty_job_record() -> dict[str, Any]:
         "record_type": "job_requirement",
         "job_title": None,
         "job_description": None,
+        "company": None,
         "required_skills": [],
         "preferred_skills": [],
         "years_of_experience": None,

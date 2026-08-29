@@ -181,7 +181,12 @@ def map_draft_to_core_job_payload(draft: DraftObject) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "jobTitle": fields.get("job_title") or draft.title or "Untitled Requirement",
         "jobDescription": fields.get("job_description"),
-        "clientName": contact["company"],
+        # The posting's own "End Client:"/"Client:" is who the role is
+        # actually for -- that's what belongs on a job listing. The
+        # recruiter's own signature company (contact["company"], e.g. a
+        # staffing agency) is a fallback only, for postings that never
+        # name an end client at all.
+        "clientName": fields.get("company") or contact["company"],
         "currency": "USD",
         **_parse_location(fields.get("location")),
         **_parse_rate(fields.get("rate_or_salary")),

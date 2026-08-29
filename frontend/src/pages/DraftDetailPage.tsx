@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client'
 import { ConfidenceMeter } from '../components/ConfidenceMeter'
 import { draftTypeLabel } from '../components/DraftTypeLabel'
 import { FieldRow } from '../components/FieldRow'
+import { ProvenanceChip } from '../components/ProvenanceChip'
 import { StatusBadge } from '../components/StatusBadge'
 import type {
   ClaimPrepareResult,
@@ -33,6 +34,7 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 const JOB_FIELDS: [string, keyof JobRequirementRecord][] = [
   ['Job title', 'job_title'],
+  ['Company', 'company'],
   ['Location', 'location'],
   ['Rate / salary', 'rate_or_salary'],
   ['Employment type', 'employment_type'],
@@ -75,6 +77,7 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
   const [busy, setBusy] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [showRawText, setShowRawText] = useState(false)
+  const [showJobDescription, setShowJobDescription] = useState(false)
   const [preparedClaim, setPreparedClaim] = useState<ClaimPrepareResult | null>(null)
 
   function load() {
@@ -90,6 +93,7 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
 
   useEffect(() => {
     setPreparedClaim(null)
+    setShowJobDescription(false)
     load()
   }, [draftId])
 
@@ -263,6 +267,29 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
                   provenance={pmap.get(`job.${key}`)}
                 />
               ))}
+              <div className="flex items-start justify-between gap-4 border-b border-line py-2.5 last:border-0">
+                <span className="w-40 shrink-0 text-sm text-ink-soft">Job description</span>
+                <div className="flex-1">
+                  {(parsing.records[0] as JobRequirementRecord).job_description ? (
+                    <>
+                      <button
+                        onClick={() => setShowJobDescription((v) => !v)}
+                        className="text-sm text-accent hover:underline"
+                      >
+                        {showJobDescription ? 'Hide' : 'Show'} full description
+                      </button>
+                      {showJobDescription && (
+                        <pre className="scrollbar-thin mono mt-3 max-h-96 overflow-auto rounded-lg bg-paper p-3 text-xs whitespace-pre-wrap text-ink">
+                          {(parsing.records[0] as JobRequirementRecord).job_description}
+                        </pre>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-sm text-ink-soft italic">—</span>
+                  )}
+                </div>
+                <ProvenanceChip entry={pmap.get('job.job_description')} />
+              </div>
             </Card>
           )}
 

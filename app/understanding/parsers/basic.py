@@ -3,6 +3,7 @@ from typing import Any
 
 from app.understanding.models import DocumentKind, ExtractedText
 from app.understanding.parsers.job_description_fields import (
+    extract_company,
     extract_employment_type,
     extract_location,
     extract_preferred_skills_text,
@@ -107,6 +108,7 @@ def parse_basic_structured_data(
             work_authorization=extract_work_authorization(text),
             employment_type=extract_employment_type(text),
             rate_or_salary=extract_rate_or_salary(text),
+            company=extract_company(text),
             parser=parser,
         ).model_dump()
 

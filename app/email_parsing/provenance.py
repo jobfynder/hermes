@@ -13,6 +13,7 @@ from app.runtime.db import cursor
 JOB_REQUIREMENT_FIELDS = [
     'job_title',
     'job_description',
+    'company',
     'required_skills',
     'preferred_skills',
     'years_of_experience',

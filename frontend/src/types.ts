@@ -59,6 +59,7 @@ export interface DraftMetadata {
 export interface JobRequirementRecord {
   record_type: 'job_requirement'
   job_title: string | null
+  company: string | null
   job_description: string | null
   required_skills: string[]
   preferred_skills: string[]

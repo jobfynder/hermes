@@ -135,6 +135,41 @@ def test_graph_message_normalization_strips_html() -> None:
     require('Alex Kim' in normalized['text'], 'Text content must survive HTML stripping')
 
 
+def test_graph_message_normalization_preserves_line_structure() -> None:
+    # Regression fixture for the HERMES-850 "jobs@ mail isn't parsing
+    # right" incident: collapsing every block-level tag to a single space
+    # (rather than a newline) turned every real HTML email into one giant
+    # run-on line, silently breaking every line-anchored field extractor
+    # downstream (job title, required skills, company -- anything
+    # matching "^Label:" at the start of a line).
+    message = {
+        'id': 'graph-msg-3',
+        'subject': 'Requirement',
+        'from': {'emailAddress': {'address': 'recruiter@example.com'}},
+        'toRecipients': [{'emailAddress': {'address': 'jobs@jobfynder.com'}}],
+        'body': {
+            'contentType': 'html',
+            'content': (
+                '<div>Job Title: Senior Java Developer</div>'
+                '<div>End Client: Acme &amp; Co</div>'
+                '<div>Location: Austin, TX</div>'
+            ),
+        },
+    }
+
+    normalized = normalize_graph_message(message)
+    lines = [line for line in normalized['text'].splitlines() if line.strip()]
+
+    require(
+        any(line.strip() == 'Job Title: Senior Java Developer' for line in lines),
+        f'Each <div> must become its own line, got: {normalized["text"]!r}',
+    )
+    require(
+        any(line.strip() == 'End Client: Acme & Co' for line in lines),
+        f'HTML entities (&amp;) must be decoded, got: {normalized["text"]!r}',
+    )
+
+
 def run() -> None:
     tests = [
         test_gmail_status_is_contract_until_configured,
@@ -143,6 +178,7 @@ def run() -> None:
         test_graph_status_is_contract_until_configured,
         test_graph_message_normalization_plain_text,
         test_graph_message_normalization_strips_html,
+        test_graph_message_normalization_preserves_line_structure,
     ]
 
     for test in tests:
