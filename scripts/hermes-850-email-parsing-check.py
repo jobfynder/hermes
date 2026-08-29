@@ -232,7 +232,14 @@ def test_forwarded_requirement_with_end_client() -> None:
         "AWS Connect Solutions Engineer\n"
         "Location: Dallas TX\n"
         "End client: Oncor\n"
-        "Required skills: Amazon Connect, AWS Lambda\n"
+        "( Need Only Independent Visa)\n"
+        "Required skills: Amazon Connect, AWS Lambda, TIBCO BusinessWorks\n"
+        "\n"
+        "Nice to have skills:\n"
+        "\n"
+        "Experience with Amazon Lex and AWS certification is a plus.\n"
+        "\n"
+        "linkedin.com/in/harry-recruiter\n"
         "\n"
         "Keywords: artificial intelligence sthree database information technology\n"
         "View this job online here\n"
@@ -266,6 +273,22 @@ def test_forwarded_requirement_with_end_client() -> None:
         "Oncor" in record["job_description"],
         "Cleaning job_description must not strip real posting content",
     )
+    require(
+        record["work_authorization"] == "Independent Visa",
+        f"Expected staffing-industry 'Independent Visa' phrasing to be recognized, got {record['work_authorization']!r}",
+    )
+    require(
+        record["linkedin_url"] == "https://linkedin.com/in/harry-recruiter",
+        f"Expected a bare linkedin.com/in/... URL in the JD body to be extracted, got {record['linkedin_url']!r}",
+    )
+    require(
+        "TIBCO BusinessWorks" in record["required_skills"] and "Amazon Connect" in record["required_skills"],
+        f"Expected IT-staffing-domain taxonomy terms in required_skills, got {record['required_skills']}",
+    )
+    require(
+        record["preferred_skills"] != [],
+        "Expected the multi-word 'Nice to have skills:' label to still match and produce a non-empty section",
+    )
 
 
 def main() -> None:
@@ -285,7 +308,7 @@ def main() -> None:
     print("PASS: empty requirement creates no record")
     print("PASS: deterministic parser uses_llm=false")
     print("PASS: confidence-based hotlist/requirement classification (shared mailbox)")
-    print("PASS: company extraction and job_description cleanup on a real forwarded posting")
+    print("PASS: company/work-authorization/LinkedIn/taxonomy-driven skills on a real forwarded posting")
     print("PASS: HERMES-850 parser guardrails")
 
 

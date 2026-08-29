@@ -1,13 +1,20 @@
 {
-  "version": "jobfynder_canonical_skills_v1",
+  "version": "jobfynder_canonical_skills_v2_it_staffing",
   "taxonomy_type": "canonical_skills",
   "skills": [
     {
       "name": "Python",
       "category": "Programming Language",
       "skill_type": "language",
-      "aliases": ["python3", "py"],
-      "related_skills": ["FastAPI", "Django", "Flask"],
+      "aliases": [
+        "python3",
+        "py"
+      ],
+      "related_skills": [
+        "FastAPI",
+        "Django",
+        "Flask"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -15,8 +22,15 @@
       "name": "Java",
       "category": "Programming Language",
       "skill_type": "language",
-      "aliases": ["core java", "java 8", "java 11", "java 17"],
-      "related_skills": ["Spring Boot"],
+      "aliases": [
+        "core java",
+        "java 8",
+        "java 11",
+        "java 17"
+      ],
+      "related_skills": [
+        "Spring Boot"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -24,8 +38,15 @@
       "name": "JavaScript",
       "category": "Programming Language",
       "skill_type": "language",
-      "aliases": ["js", "ecmascript"],
-      "related_skills": ["React", "Node.js", "TypeScript"],
+      "aliases": [
+        "js",
+        "ecmascript"
+      ],
+      "related_skills": [
+        "React",
+        "Node.js",
+        "TypeScript"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -33,8 +54,14 @@
       "name": "TypeScript",
       "category": "Programming Language",
       "skill_type": "language",
-      "aliases": ["ts"],
-      "related_skills": ["JavaScript", "React", "Node.js"],
+      "aliases": [
+        "ts"
+      ],
+      "related_skills": [
+        "JavaScript",
+        "React",
+        "Node.js"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -42,8 +69,15 @@
       "name": "React",
       "category": "Frontend",
       "skill_type": "framework",
-      "aliases": ["react.js", "reactjs"],
-      "related_skills": ["JavaScript", "TypeScript", "Next.js"],
+      "aliases": [
+        "react.js",
+        "reactjs"
+      ],
+      "related_skills": [
+        "JavaScript",
+        "TypeScript",
+        "Next.js"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -51,8 +85,15 @@
       "name": "Next.js",
       "category": "Frontend",
       "skill_type": "framework",
-      "aliases": ["nextjs", "next js"],
-      "related_skills": ["React", "JavaScript", "TypeScript"],
+      "aliases": [
+        "nextjs",
+        "next js"
+      ],
+      "related_skills": [
+        "React",
+        "JavaScript",
+        "TypeScript"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -60,8 +101,15 @@
       "name": "Node.js",
       "category": "Backend",
       "skill_type": "runtime",
-      "aliases": ["nodejs", "node js", "node"],
-      "related_skills": ["JavaScript", "TypeScript"],
+      "aliases": [
+        "nodejs",
+        "node js",
+        "node"
+      ],
+      "related_skills": [
+        "JavaScript",
+        "TypeScript"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -69,8 +117,12 @@
       "name": "FastAPI",
       "category": "Backend",
       "skill_type": "framework",
-      "aliases": ["fast api"],
-      "related_skills": ["Python"],
+      "aliases": [
+        "fast api"
+      ],
+      "related_skills": [
+        "Python"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -79,7 +131,9 @@
       "category": "Backend",
       "skill_type": "framework",
       "aliases": [],
-      "related_skills": ["Python"],
+      "related_skills": [
+        "Python"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -88,7 +142,9 @@
       "category": "Backend",
       "skill_type": "framework",
       "aliases": [],
-      "related_skills": ["Python"],
+      "related_skills": [
+        "Python"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -96,8 +152,13 @@
       "name": "Spring Boot",
       "category": "Backend",
       "skill_type": "framework",
-      "aliases": ["springboot", "spring"],
-      "related_skills": ["Java"],
+      "aliases": [
+        "springboot",
+        "spring"
+      ],
+      "related_skills": [
+        "Java"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -105,7 +166,10 @@
       "name": "PostgreSQL",
       "category": "Database",
       "skill_type": "database",
-      "aliases": ["postgres", "postgresql db"],
+      "aliases": [
+        "postgres",
+        "postgresql db"
+      ],
       "related_skills": [],
       "confidence": "high",
       "source": "seed"
@@ -123,7 +187,9 @@
       "name": "MongoDB",
       "category": "Database",
       "skill_type": "database",
-      "aliases": ["mongo"],
+      "aliases": [
+        "mongo"
+      ],
       "related_skills": [],
       "confidence": "high",
       "source": "seed"
@@ -141,8 +207,13 @@
       "name": "Elasticsearch",
       "category": "Search",
       "skill_type": "search_engine",
-      "aliases": ["elastic search", "elastic"],
-      "related_skills": ["Typesense"],
+      "aliases": [
+        "elastic search",
+        "elastic"
+      ],
+      "related_skills": [
+        "Typesense"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -151,7 +222,9 @@
       "category": "Search",
       "skill_type": "search_engine",
       "aliases": [],
-      "related_skills": ["Elasticsearch"],
+      "related_skills": [
+        "Elasticsearch"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -159,8 +232,14 @@
       "name": "AWS",
       "category": "Cloud",
       "skill_type": "cloud_platform",
-      "aliases": ["amazon web services"],
-      "related_skills": ["Docker", "Kubernetes", "Terraform"],
+      "aliases": [
+        "amazon web services"
+      ],
+      "related_skills": [
+        "Docker",
+        "Kubernetes",
+        "Terraform"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -168,8 +247,14 @@
       "name": "Azure",
       "category": "Cloud",
       "skill_type": "cloud_platform",
-      "aliases": ["microsoft azure"],
-      "related_skills": ["Docker", "Kubernetes", "Terraform"],
+      "aliases": [
+        "microsoft azure"
+      ],
+      "related_skills": [
+        "Docker",
+        "Kubernetes",
+        "Terraform"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -177,8 +262,15 @@
       "name": "GCP",
       "category": "Cloud",
       "skill_type": "cloud_platform",
-      "aliases": ["google cloud", "google cloud platform"],
-      "related_skills": ["Docker", "Kubernetes", "Terraform"],
+      "aliases": [
+        "google cloud",
+        "google cloud platform"
+      ],
+      "related_skills": [
+        "Docker",
+        "Kubernetes",
+        "Terraform"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -187,7 +279,9 @@
       "category": "DevOps",
       "skill_type": "containerization",
       "aliases": [],
-      "related_skills": ["Kubernetes"],
+      "related_skills": [
+        "Kubernetes"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -195,8 +289,12 @@
       "name": "Kubernetes",
       "category": "DevOps",
       "skill_type": "orchestration",
-      "aliases": ["k8s"],
-      "related_skills": ["Docker"],
+      "aliases": [
+        "k8s"
+      ],
+      "related_skills": [
+        "Docker"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -204,7 +302,9 @@
       "name": "Kafka",
       "category": "Messaging",
       "skill_type": "streaming",
-      "aliases": ["apache kafka"],
+      "aliases": [
+        "apache kafka"
+      ],
       "related_skills": [],
       "confidence": "high",
       "source": "seed"
@@ -213,7 +313,9 @@
       "name": "RabbitMQ",
       "category": "Messaging",
       "skill_type": "queue",
-      "aliases": ["rabbit mq"],
+      "aliases": [
+        "rabbit mq"
+      ],
       "related_skills": [],
       "confidence": "high",
       "source": "seed"
@@ -222,8 +324,14 @@
       "name": "Terraform",
       "category": "DevOps",
       "skill_type": "iac",
-      "aliases": ["terraform iac"],
-      "related_skills": ["AWS", "Azure", "GCP"],
+      "aliases": [
+        "terraform iac"
+      ],
+      "related_skills": [
+        "AWS",
+        "Azure",
+        "GCP"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -232,7 +340,9 @@
       "category": "DevOps",
       "skill_type": "ci_cd",
       "aliases": [],
-      "related_skills": ["GitHub Actions"],
+      "related_skills": [
+        "GitHub Actions"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -240,8 +350,13 @@
       "name": "GitHub Actions",
       "category": "DevOps",
       "skill_type": "ci_cd",
-      "aliases": ["github ci", "github workflows"],
-      "related_skills": ["Jenkins"],
+      "aliases": [
+        "github ci",
+        "github workflows"
+      ],
+      "related_skills": [
+        "Jenkins"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -249,8 +364,13 @@
       "name": "REST API",
       "category": "API",
       "skill_type": "api_style",
-      "aliases": ["restful api", "rest"],
-      "related_skills": ["GraphQL"],
+      "aliases": [
+        "restful api",
+        "rest"
+      ],
+      "related_skills": [
+        "GraphQL"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -259,7 +379,9 @@
       "category": "API",
       "skill_type": "api_style",
       "aliases": [],
-      "related_skills": ["REST API"],
+      "related_skills": [
+        "REST API"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -267,8 +389,13 @@
       "name": "NLP",
       "category": "AI",
       "skill_type": "ai_domain",
-      "aliases": ["natural language processing"],
-      "related_skills": ["spaCy", "LLM"],
+      "aliases": [
+        "natural language processing"
+      ],
+      "related_skills": [
+        "spaCy",
+        "LLM"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -276,8 +403,12 @@
       "name": "spaCy",
       "category": "AI",
       "skill_type": "nlp_library",
-      "aliases": ["spacy"],
-      "related_skills": ["NLP"],
+      "aliases": [
+        "spacy"
+      ],
+      "related_skills": [
+        "NLP"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -285,8 +416,14 @@
       "name": "LLM",
       "category": "AI",
       "skill_type": "ai_domain",
-      "aliases": ["large language model", "large language models"],
-      "related_skills": ["NLP", "Generative AI"],
+      "aliases": [
+        "large language model",
+        "large language models"
+      ],
+      "related_skills": [
+        "NLP",
+        "Generative AI"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -294,8 +431,14 @@
       "name": "Generative AI",
       "category": "AI",
       "skill_type": "ai_domain",
-      "aliases": ["gen ai", "genai"],
-      "related_skills": ["LLM", "NLP"],
+      "aliases": [
+        "gen ai",
+        "genai"
+      ],
+      "related_skills": [
+        "LLM",
+        "NLP"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -303,8 +446,13 @@
       "name": "Resume Parsing",
       "category": "Recruitment Intelligence",
       "skill_type": "domain_capability",
-      "aliases": ["resume parser", "cv parsing"],
-      "related_skills": ["NLP"],
+      "aliases": [
+        "resume parser",
+        "cv parsing"
+      ],
+      "related_skills": [
+        "NLP"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -312,10 +460,1677 @@
       "name": "Job Matching",
       "category": "Recruitment Intelligence",
       "skill_type": "domain_capability",
-      "aliases": ["matching engine", "candidate matching"],
-      "related_skills": ["Resume Parsing"],
+      "aliases": [
+        "matching engine",
+        "candidate matching"
+      ],
+      "related_skills": [
+        "Resume Parsing"
+      ],
       "confidence": "high",
       "source": "seed"
+    },
+    {
+      "name": "C#",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [
+        "c sharp",
+        "csharp"
+      ],
+      "related_skills": [
+        ".NET",
+        "ASP.NET"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": ".NET",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [
+        "dot net",
+        "dotnet",
+        ".net framework"
+      ],
+      "related_skills": [
+        "C#",
+        "ASP.NET",
+        ".NET Core"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": ".NET Core",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [
+        "dotnet core",
+        ".net 6",
+        ".net 7",
+        ".net 8"
+      ],
+      "related_skills": [
+        ".NET",
+        "C#"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "ASP.NET",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [
+        "asp net"
+      ],
+      "related_skills": [
+        ".NET",
+        "C#"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "ASP.NET Core",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [
+        "asp.net core mvc"
+      ],
+      "related_skills": [
+        ".NET Core",
+        "C#"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "VB.NET",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [
+        "visual basic .net"
+      ],
+      "related_skills": [
+        ".NET"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "PL/SQL",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [
+        "plsql"
+      ],
+      "related_skills": [
+        "Oracle Database"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "T-SQL",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [
+        "transact-sql"
+      ],
+      "related_skills": [
+        "SQL Server"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "COBOL",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [],
+      "related_skills": [
+        "JCL"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "PowerShell",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [
+        "ps1"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Go",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [
+        "golang"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Scala",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [],
+      "related_skills": [
+        "Apache Spark"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Ruby",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [],
+      "related_skills": [
+        "Ruby on Rails"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "PHP",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [],
+      "related_skills": [
+        "Laravel"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Perl",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Swift",
+      "category": "Mobile",
+      "skill_type": "language",
+      "aliases": [],
+      "related_skills": [
+        "iOS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Kotlin",
+      "category": "Mobile",
+      "skill_type": "language",
+      "aliases": [],
+      "related_skills": [
+        "Android"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "C++",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [
+        "cpp"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "C",
+      "category": "Programming Language",
+      "skill_type": "language",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Angular",
+      "category": "Frontend",
+      "skill_type": "framework",
+      "aliases": [
+        "angularjs",
+        "angular js"
+      ],
+      "related_skills": [
+        "TypeScript"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Vue.js",
+      "category": "Frontend",
+      "skill_type": "framework",
+      "aliases": [
+        "vuejs",
+        "vue"
+      ],
+      "related_skills": [
+        "JavaScript"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "jQuery",
+      "category": "Frontend",
+      "skill_type": "library",
+      "aliases": [],
+      "related_skills": [
+        "JavaScript"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "HTML",
+      "category": "Frontend",
+      "skill_type": "markup",
+      "aliases": [
+        "html5"
+      ],
+      "related_skills": [
+        "CSS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "CSS",
+      "category": "Frontend",
+      "skill_type": "styling",
+      "aliases": [
+        "css3"
+      ],
+      "related_skills": [
+        "HTML"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Express.js",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [
+        "expressjs",
+        "express"
+      ],
+      "related_skills": [
+        "Node.js"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Ruby on Rails",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [
+        "rails"
+      ],
+      "related_skills": [
+        "Ruby"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Laravel",
+      "category": "Backend",
+      "skill_type": "framework",
+      "aliases": [],
+      "related_skills": [
+        "PHP"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Microservices",
+      "category": "Architecture",
+      "skill_type": "architecture_pattern",
+      "aliases": [
+        "micro services"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Oracle Database",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": [
+        "oracle db",
+        "oracle 19c",
+        "oracle 12c"
+      ],
+      "related_skills": [
+        "PL/SQL"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SQL Server",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": [
+        "ms sql",
+        "mssql",
+        "microsoft sql server"
+      ],
+      "related_skills": [
+        "T-SQL"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "DB2",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": [
+        "ibm db2"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Snowflake",
+      "category": "Database",
+      "skill_type": "cloud_data_warehouse",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Cassandra",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": [
+        "apache cassandra"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "DynamoDB",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": [
+        "amazon dynamodb",
+        "dynamo db"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Databricks",
+      "category": "Data Engineering",
+      "skill_type": "platform",
+      "aliases": [],
+      "related_skills": [
+        "Apache Spark"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Teradata",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Sybase",
+      "category": "Database",
+      "skill_type": "database",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "AWS Lambda",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "lambda"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Amazon Connect",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "aws connect"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Amazon Lex",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "aws lex"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Amazon S3",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "aws s3",
+        "s3"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Amazon EC2",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "aws ec2",
+        "ec2"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Amazon RDS",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "aws rds",
+        "rds"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "AWS CloudFormation",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "cloudformation"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "AWS IAM",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "iam"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Amazon SNS",
+      "category": "Messaging",
+      "skill_type": "aws_service",
+      "aliases": [
+        "aws sns",
+        "sns"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Amazon SQS",
+      "category": "Messaging",
+      "skill_type": "aws_service",
+      "aliases": [
+        "aws sqs",
+        "sqs"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "AWS Glue",
+      "category": "Data Engineering",
+      "skill_type": "aws_service",
+      "aliases": [],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Amazon Redshift",
+      "category": "Database",
+      "skill_type": "aws_service",
+      "aliases": [
+        "redshift"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "AWS CloudWatch",
+      "category": "Cloud",
+      "skill_type": "aws_service",
+      "aliases": [
+        "cloudwatch"
+      ],
+      "related_skills": [
+        "AWS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure Logic Apps",
+      "category": "Cloud",
+      "skill_type": "azure_service",
+      "aliases": [
+        "logic apps"
+      ],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure Service Bus",
+      "category": "Messaging",
+      "skill_type": "azure_service",
+      "aliases": [
+        "service bus"
+      ],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure Functions",
+      "category": "Cloud",
+      "skill_type": "azure_service",
+      "aliases": [],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure API Management",
+      "category": "API",
+      "skill_type": "azure_service",
+      "aliases": [
+        "apim"
+      ],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure DevOps",
+      "category": "DevOps",
+      "skill_type": "azure_service",
+      "aliases": [
+        "ado",
+        "vsts"
+      ],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure Data Factory",
+      "category": "Data Engineering",
+      "skill_type": "azure_service",
+      "aliases": [
+        "adf"
+      ],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure Synapse",
+      "category": "Data Engineering",
+      "skill_type": "azure_service",
+      "aliases": [
+        "synapse analytics"
+      ],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure Active Directory",
+      "category": "Security",
+      "skill_type": "azure_service",
+      "aliases": [
+        "azure ad",
+        "entra id"
+      ],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Azure Integration Services",
+      "category": "Cloud",
+      "skill_type": "azure_service",
+      "aliases": [
+        "ais"
+      ],
+      "related_skills": [
+        "Azure",
+        "Azure Logic Apps"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Ansible",
+      "category": "DevOps",
+      "skill_type": "configuration_management",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Chef",
+      "category": "DevOps",
+      "skill_type": "configuration_management",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Puppet",
+      "category": "DevOps",
+      "skill_type": "configuration_management",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "GitLab CI",
+      "category": "DevOps",
+      "skill_type": "ci_cd",
+      "aliases": [
+        "gitlab ci/cd"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "CircleCI",
+      "category": "DevOps",
+      "skill_type": "ci_cd",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Bamboo",
+      "category": "DevOps",
+      "skill_type": "ci_cd",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Bicep",
+      "category": "DevOps",
+      "skill_type": "iac",
+      "aliases": [],
+      "related_skills": [
+        "Azure"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Helm",
+      "category": "DevOps",
+      "skill_type": "orchestration",
+      "aliases": [],
+      "related_skills": [
+        "Kubernetes"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "TIBCO BusinessWorks",
+      "category": "Integration",
+      "skill_type": "middleware",
+      "aliases": [
+        "tibco bw",
+        "tibco bw 5.x",
+        "tibco bw 6.x"
+      ],
+      "related_skills": [
+        "TIBCO EMS"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "TIBCO EMS",
+      "category": "Integration",
+      "skill_type": "middleware",
+      "aliases": [],
+      "related_skills": [
+        "TIBCO BusinessWorks"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "MuleSoft",
+      "category": "Integration",
+      "skill_type": "middleware",
+      "aliases": [
+        "mule esb",
+        "anypoint"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Informatica",
+      "category": "Integration",
+      "skill_type": "etl_tool",
+      "aliases": [
+        "informatica powercenter"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Dell Boomi",
+      "category": "Integration",
+      "skill_type": "middleware",
+      "aliases": [
+        "boomi"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "IBM WebSphere MQ",
+      "category": "Messaging",
+      "skill_type": "middleware",
+      "aliases": [
+        "websphere mq",
+        "ibm mq"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Apache Camel",
+      "category": "Integration",
+      "skill_type": "middleware",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "BizTalk",
+      "category": "Integration",
+      "skill_type": "middleware",
+      "aliases": [
+        "biztalk server"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SAP",
+      "category": "ERP",
+      "skill_type": "erp_platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SAP ABAP",
+      "category": "ERP",
+      "skill_type": "erp_language",
+      "aliases": [
+        "abap"
+      ],
+      "related_skills": [
+        "SAP"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SAP HANA",
+      "category": "Database",
+      "skill_type": "erp_platform",
+      "aliases": [],
+      "related_skills": [
+        "SAP"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SAP FICO",
+      "category": "ERP",
+      "skill_type": "erp_module",
+      "aliases": [
+        "sap fi",
+        "sap co"
+      ],
+      "related_skills": [
+        "SAP"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SAP MM",
+      "category": "ERP",
+      "skill_type": "erp_module",
+      "aliases": [],
+      "related_skills": [
+        "SAP"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SAP SD",
+      "category": "ERP",
+      "skill_type": "erp_module",
+      "aliases": [],
+      "related_skills": [
+        "SAP"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SAP BASIS",
+      "category": "ERP",
+      "skill_type": "erp_module",
+      "aliases": [],
+      "related_skills": [
+        "SAP"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Salesforce",
+      "category": "CRM",
+      "skill_type": "crm_platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Salesforce Apex",
+      "category": "CRM",
+      "skill_type": "crm_language",
+      "aliases": [
+        "apex"
+      ],
+      "related_skills": [
+        "Salesforce"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Salesforce Lightning",
+      "category": "CRM",
+      "skill_type": "crm_framework",
+      "aliases": [],
+      "related_skills": [
+        "Salesforce"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Oracle EBS",
+      "category": "ERP",
+      "skill_type": "erp_platform",
+      "aliases": [
+        "oracle e-business suite"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Oracle EPM",
+      "category": "ERP",
+      "skill_type": "erp_platform",
+      "aliases": [
+        "oracle enterprise performance management"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Oracle Hyperion",
+      "category": "ERP",
+      "skill_type": "erp_platform",
+      "aliases": [
+        "hyperion"
+      ],
+      "related_skills": [
+        "Oracle EPM"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Workday",
+      "category": "HCM",
+      "skill_type": "hcm_platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "ServiceNow",
+      "category": "ITSM",
+      "skill_type": "itsm_platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "PeopleSoft",
+      "category": "ERP",
+      "skill_type": "erp_platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Guidewire",
+      "category": "Insurance Platform",
+      "skill_type": "domain_platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Microsoft Dynamics 365",
+      "category": "CRM",
+      "skill_type": "crm_platform",
+      "aliases": [
+        "dynamics 365",
+        "d365"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "NetSuite",
+      "category": "ERP",
+      "skill_type": "erp_platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Tableau",
+      "category": "BI",
+      "skill_type": "bi_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Power BI",
+      "category": "BI",
+      "skill_type": "bi_tool",
+      "aliases": [
+        "powerbi"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SSRS",
+      "category": "BI",
+      "skill_type": "bi_tool",
+      "aliases": [
+        "sql server reporting services"
+      ],
+      "related_skills": [
+        "SQL Server"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SSIS",
+      "category": "Data Engineering",
+      "skill_type": "etl_tool",
+      "aliases": [
+        "sql server integration services"
+      ],
+      "related_skills": [
+        "SQL Server"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SSAS",
+      "category": "BI",
+      "skill_type": "bi_tool",
+      "aliases": [
+        "sql server analysis services"
+      ],
+      "related_skills": [
+        "SQL Server"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Cognos",
+      "category": "BI",
+      "skill_type": "bi_tool",
+      "aliases": [
+        "ibm cognos"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "QlikView",
+      "category": "BI",
+      "skill_type": "bi_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Qlik Sense",
+      "category": "BI",
+      "skill_type": "bi_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Looker",
+      "category": "BI",
+      "skill_type": "bi_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Apache Spark",
+      "category": "Data Engineering",
+      "skill_type": "data_processing",
+      "aliases": [
+        "pyspark",
+        "spark"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Hadoop",
+      "category": "Data Engineering",
+      "skill_type": "data_processing",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Apache Airflow",
+      "category": "Data Engineering",
+      "skill_type": "orchestration",
+      "aliases": [
+        "airflow"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Talend",
+      "category": "Data Engineering",
+      "skill_type": "etl_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Selenium",
+      "category": "Testing",
+      "skill_type": "test_automation",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "TestNG",
+      "category": "Testing",
+      "skill_type": "test_framework",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Cucumber",
+      "category": "Testing",
+      "skill_type": "test_framework",
+      "aliases": [
+        "bdd"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "JUnit",
+      "category": "Testing",
+      "skill_type": "test_framework",
+      "aliases": [],
+      "related_skills": [
+        "Java"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Postman",
+      "category": "Testing",
+      "skill_type": "api_testing_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "JMeter",
+      "category": "Testing",
+      "skill_type": "performance_testing",
+      "aliases": [
+        "apache jmeter"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "LoadRunner",
+      "category": "Testing",
+      "skill_type": "performance_testing",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Cypress",
+      "category": "Testing",
+      "skill_type": "test_automation",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Appium",
+      "category": "Testing",
+      "skill_type": "mobile_testing",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SoapUI",
+      "category": "Testing",
+      "skill_type": "api_testing_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "JIRA",
+      "category": "Project Management",
+      "skill_type": "pm_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Confluence",
+      "category": "Project Management",
+      "skill_type": "pm_tool",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Agile",
+      "category": "Methodology",
+      "skill_type": "methodology",
+      "aliases": [],
+      "related_skills": [
+        "Scrum"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Scrum",
+      "category": "Methodology",
+      "skill_type": "methodology",
+      "aliases": [],
+      "related_skills": [
+        "Agile"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SAFe",
+      "category": "Methodology",
+      "skill_type": "methodology",
+      "aliases": [
+        "scaled agile framework"
+      ],
+      "related_skills": [
+        "Agile"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Kanban",
+      "category": "Methodology",
+      "skill_type": "methodology",
+      "aliases": [],
+      "related_skills": [
+        "Agile"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "ITIL",
+      "category": "ITSM",
+      "skill_type": "framework",
+      "aliases": [],
+      "related_skills": [
+        "ServiceNow"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "JCL",
+      "category": "Mainframe",
+      "skill_type": "language",
+      "aliases": [
+        "job control language"
+      ],
+      "related_skills": [
+        "COBOL"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "CICS",
+      "category": "Mainframe",
+      "skill_type": "platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "VSAM",
+      "category": "Mainframe",
+      "skill_type": "storage",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "OAuth2",
+      "category": "Security",
+      "skill_type": "protocol",
+      "aliases": [
+        "oauth 2.0",
+        "oauth"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "OpenID Connect",
+      "category": "Security",
+      "skill_type": "protocol",
+      "aliases": [
+        "oidc"
+      ],
+      "related_skills": [
+        "OAuth2"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "SSO",
+      "category": "Security",
+      "skill_type": "concept",
+      "aliases": [
+        "single sign-on"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Okta",
+      "category": "Security",
+      "skill_type": "identity_platform",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Active Directory",
+      "category": "Security",
+      "skill_type": "identity_platform",
+      "aliases": [
+        "ad"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Cisco",
+      "category": "Networking",
+      "skill_type": "vendor",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "VPN",
+      "category": "Networking",
+      "skill_type": "concept",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Firewall",
+      "category": "Security",
+      "skill_type": "concept",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "ActiveMQ",
+      "category": "Messaging",
+      "skill_type": "queue",
+      "aliases": [
+        "apache activemq"
+      ],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "iOS",
+      "category": "Mobile",
+      "skill_type": "platform",
+      "aliases": [],
+      "related_skills": [
+        "Swift"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Android",
+      "category": "Mobile",
+      "skill_type": "platform",
+      "aliases": [],
+      "related_skills": [
+        "Kotlin"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "React Native",
+      "category": "Mobile",
+      "skill_type": "framework",
+      "aliases": [],
+      "related_skills": [
+        "React"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Flutter",
+      "category": "Mobile",
+      "skill_type": "framework",
+      "aliases": [],
+      "related_skills": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Machine Learning",
+      "category": "AI",
+      "skill_type": "ai_domain",
+      "aliases": [
+        "ml"
+      ],
+      "related_skills": [
+        "NLP"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "TensorFlow",
+      "category": "AI",
+      "skill_type": "ml_library",
+      "aliases": [],
+      "related_skills": [
+        "Machine Learning"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "PyTorch",
+      "category": "AI",
+      "skill_type": "ml_library",
+      "aliases": [],
+      "related_skills": [
+        "Machine Learning"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "scikit-learn",
+      "category": "AI",
+      "skill_type": "ml_library",
+      "aliases": [
+        "sklearn"
+      ],
+      "related_skills": [
+        "Machine Learning"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "Pandas",
+      "category": "Data Science",
+      "skill_type": "library",
+      "aliases": [],
+      "related_skills": [
+        "Python"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "name": "NumPy",
+      "category": "Data Science",
+      "skill_type": "library",
+      "aliases": [],
+      "related_skills": [
+        "Python"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
     }
   ]
 }

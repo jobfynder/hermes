@@ -14,6 +14,7 @@ JOB_REQUIREMENT_FIELDS = [
     'job_title',
     'job_description',
     'company',
+    'linkedin_url',
     'required_skills',
     'preferred_skills',
     'years_of_experience',

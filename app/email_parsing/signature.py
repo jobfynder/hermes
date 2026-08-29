@@ -89,6 +89,31 @@ TRACKING_URL_RE = re.compile(
 )
 
 
+_FORWARDED_HEADER_LINE_RE = re.compile(
+    r"(?im)^\s*(?:from|sent|date|to|subject|cc|bcc)\s*:.*$"
+)
+
+
+def _skip_forwarded_header_block(lines: list[str], start: int) -> int:
+    """Given the line index where a forwarded-message header block begins
+    (RAW_HEADER_BLOCK_RE only matches its first two lines -- From:/Sent:),
+    returns the index just past the full contiguous From:/Sent:/To:/
+    Subject:/Cc:/Bcc: run (and any blank lines among them). That's where
+    the forwarded sender's own signature-like info actually starts, not
+    the header block itself -- scanning from `start` directly picks up
+    the header's own "Subject: ..." line as if it were signature content.
+    """
+
+    index = start
+
+    while index < len(lines) and (
+        not lines[index].strip() or _FORWARDED_HEADER_LINE_RE.match(lines[index])
+    ):
+        index += 1
+
+    return index
+
+
 def _strip_quote_prefix(line: str) -> str:
     return re.sub(r"^\s*(?:>\s*)+", "", line)
 
@@ -449,19 +474,10 @@ def _extract_location(content_lines: list[str]) -> dict[str, Any] | None:
 # Signature block detection (Phase 1).
 # ---------------------------------------------------------------------------
 
-def _detect_signature_span(lines: list[str], search_end: int) -> tuple[int, int, str, str | None] | None:
-    """Returns (start, end, method, signoff_line) over lines[:search_end],
-    or None if no signature-like block is found."""
-
-    for index in range(search_end):
-        if SIGNOFF_RE.match(lines[index]):
-            return index, search_end, "signoff_marker", lines[index]
-
-    tail_window = min(15, search_end)
-    tail_start = search_end - tail_window
+def _signal_indices(lines: list[str], window_start: int, window_end: int) -> list[int]:
     signal_indices: list[int] = []
 
-    for index in range(tail_start, search_end):
+    for index in range(window_start, window_end):
         line = lines[index]
         if not line.strip():
             continue
@@ -476,16 +492,69 @@ def _detect_signature_span(lines: list[str], search_end: int) -> tuple[int, int,
         ):
             signal_indices.append(index)
 
-    if len(signal_indices) >= 2:
-        block_start = signal_indices[0]
-        while block_start > tail_start and (
-            NAME_LINE_RE.match(lines[block_start - 1].strip())
-            or not lines[block_start - 1].strip()
-        ):
-            block_start -= 1
-        while block_start < search_end and not lines[block_start].strip():
-            block_start += 1
-        return block_start, search_end, "structural", None
+    return signal_indices
+
+
+def _structural_span_in_window(
+    lines: list[str], window_start: int, window_end: int, search_end: int
+) -> tuple[int, int, str, str | None] | None:
+    signal_indices = _signal_indices(lines, window_start, window_end)
+
+    if len(signal_indices) < 2:
+        return None
+
+    block_start = signal_indices[0]
+    while block_start > window_start and (
+        NAME_LINE_RE.match(lines[block_start - 1].strip())
+        or not lines[block_start - 1].strip()
+    ):
+        block_start -= 1
+    while block_start < search_end and not lines[block_start].strip():
+        block_start += 1
+
+    # A structural block found near the top of a forwarded message is a
+    # short "From: Name, Company email@..." line, not a multi-line
+    # closing signature -- cap its end at the window instead of running
+    # all the way to search_end (which head_start callers only pass a
+    # short window for anyway; harmless for the tail-window caller, since
+    # window_end == search_end there already).
+    block_end = min(window_end, search_end)
+    return block_start, block_end, "structural", None
+
+
+def _detect_signature_span(
+    lines: list[str], search_end: int, head_start: int | None = None
+) -> tuple[int, int, str, str | None] | None:
+    """Returns (start, end, method, signoff_line) over lines[:search_end],
+    or None if no signature-like block is found.
+
+    head_start, when given, is tried first: a window right after a
+    forwarded-message header block, where a forwarded sender's own
+    "From: Name, Company email@..." line typically sits. That's the
+    right place to look specifically for a message that's nothing but a
+    single forward (see is_pure_forward in parse_email_signature) --
+    everywhere else, only the tail-window/signoff-marker checks below
+    apply, exactly as before.
+    """
+
+    for index in range(search_end):
+        if SIGNOFF_RE.match(lines[index]):
+            return index, search_end, "signoff_marker", lines[index]
+
+    if head_start is not None:
+        head_window = min(15, search_end - head_start)
+        span = _structural_span_in_window(
+            lines, head_start, head_start + head_window, search_end
+        )
+        if span is not None:
+            return span
+
+    tail_window = min(15, search_end)
+    tail_start = search_end - tail_window
+
+    span = _structural_span_in_window(lines, tail_start, search_end, search_end)
+    if span is not None:
+        return span
 
     for index in range(tail_start, search_end):
         if SENT_FROM_DEVICE_RE.match(lines[index]):
@@ -520,14 +589,38 @@ def parse_email_signature(
     boundary = _quote_boundary_index(raw_lines)
     quoted_signature_ignored = False
 
-    if boundary is not None and not include_quoted_history:
+    # Phase 6's original intent: don't let a signature from ten replies
+    # deep in a thread get attributed to the current sender when there's
+    # real fresh content above it worth protecting. That protection has
+    # nothing to protect when the boundary sits right at the top -- a
+    # single "FW:"/forwarded job posting IS its "quoted history" in its
+    # entirety, no fresh reply text was ever added above it, and the
+    # sender/recruiter info Hermes actually needs lives exactly where this
+    # would otherwise stop looking. Only keep the original cutoff when
+    # there's substantive text before the boundary to protect.
+    lines_before_boundary = (
+        sum(1 for line in raw_lines[:boundary] if line.strip())
+        if boundary is not None
+        else 0
+    )
+    is_pure_forward = boundary is not None and lines_before_boundary <= 1
+
+    if boundary is not None and not include_quoted_history and not is_pure_forward:
         quoted_text = "\n".join(lines[boundary:])
         if SIGNOFF_RE.search(quoted_text) or EMAIL_PATTERN.search(quoted_text):
             quoted_signature_ignored = True
 
-    search_end = len(lines) if include_quoted_history or boundary is None else boundary
+    search_end = (
+        len(lines)
+        if include_quoted_history or boundary is None or is_pure_forward
+        else boundary
+    )
 
-    span = _detect_signature_span(lines, search_end)
+    span = _detect_signature_span(
+        lines,
+        search_end,
+        head_start=_skip_forwarded_header_block(lines, boundary) if is_pure_forward else None,
+    )
 
     if span is None:
         return {

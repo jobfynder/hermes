@@ -60,6 +60,7 @@ export interface JobRequirementRecord {
   record_type: 'job_requirement'
   job_title: string | null
   company: string | null
+  linkedin_url: string | null
   job_description: string | null
   required_skills: string[]
   preferred_skills: string[]

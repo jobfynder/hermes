@@ -103,12 +103,18 @@ def extract_labeled_section(
 ) -> str | None:
     clean_text = text or ""
 
+    # Real postings routinely tack a trailing word onto a label before the
+    # colon -- "Nice to have skills:", "Must have qualifications:" -- which
+    # a bare "label\s*[:-]" never matches, so the whole section silently
+    # comes back empty instead of a near-miss. Allow up to two extra words
+    # between the label phrase and the colon to absorb that.
+    trailing_word = r"(?:\s+[A-Za-z][A-Za-z\-]*){0,2}"
     label_pattern = "|".join(re.escape(label) for label in labels)
     stop_pattern = "|".join(re.escape(label) for label in stop_labels)
 
     pattern = (
-        rf"(?:{label_pattern})\s*[:\-]\s*"
-        rf"(.*?)(?=\n\s*(?:{stop_pattern})\s*[:\-]|$)"
+        rf"(?:{label_pattern}){trailing_word}\s*[:\-]\s*"
+        rf"(.*?)(?=\n\s*(?:{stop_pattern}){trailing_word}\s*[:\-]|$)"
     )
 
     match = re.search(pattern, clean_text, flags=re.IGNORECASE | re.DOTALL)
@@ -116,7 +122,13 @@ def extract_labeled_section(
     if not match:
         return None
 
-    return clean_field(match.group(1))
+    # Unlike the single-line fields above (Location, Rate, ...), a skills
+    # section is legitimately multi-line -- each requirement/bullet on its
+    # own line -- so this deliberately does not reuse clean_field()'s
+    # "keep only the first line" behavior, which would silently drop every
+    # skill after the first line of a real bullet list.
+    section = match.group(1).strip()
+    return section or None
 
 
 def extract_required_skills_text(text: str) -> str | None:
@@ -140,6 +152,7 @@ def extract_required_skills_text(text: str) -> str | None:
             "Work Authorization",
             "Rate",
             "Salary",
+            "Keywords",
         ],
     )
 
@@ -165,5 +178,6 @@ def extract_preferred_skills_text(text: str) -> str | None:
             "Work Authorization",
             "Rate",
             "Salary",
+            "Keywords",
         ],
     )

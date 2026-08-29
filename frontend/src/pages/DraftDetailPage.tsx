@@ -268,6 +268,24 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
                 />
               ))}
               <div className="flex items-start justify-between gap-4 border-b border-line py-2.5 last:border-0">
+                <span className="w-40 shrink-0 text-sm text-ink-soft">LinkedIn</span>
+                <div className="flex-1">
+                  {(parsing.records[0] as JobRequirementRecord).linkedin_url ? (
+                    <a
+                      href={(parsing.records[0] as JobRequirementRecord).linkedin_url ?? undefined}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-accent hover:underline"
+                    >
+                      {(parsing.records[0] as JobRequirementRecord).linkedin_url}
+                    </a>
+                  ) : (
+                    <span className="text-sm text-ink-soft italic">—</span>
+                  )}
+                </div>
+                <ProvenanceChip entry={pmap.get('job.linkedin_url')} />
+              </div>
+              <div className="flex items-start justify-between gap-4 border-b border-line py-2.5 last:border-0">
                 <span className="w-40 shrink-0 text-sm text-ink-soft">Job description</span>
                 <div className="flex-1">
                   {(parsing.records[0] as JobRequirementRecord).job_description ? (

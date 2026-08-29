@@ -560,6 +560,7 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
                 "job_title": job_title,
                 "job_description": _clean_job_description(section),
                 "company": structured.get("company"),
+                "linkedin_url": structured.get("linkedin_url"),
                 "required_skills": required_skills,
                 "preferred_skills": preferred_skills,
                 "years_of_experience": structured.get(

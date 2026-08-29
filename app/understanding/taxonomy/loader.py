@@ -7,8 +7,20 @@ from typing import Any
 
 TAXONOMY_DIR = Path(__file__).resolve().parent
 
-SKILLS_TAXONOMY_PATH = TAXONOMY_DIR / "skills.json"
 CANONICAL_SKILLS_PATH = TAXONOMY_DIR / "canonical_skills.json"
+# skills.json used to be a second, separately-maintained copy of this same
+# data -- extract_skills() (the actual required/preferred-skill matcher for
+# parsed emails) read skills.json, while normalize_skill() and the
+# /taxonomy/skills/canonical endpoint read canonical_skills.json. The two
+# had drifted into near-duplicates of each other and neither was ever
+# expanded past ~35 generic software-engineering terms, so IT-staffing
+# postings (SAP, Amazon Connect, TIBCO, ...) matched almost nothing no
+# matter which file a given code path happened to read. Retired skills.json
+# in favor of canonical_skills.json as the single source of truth for both
+# paths; the name is kept as an alias so load_skills_taxonomy()'s existing
+# callers (the /taxonomy/skills endpoint, the LLM fallback's taxonomy hint)
+# don't need to change.
+SKILLS_TAXONOMY_PATH = CANONICAL_SKILLS_PATH
 SKILL_ALIASES_PATH = TAXONOMY_DIR / "skill_aliases.json"
 JOB_TITLES_PATH = TAXONOMY_DIR / "job_titles.json"
 TITLE_ALIASES_PATH = TAXONOMY_DIR / "title_aliases.json"

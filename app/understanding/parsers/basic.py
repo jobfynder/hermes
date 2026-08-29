@@ -109,6 +109,7 @@ def parse_basic_structured_data(
             employment_type=extract_employment_type(text),
             rate_or_salary=extract_rate_or_salary(text),
             company=extract_company(text),
+            linkedin_url=extract_linkedin_url(text),
             parser=parser,
         ).model_dump()
 

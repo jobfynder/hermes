@@ -22,6 +22,15 @@ WORK_AUTH_PATTERNS = [
     ("L2 EAD", r"\b(?:l2 ead|l-2 ead)\b"),
     ("OPT", r"\b(?:opt|cpt|stem opt)\b"),
     ("TN Visa", r"\b(?:tn visa|tn)\b"),
+    # Staffing-industry phrasing for how a candidate/vendor must be able to
+    # bill, which recruiters routinely state alongside (or instead of) an
+    # actual immigration status -- common in IT staffing postings, absent
+    # from the original list, which only covered immigration-status terms.
+    # Corp-to-Corp/W2/1099-as-a-billing-arrangement are deliberately left
+    # to extract_employment_type() (job_description_fields.py), which
+    # already covers that half of the same staffing-lingo overlap.
+    ("Independent Visa", r"\bindependent visa\b"),
+    ("No Sponsorship", r"\b(?:no sponsorship|without sponsorship|sponsorship not (?:available|provided))\b"),
     ("EAD", r"\b(?:ead|work authorization|work authorised|work authorized)\b"),
 ]
 

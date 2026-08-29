@@ -42,6 +42,7 @@ FALLBACK_CONFIDENCE_THRESHOLD = 0.70
 JOB_REQUIREMENT_FIELDS = (
     "job_title",
     "company",
+    "linkedin_url",
     "required_skills",
     "preferred_skills",
     "years_of_experience",
@@ -89,6 +90,7 @@ def _empty_job_record() -> dict[str, Any]:
         "job_title": None,
         "job_description": None,
         "company": None,
+        "linkedin_url": None,
         "required_skills": [],
         "preferred_skills": [],
         "years_of_experience": None,

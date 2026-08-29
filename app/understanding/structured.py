@@ -40,6 +40,7 @@ class JobDescriptionStructuredData(BaseModel):
     employment_type: str | None = None
     rate_or_salary: str | None = None
     company: str | None = None
+    linkedin_url: str | None = None
     parser: ParserMetadata
 
 

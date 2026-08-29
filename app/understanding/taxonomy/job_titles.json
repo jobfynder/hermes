@@ -1,13 +1,20 @@
 {
-  "version": "jobfynder_job_titles_v1",
+  "version": "jobfynder_job_titles_v2_it_staffing",
   "taxonomy_type": "job_titles",
   "titles": [
     {
       "title": "Senior Java Developer",
       "family": "Software Engineering",
       "seniority": "senior",
-      "aliases": ["sr java developer", "senior java engineer", "sr java engineer"],
-      "related_titles": ["Java Developer", "Backend Developer"],
+      "aliases": [
+        "sr java developer",
+        "senior java engineer",
+        "sr java engineer"
+      ],
+      "related_titles": [
+        "Backend Developer",
+        "Java Developer"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -15,8 +22,14 @@
       "title": "Frontend React Developer",
       "family": "Software Engineering",
       "seniority": "mid",
-      "aliases": ["react ui developer", "react frontend developer", "ui react engineer"],
-      "related_titles": ["Frontend Developer", "React Developer"],
+      "aliases": [
+        "react ui developer",
+        "react frontend developer",
+        "ui react engineer"
+      ],
+      "related_titles": [
+        "Frontend Developer"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -24,8 +37,15 @@
       "title": "Full Stack Developer",
       "family": "Software Engineering",
       "seniority": "mid",
-      "aliases": ["fullstack developer", "full stack engineer", "mern developer"],
-      "related_titles": ["Frontend React Developer", "Backend Developer"],
+      "aliases": [
+        "fullstack developer",
+        "full stack engineer",
+        "mern developer"
+      ],
+      "related_titles": [
+        "Backend Developer",
+        "Frontend React Developer"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -33,8 +53,13 @@
       "title": "DevOps Engineer",
       "family": "Infrastructure",
       "seniority": "mid",
-      "aliases": ["dev ops engineer", "cloud devops engineer"],
-      "related_titles": ["Site Reliability Engineer"],
+      "aliases": [
+        "dev ops engineer",
+        "cloud devops engineer"
+      ],
+      "related_titles": [
+        "Site Reliability Engineer"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -42,8 +67,13 @@
       "title": "Site Reliability Engineer",
       "family": "Infrastructure",
       "seniority": "mid",
-      "aliases": ["sre", "site reliability"],
-      "related_titles": ["DevOps Engineer"],
+      "aliases": [
+        "sre",
+        "site reliability"
+      ],
+      "related_titles": [
+        "DevOps Engineer"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -51,8 +81,13 @@
       "title": "Data Engineer",
       "family": "Data",
       "seniority": "mid",
-      "aliases": ["big data engineer", "etl developer"],
-      "related_titles": ["Python Developer"],
+      "aliases": [
+        "big data engineer",
+        "etl developer"
+      ],
+      "related_titles": [
+        "Python Developer"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -60,8 +95,14 @@
       "title": "QA Engineer",
       "family": "Quality Engineering",
       "seniority": "mid",
-      "aliases": ["quality analyst", "test engineer", "software tester"],
-      "related_titles": ["Automation Engineer"],
+      "aliases": [
+        "quality analyst",
+        "test engineer",
+        "software tester"
+      ],
+      "related_titles": [
+        "QA Automation Engineer"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -69,8 +110,14 @@
       "title": "Technical Recruiter",
       "family": "Recruiting",
       "seniority": "mid",
-      "aliases": ["tech recruiter", "it recruiter", "staffing recruiter"],
-      "related_titles": ["US IT Recruiter"],
+      "aliases": [
+        "tech recruiter",
+        "it recruiter",
+        "staffing recruiter"
+      ],
+      "related_titles": [
+        "US IT Recruiter"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -78,8 +125,14 @@
       "title": "US IT Recruiter",
       "family": "Recruiting",
       "seniority": "mid",
-      "aliases": ["us recruiter", "us technical recruiter", "us staffing recruiter"],
-      "related_titles": ["Technical Recruiter"],
+      "aliases": [
+        "us recruiter",
+        "us technical recruiter",
+        "us staffing recruiter"
+      ],
+      "related_titles": [
+        "Technical Recruiter"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -87,8 +140,15 @@
       "title": "Bench Sales Recruiter",
       "family": "Recruiting",
       "seniority": "mid",
-      "aliases": ["bench sales", "bench sales executive", "bench marketing recruiter", "marketing recruiter"],
-      "related_titles": ["Business Development Manager"],
+      "aliases": [
+        "bench sales",
+        "bench sales executive",
+        "bench marketing recruiter",
+        "marketing recruiter"
+      ],
+      "related_titles": [
+        "Business Development Manager"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -96,8 +156,14 @@
       "title": "Business Development Manager",
       "family": "Sales",
       "seniority": "mid",
-      "aliases": ["bdm", "business development executive"],
-      "related_titles": ["Bench Sales Recruiter", "Account Manager"],
+      "aliases": [
+        "bdm",
+        "business development executive"
+      ],
+      "related_titles": [
+        "Account Manager",
+        "Bench Sales Recruiter"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -105,8 +171,13 @@
       "title": "Account Manager",
       "family": "Sales",
       "seniority": "mid",
-      "aliases": ["client account manager", "staffing account manager"],
-      "related_titles": ["Business Development Manager"],
+      "aliases": [
+        "client account manager",
+        "staffing account manager"
+      ],
+      "related_titles": [
+        "Business Development Manager"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -114,8 +185,13 @@
       "title": "Talent Acquisition Specialist",
       "family": "Recruiting",
       "seniority": "mid",
-      "aliases": ["ta specialist", "talent acquisition recruiter"],
-      "related_titles": ["Technical Recruiter"],
+      "aliases": [
+        "ta specialist",
+        "talent acquisition recruiter"
+      ],
+      "related_titles": [
+        "Technical Recruiter"
+      ],
       "confidence": "high",
       "source": "seed"
     },
@@ -123,10 +199,351 @@
       "title": "AI Engineer",
       "family": "AI Engineering",
       "seniority": "mid",
-      "aliases": ["genai engineer", "generative ai engineer", "llm engineer"],
-      "related_titles": ["Machine Learning Engineer"],
+      "aliases": [
+        "genai engineer",
+        "generative ai engineer",
+        "llm engineer"
+      ],
+      "related_titles": [
+        "Machine Learning Engineer"
+      ],
       "confidence": "medium",
       "source": "seed"
+    },
+    {
+      "title": ".NET Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": [
+        "dot net developer",
+        "asp.net developer"
+      ],
+      "related_titles": [
+        "Full Stack Developer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Python Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": [
+        "python engineer"
+      ],
+      "related_titles": [
+        "Backend Developer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Business Analyst",
+      "family": "Business Analysis",
+      "seniority": "mid",
+      "aliases": [
+        "ba"
+      ],
+      "related_titles": [
+        "Systems Analyst"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Systems Analyst",
+      "family": "Business Analysis",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [
+        "Business Analyst"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Project Manager",
+      "family": "Project Management",
+      "seniority": "senior",
+      "aliases": [
+        "pm",
+        "it project manager"
+      ],
+      "related_titles": [
+        "Scrum Master"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Scrum Master",
+      "family": "Project Management",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [
+        "Project Manager"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Solutions Architect",
+      "family": "Architecture",
+      "seniority": "senior",
+      "aliases": [
+        "solution architect"
+      ],
+      "related_titles": [
+        "Technical Architect"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Technical Architect",
+      "family": "Architecture",
+      "seniority": "senior",
+      "aliases": [],
+      "related_titles": [
+        "Solutions Architect"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Cloud Architect",
+      "family": "Architecture",
+      "seniority": "senior",
+      "aliases": [],
+      "related_titles": [
+        "Solutions Architect"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Salesforce Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": [
+        "sfdc developer"
+      ],
+      "related_titles": [
+        "Salesforce Administrator"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Salesforce Administrator",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": [
+        "sfdc admin"
+      ],
+      "related_titles": [
+        "Salesforce Developer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "SAP Consultant",
+      "family": "ERP",
+      "seniority": "senior",
+      "aliases": [
+        "sap functional consultant"
+      ],
+      "related_titles": [
+        "SAP ABAP Developer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "SAP ABAP Developer",
+      "family": "ERP",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [
+        "SAP Consultant"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Data Analyst",
+      "family": "Data",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [
+        "Data Engineer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Data Scientist",
+      "family": "Data",
+      "seniority": "senior",
+      "aliases": [],
+      "related_titles": [
+        "Machine Learning Engineer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Machine Learning Engineer",
+      "family": "AI Engineering",
+      "seniority": "senior",
+      "aliases": [
+        "ml engineer"
+      ],
+      "related_titles": [
+        "AI Engineer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Network Engineer",
+      "family": "Infrastructure",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Systems Administrator",
+      "family": "Infrastructure",
+      "seniority": "mid",
+      "aliases": [
+        "sysadmin"
+      ],
+      "related_titles": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Database Administrator",
+      "family": "Infrastructure",
+      "seniority": "mid",
+      "aliases": [
+        "dba"
+      ],
+      "related_titles": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Oracle DBA",
+      "family": "Infrastructure",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [
+        "Database Administrator"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Mainframe Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "QA Automation Engineer",
+      "family": "Quality Engineering",
+      "seniority": "mid",
+      "aliases": [
+        "automation tester",
+        "sdet"
+      ],
+      "related_titles": [
+        "QA Engineer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "UI/UX Designer",
+      "family": "Design",
+      "seniority": "mid",
+      "aliases": [
+        "ux designer",
+        "ui designer"
+      ],
+      "related_titles": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Product Manager",
+      "family": "Product",
+      "seniority": "senior",
+      "aliases": [],
+      "related_titles": [
+        "Project Manager"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "ServiceNow Developer",
+      "family": "ITSM",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Workday Consultant",
+      "family": "HCM",
+      "seniority": "senior",
+      "aliases": [],
+      "related_titles": [],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Java Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [
+        "Senior Java Developer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Backend Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [
+        "Full Stack Developer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
+    },
+    {
+      "title": "Frontend Developer",
+      "family": "Software Engineering",
+      "seniority": "mid",
+      "aliases": [],
+      "related_titles": [
+        "Frontend React Developer"
+      ],
+      "confidence": "high",
+      "source": "hermes-850-it-staffing-expansion"
     }
   ]
 }
