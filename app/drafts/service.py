@@ -2,6 +2,7 @@ import json
 from uuid import uuid4
 
 from app.email_parsing.classification_learning import record_classification_correction
+from app.integrations.core_job_push import push_job_to_core
 from app.runtime.db import cursor
 from app.runtime.events import emit_event
 
@@ -206,6 +207,18 @@ def publish_draft_object(draft_id: str) -> DraftPublishResult:
 
     draft = _row_to_draft(row)
     emit_event("draft.published", {"draft_id": draft.draft_id, "draft_type": draft.draft_type})
+
+    # Last step of the pipeline: only a PUBLISHED job-requirement draft
+    # ever reaches Jobfynder Core, and even then it lands as DRAFT there
+    # too (Core's own separate publish step still gates going live) --
+    # see app/integrations/core_job_push.py for the full boundary
+    # rationale. Never allowed to fail this function: a push failure is
+    # recorded for retry/follow-up, not surfaced as a failed publish --
+    # the draft *is* published in Hermes regardless of whether Core's
+    # side could be reached just now.
+    push_result = push_job_to_core(draft)
+    if push_result["status"] != "skipped":
+        update_draft_metadata(draft.draft_id, {"core_push": push_result})
 
     return DraftPublishResult(
         status="published",
