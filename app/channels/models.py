@@ -28,6 +28,9 @@ IntakeStatus = Literal[
     "needs_review",
     "failed",
     "duplicate",
+    # Sender matched app.email_parsing.blocklist.is_blocked() -- logged to
+    # intake_log and discarded before any draft was created.
+    "blocked",
 ]
 
 DocumentKind = Literal[

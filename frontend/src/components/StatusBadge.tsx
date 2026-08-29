@@ -5,6 +5,7 @@ const STYLES: Record<DraftStatus, string> = {
   needs_review: 'bg-warn-soft text-warn',
   published: 'bg-pass-soft text-pass',
   rejected: 'bg-fail-soft text-fail',
+  spam: 'bg-fail-soft text-fail',
 }
 
 const LABELS: Record<DraftStatus, string> = {
@@ -12,6 +13,7 @@ const LABELS: Record<DraftStatus, string> = {
   needs_review: 'Needs review',
   published: 'Published',
   rejected: 'Rejected',
+  spam: 'Spam',
 }
 
 export function StatusBadge({ status }: { status: DraftStatus }) {

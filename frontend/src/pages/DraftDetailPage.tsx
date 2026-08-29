@@ -186,6 +186,44 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
     }
   }
 
+  async function handleDelete() {
+    if (!window.confirm('Permanently delete this draft? This cannot be undone.')) return
+    setBusy(true)
+    setActionMessage(null)
+    try {
+      const result = await api.deleteDraft(draftId)
+      if (result.deleted) {
+        onBack()
+      } else {
+        setActionMessage(`Could not delete: ${result.reason ?? 'unknown reason'}`)
+      }
+    } catch (err) {
+      setActionMessage(err instanceof ApiError ? err.message : 'Delete failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleBlockSender() {
+    const senderEmail = draft?.metadata.sender?.email
+    if (!senderEmail) {
+      setActionMessage('This draft has no sender email to block.')
+      return
+    }
+    const domain = senderEmail.split('@')[1] ?? senderEmail
+    if (!window.confirm(`Block all future mail from ${domain}?`)) return
+    setBusy(true)
+    setActionMessage(null)
+    try {
+      const result = await api.blockDraftSender(draftId, 'domain')
+      setActionMessage(result.blocked ? `Blocked ${result.value}.` : `Could not block: ${result.reason}`)
+    } catch (err) {
+      setActionMessage(err instanceof ApiError ? err.message : 'Block sender failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (error) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-8">
@@ -249,8 +287,30 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
             Mark as {draftTypeLabel(t)}
           </button>
         ))}
+        <span className="mx-1 h-5 w-px bg-line" />
+        <button
+          disabled={busy || draft.status === 'published'}
+          onClick={handleDelete}
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-fail transition hover:bg-fail-soft disabled:opacity-40"
+        >
+          Delete
+        </button>
+        <button
+          disabled={busy || !draft.metadata.sender?.email}
+          onClick={handleBlockSender}
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink disabled:opacity-40"
+        >
+          Block sender's domain
+        </button>
         {actionMessage && <span className="text-sm text-ink-soft">{actionMessage}</span>}
       </div>
+
+      {draft.status === 'spam' && draft.metadata.spam_reasons && draft.metadata.spam_reasons.length > 0 && (
+        <div className="mt-4 rounded-lg bg-fail-soft px-4 py-3 text-sm text-fail">
+          Flagged as likely spam: {draft.metadata.spam_reasons.join(', ').replace(/_/g, ' ')}. Review below —
+          reclassify it if this was a mistake, or delete it if it's junk.
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">

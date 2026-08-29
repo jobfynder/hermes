@@ -173,6 +173,49 @@ CREATE TABLE IF NOT EXISTS core_pushes (
     attempted_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_core_pushes_draft_id ON core_pushes (draft_id);
+
+-- Sender blocklist (HERMES-900 spam/volume control): a domain or exact
+-- email address a human has explicitly decided to stop hearing from.
+-- Checked at the very top of channel intake (app/channels/service.py) --
+-- a match means the message is logged to intake_log and discarded before
+-- a draft is ever created, so blocking a noisy sender actually reduces
+-- review-queue clutter instead of just tagging it after the fact. A
+-- domain entry (email IS NULL) blocks every address at that domain; an
+-- email entry blocks only that one address, even if its domain isn't
+-- otherwise blocked.
+CREATE TABLE IF NOT EXISTS sender_blocklist (
+    id              BIGSERIAL PRIMARY KEY,
+    match_type      TEXT NOT NULL CHECK (match_type IN ('domain', 'email')),
+    value           TEXT NOT NULL,
+    reason          TEXT,
+    source_draft_id UUID,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_blocklist_match ON sender_blocklist (match_type, value);
+
+-- Candidate skills/job titles seen in postings that don't match anything
+-- in the taxonomy (app/understanding/taxonomy/canonical_skills.json /
+-- job_titles.json). Accumulates occurrence_count across separate emails
+-- so a one-off typo doesn't look the same as a real new tool name showing
+-- up repeatedly across different senders -- reviewed and approved via
+-- the taxonomy-candidates admin endpoints (app/routers/taxonomy_admin.py)
+-- rather than added automatically, since an unreviewed addition can
+-- silently corrupt matching for every future email.
+CREATE TABLE IF NOT EXISTS taxonomy_candidates (
+    id                  BIGSERIAL PRIMARY KEY,
+    signal_type         TEXT NOT NULL CHECK (signal_type IN ('skill', 'job_title')),
+    term                TEXT NOT NULL,
+    normalized_term     TEXT NOT NULL,
+    occurrence_count    INTEGER NOT NULL DEFAULT 1,
+    distinct_senders    JSONB NOT NULL DEFAULT '[]',
+    sample_draft_ids    JSONB NOT NULL DEFAULT '[]',
+    status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    first_seen_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reviewed_at         TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_taxonomy_candidates_term ON taxonomy_candidates (signal_type, normalized_term);
+CREATE INDEX IF NOT EXISTS idx_taxonomy_candidates_status ON taxonomy_candidates (status);
 """
 
 

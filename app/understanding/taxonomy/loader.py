@@ -38,6 +38,56 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def clear_taxonomy_cache() -> None:
+    """Busts every lru_cache below so a taxonomy file edit takes effect on
+    the very next request, in the same running process -- no redeploy.
+    The one caller today is approving a taxonomy candidate (HERMES-900,
+    app/understanding/taxonomy/candidates.py), which writes the approved
+    term straight into canonical_skills.json on disk right before calling
+    this.
+    """
+    load_skills_taxonomy.cache_clear()
+    load_canonical_skills_taxonomy.cache_clear()
+    load_skill_aliases_taxonomy.cache_clear()
+    load_job_titles_taxonomy.cache_clear()
+    load_title_aliases_taxonomy.cache_clear()
+    build_skill_alias_index.cache_clear()
+    build_title_alias_index.cache_clear()
+
+
+def add_canonical_skill(
+    name: str,
+    category: str = "Tool/Technology",
+    skill_type: str = "tool",
+    aliases: list[str] | None = None,
+) -> None:
+    """Appends a human-approved taxonomy candidate to canonical_skills.json
+    and immediately busts the cache so extract_skills() picks it up
+    without a redeploy. Refuses a name that's already present (by
+    normalized key) rather than writing a duplicate entry.
+    """
+    data = json.loads(CANONICAL_SKILLS_PATH.read_text(encoding="utf-8"))
+    existing_keys = {normalize_taxonomy_key(entry.get("name")) for entry in data["skills"]}
+
+    if normalize_taxonomy_key(name) in existing_keys:
+        clear_taxonomy_cache()
+        return
+
+    data["skills"].append(
+        {
+            "name": name,
+            "category": category,
+            "skill_type": skill_type,
+            "aliases": aliases or [],
+            "related_skills": [],
+            "confidence": "medium",
+            "source": "taxonomy_candidate_approved",
+        }
+    )
+    CANONICAL_SKILLS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    clear_taxonomy_cache()
+
+
 @lru_cache(maxsize=1)
 def load_skills_taxonomy() -> dict[str, Any]:
     return _load_json(SKILLS_TAXONOMY_PATH)

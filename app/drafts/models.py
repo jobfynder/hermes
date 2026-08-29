@@ -18,6 +18,12 @@ DraftStatus = Literal[
     "needs_review",
     "published",
     "rejected",
+    # Heuristically flagged as likely spam/junk (app/email_parsing/spam.py)
+    # -- distinct from a blocked sender, which never becomes a draft at
+    # all. Flag-only by design: nothing here is ever auto-deleted, a human
+    # reviews it in the frontend and either deletes it or reclassifies it
+    # back to draft if the heuristic was wrong.
+    "spam",
 ]
 
 

@@ -1,12 +1,14 @@
 import json
 from uuid import uuid4
 
+from psycopg import errors
+
 from app.email_parsing.classification_learning import record_classification_correction
 from app.integrations.core_job_push import push_job_to_core
 from app.runtime.db import cursor
 from app.runtime.events import emit_event
 
-from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
+from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult, DraftStatus
 
 # The two draft types classify_email_by_confidence() actually distinguishes
 # between (app/email_parsing/parsers.py) -- reclassify_draft_object() only
@@ -77,9 +79,15 @@ def create_draft_object(
     requires_review: bool = True,
     errors: list[str] | None = None,
     metadata: dict | None = None,
+    status_override: DraftStatus | None = None,
 ) -> DraftObject:
     draft_id = str(uuid4())
-    status = "needs_review" if requires_review else "draft"
+    # status_override exists for exactly one caller today: intake flagging
+    # a message as likely spam (app/email_parsing/spam.py) still creates a
+    # normal, reviewable draft -- just stamped "spam" from the start
+    # instead of the usual draft/needs_review -- rather than the silent
+    # blocklist path, which never reaches create_draft_object at all.
+    status = status_override or ("needs_review" if requires_review else "draft")
     title = _title_from_payload(draft_type, payload)
     summary = payload.get("summary") or payload.get("text") or payload.get("description")
 
@@ -323,3 +331,38 @@ def reclassify_draft_object(draft_id: str, corrected_draft_type: DraftObjectType
         )
 
     return updated
+
+
+def delete_draft_object(draft_id: str) -> dict:
+    """Hard-deletes a draft row -- the one genuinely destructive action in
+    this module, unlike reject/publish which only flip status and keep the
+    record for audit. Exists specifically for the spam-review workflow
+    (HERMES-900): a human looked at a draft flagged status='spam' and
+    confirmed it, so there is nothing worth auditing. Deliberately refuses
+    to delete a published draft (it may already be live on Jobfynder Core,
+    referenced by core_pushes) -- reject it first if it truly needs to go
+    away. email_claims/core_pushes both carry a plain FK with no cascade,
+    so any other still-referenced draft fails loudly via IntegrityError
+    rather than leaving an orphaned claim/push row.
+    """
+    draft = get_draft_object(draft_id)
+    if not draft:
+        return {"deleted": False, "reason": "draft_not_found"}
+
+    if draft.status == "published":
+        return {"deleted": False, "reason": "cannot_delete_published_draft"}
+
+    try:
+        with cursor() as cur:
+            cur.execute("DELETE FROM drafts WHERE draft_id = %s", (draft_id,))
+            deleted = cur.rowcount > 0
+    except errors.ForeignKeyViolation:
+        return {"deleted": False, "reason": "draft_has_related_claim_or_core_push"}
+
+    if deleted:
+        emit_event(
+            "draft.deleted",
+            {"draft_id": draft_id, "draft_type": draft.draft_type, "status_before_delete": draft.status},
+        )
+
+    return {"deleted": deleted}

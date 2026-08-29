@@ -4,6 +4,7 @@ from app.access.models import ActionAccessRequest
 from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
 from app.drafts.service import create_draft_object
+from app.email_parsing.blocklist import is_blocked as is_sender_blocked
 from app.email_parsing.classification_learning import get_domain_bias
 from app.email_parsing.dedupe import register_and_check
 from app.email_parsing.llm_fallback import apply_hotlist_fallback, apply_job_requirement_fallback
@@ -18,6 +19,8 @@ from app.email_parsing.provenance import (
 )
 from app.email_parsing.sender_resolver import looks_forwarded, resolve_original_sender
 from app.email_parsing.signature import parse_email_signature
+from app.email_parsing.spam import classify_spam
+from app.understanding.taxonomy.candidates import record_taxonomy_candidates
 from app.runtime.events import emit_event
 from app.runtime.intake_log import (
     record_idempotency_key_if_new,
@@ -192,6 +195,48 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             requires_review=True,
             confidence=0.0,
             errors=access_errors,
+            duplicate_key=duplicate_key,
+        )
+
+    # Blocklist check (HERMES-900): a human already decided about this
+    # sender, so skip everything else -- no dedupe bookkeeping, no
+    # understanding pipeline, no draft. Checked before the idempotency key
+    # is even recorded so a blocked sender's mail leaves nothing behind
+    # but the intake_log entry below, which is what makes blocking actually
+    # reduce review-queue clutter at 5,000 emails/day instead of just
+    # tagging it after the fact.
+    block_match = is_sender_blocked(request.sender.email if request.sender else None)
+    if block_match:
+        record_intake(
+            {
+                "duplicate_key": duplicate_key,
+                "channel": request.channel,
+                "source_message_id": request.source_message_id,
+                "status": "blocked",
+                "document_kind": "unknown",
+                "block_matched": block_match["match_type"],
+                "block_value": block_match["value"],
+                "block_reason": block_match["reason"],
+            }
+        )
+        emit_event(
+            "intake.blocked",
+            {
+                "duplicate_key": duplicate_key,
+                "channel": request.channel,
+                "source_message_id": request.source_message_id,
+                "matched": block_match["match_type"],
+                "value": block_match["value"],
+            },
+        )
+        return ChannelIntakeResponse(
+            channel=request.channel,
+            source_message_id=request.source_message_id,
+            intake_status="blocked",
+            document_kind="unknown",
+            requires_review=False,
+            confidence=0.0,
+            errors=[],
             duplicate_key=duplicate_key,
         )
 
@@ -429,6 +474,27 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
 
     draft_type = draft_object_for(document_kind)
 
+    # Spam heuristic (HERMES-900): unlike the blocklist check above, this
+    # runs on every message from a sender nobody has judged yet, and it
+    # only ever flags -- create_draft_object still runs below, just with
+    # status forced to 'spam' instead of the usual draft/needs_review, so
+    # a human reviews and either deletes it or reclassifies it back.
+    spam_reasons = classify_spam(
+        text=request.text or "",
+        document_kind=document_kind,
+        confidence=confidence,
+    )
+    if spam_reasons:
+        emit_event(
+            "intake.flagged_spam",
+            {
+                "duplicate_key": duplicate_key,
+                "channel": request.channel,
+                "source_message_id": request.source_message_id,
+                "reasons": spam_reasons,
+            },
+        )
+
     # Forwarded-sender resolution (spec 4.1). normalize_email_payload()
     # (app/providers/email/service.py) already computes this ahead of time
     # for the webhook path, where a Reply-To header may be available --
@@ -460,11 +526,13 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         taxonomy_signals=taxonomy_signals,
         confidence=confidence,
         requires_review=requires_review,
+        status_override="spam" if spam_reasons else None,
         metadata={
             "duplicate_key": duplicate_key,
             "content_type": request.content_type,
             "sender": request.sender.model_dump() if request.sender else None,
             "original_sender_candidate": original_sender_candidate,
+            "spam_reasons": spam_reasons,
             "exact_content_duplicate_of": (
                 content_dedupe["canonical_duplicate_key"]
                 if content_dedupe["is_exact_content_duplicate"]
@@ -496,6 +564,29 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         record_field_provenance(
             parse_run_id=draft.draft_id,
             entries=build_signature_provenance(signature),
+        )
+
+    # Taxonomy candidate detection (HERMES-900): surfaces skill/job-title
+    # -shaped tokens the taxonomy doesn't recognize for human review --
+    # never added automatically, see app/understanding/taxonomy/
+    # candidates.py. Best-effort and after the draft already exists: a
+    # failure here must never block draft creation, which is the part
+    # that actually matters to the reviewer.
+    try:
+        sender_domain = (
+            request.sender.email.rsplit("@", 1)[-1].lower()
+            if request.sender and request.sender.email and "@" in request.sender.email
+            else None
+        )
+        record_taxonomy_candidates(
+            text=request.text or "",
+            draft_id=draft.draft_id,
+            sender_domain=sender_domain,
+        )
+    except Exception as exc:  # noqa: BLE001
+        emit_event(
+            "taxonomy_candidates.record_failed",
+            {"duplicate_key": duplicate_key, "error": str(exc)},
         )
 
     return ChannelIntakeResponse(

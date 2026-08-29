@@ -7,7 +7,7 @@ export type DraftObjectType =
   | 'draft_vendor_list'
   | 'draft_channel_note'
 
-export type DraftStatus = 'draft' | 'needs_review' | 'published' | 'rejected'
+export type DraftStatus = 'draft' | 'needs_review' | 'published' | 'rejected' | 'spam'
 
 export interface DraftObject {
   draft_id: string
@@ -46,6 +46,7 @@ export interface DraftMetadata {
   claimed_fields?: Record<string, unknown>
   claim_id?: string
   rejection_reason?: string
+  spam_reasons?: string[]
   core_push?: {
     status: 'pushed' | 'skipped' | 'failed'
     core_job_id?: string
@@ -164,4 +165,31 @@ export interface DraftPublishResult {
   draft_type: DraftObjectType
   published_payload: Record<string, unknown>
   errors: string[]
+}
+
+export interface DeleteDraftResult {
+  deleted: boolean
+  reason: string | null
+}
+
+export interface BlocklistEntry {
+  id: number
+  match_type: 'domain' | 'email'
+  value: string
+  reason: string | null
+  source_draft_id: string | null
+  created_at: string
+}
+
+export interface TaxonomyCandidateEntry {
+  id: number
+  signal_type: 'skill' | 'job_title'
+  term: string
+  normalized_term: string
+  occurrence_count: number
+  distinct_senders: string[]
+  sample_draft_ids: string[]
+  status: 'pending' | 'approved' | 'rejected'
+  first_seen_at: string
+  last_seen_at: string
 }

@@ -3,15 +3,18 @@ import { clearToken } from './api/client'
 import { TokenGate } from './components/TokenGate'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftListPage } from './pages/DraftListPage'
+import { ModerationPage } from './pages/ModerationPage'
+
+type View = { name: 'list' } | { name: 'detail'; draftId: string } | { name: 'moderation' }
 
 function AppShell() {
-  const [selected, setSelected] = useState<string | null>(null)
+  const [view, setView] = useState<View>({ name: 'list' })
 
   return (
     <div className="min-h-screen bg-paper">
       <nav className="border-b border-line bg-surface">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <button onClick={() => setSelected(null)} className="text-sm font-semibold text-ink">
+          <button onClick={() => setView({ name: 'list' })} className="text-sm font-semibold text-ink">
             Hermes Email Review
           </button>
           <button
@@ -26,10 +29,15 @@ function AppShell() {
         </div>
       </nav>
 
-      {selected ? (
-        <DraftDetailPage draftId={selected} onBack={() => setSelected(null)} />
-      ) : (
-        <DraftListPage onSelect={setSelected} />
+      {view.name === 'detail' && (
+        <DraftDetailPage draftId={view.draftId} onBack={() => setView({ name: 'list' })} />
+      )}
+      {view.name === 'moderation' && <ModerationPage onBack={() => setView({ name: 'list' })} />}
+      {view.name === 'list' && (
+        <DraftListPage
+          onSelect={(id) => setView({ name: 'detail', draftId: id })}
+          onOpenModeration={() => setView({ name: 'moderation' })}
+        />
       )}
     </div>
   )

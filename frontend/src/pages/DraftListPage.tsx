@@ -16,7 +16,7 @@ const TYPE_FILTERS: (DraftObjectType | 'all')[] = [
   'draft_channel_note',
 ]
 
-const STATUS_FILTERS: (DraftStatus | 'all')[] = ['all', 'needs_review', 'draft', 'published', 'rejected']
+const STATUS_FILTERS: (DraftStatus | 'all')[] = ['all', 'needs_review', 'draft', 'published', 'rejected', 'spam']
 
 function timeAgo(iso: string | null): string {
   if (!iso) return '—'
@@ -29,7 +29,13 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
-export function DraftListPage({ onSelect }: { onSelect: (id: string) => void }) {
+export function DraftListPage({
+  onSelect,
+  onOpenModeration,
+}: {
+  onSelect: (id: string) => void
+  onOpenModeration?: () => void
+}) {
   const [drafts, setDrafts] = useState<DraftObject[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<DraftObjectType | 'all'>('all')
@@ -72,10 +78,11 @@ export function DraftListPage({ onSelect }: { onSelect: (id: string) => void }) 
   }, [drafts, typeFilter, statusFilter, search])
 
   const counts = useMemo(() => {
-    if (!drafts) return { total: 0, needsReview: 0 }
+    if (!drafts) return { total: 0, needsReview: 0, spam: 0 }
     return {
       total: drafts.length,
       needsReview: drafts.filter((d) => d.status === 'needs_review').length,
+      spam: drafts.filter((d) => d.status === 'spam').length,
     }
   }, [drafts])
 
@@ -86,9 +93,23 @@ export function DraftListPage({ onSelect }: { onSelect: (id: string) => void }) 
           <h1 className="text-xl font-semibold text-ink">Parsed emails</h1>
           <p className="mt-1 text-sm text-ink-soft">
             {counts.total} total &middot; {counts.needsReview} awaiting review
+            {counts.spam > 0 && (
+              <>
+                {' '}
+                &middot; <span className="text-fail">{counts.spam} flagged as spam</span>
+              </>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {onOpenModeration && (
+            <button
+              onClick={onOpenModeration}
+              className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
+            >
+              Blocklist &amp; taxonomy
+            </button>
+          )}
           {lastLoadedAt && (
             <span className="text-xs text-ink-soft">
               Updated {lastLoadedAt.toLocaleTimeString()}

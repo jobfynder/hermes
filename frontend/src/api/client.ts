@@ -1,10 +1,13 @@
 import type {
+  BlocklistEntry,
   ClaimPrepareResult,
+  DeleteDraftResult,
   DraftObject,
   DraftObjectType,
   DraftPublishResult,
   EmailClaim,
   FieldProvenanceEntry,
+  TaxonomyCandidateEntry,
 } from '../types'
 
 const TOKEN_STORAGE_KEY = 'hermes_review_token'
@@ -84,4 +87,29 @@ export const api = {
     }),
   markClaimSent: (claimId: string) =>
     request<EmailClaim>(`/claim/${claimId}/mark-sent`, { method: 'POST' }),
+  deleteDraft: (id: string) => request<DeleteDraftResult>(`/drafts/${id}`, { method: 'DELETE' }),
+  blockDraftSender: (id: string, matchType: 'domain' | 'email', reason?: string) =>
+    request<{ blocked: boolean; match_type?: string; value?: string; reason?: string }>(
+      `/drafts/${id}/block-sender`,
+      { method: 'POST', body: JSON.stringify({ match_type: matchType, reason }) },
+    ),
+  listBlocklist: () => request<BlocklistEntry[]>('/blocklist'),
+  addBlock: (matchType: 'domain' | 'email', value: string, reason?: string) =>
+    request<BlocklistEntry>('/blocklist', {
+      method: 'POST',
+      body: JSON.stringify({ match_type: matchType, value, reason }),
+    }),
+  removeBlock: (id: number) => request<{ removed: boolean }>(`/blocklist/${id}`, { method: 'DELETE' }),
+  listTaxonomyCandidates: (status = 'pending') =>
+    request<TaxonomyCandidateEntry[]>(`/taxonomy-candidates?status=${status}`),
+  approveTaxonomyCandidate: (id: number, category?: string, skillType?: string) =>
+    request<{ ok: boolean; term?: string; reason?: string }>(`/taxonomy-candidates/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify({ category, skill_type: skillType }),
+    }),
+  rejectTaxonomyCandidate: (id: number) =>
+    request<{ ok: boolean; term?: string; reason?: string }>(`/taxonomy-candidates/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
 }
