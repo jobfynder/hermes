@@ -1,6 +1,10 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.claim.models import EmailClaim
+from app.claim.service import get_claim_by_draft
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
 from app.drafts.service import (
     get_draft_object,
@@ -9,6 +13,7 @@ from app.drafts.service import (
     reclassify_draft_object,
     reject_draft_object,
 )
+from app.email_parsing.provenance import load_field_provenance
 from app.security.rbac import require_permission
 
 
@@ -18,6 +23,18 @@ class RejectDraftRequest(BaseModel):
 
 class ReclassifyDraftRequest(BaseModel):
     corrected_draft_type: DraftObjectType
+
+
+class FieldProvenanceEntry(BaseModel):
+    field_path: str
+    raw_value: Any = None
+    normalized_value: Any = None
+    source_region: str | None = None
+    extractor: str
+    extraction_method: str
+    confidence: float
+    value_kind: str
+    recorded_at: str
 
 
 router = APIRouter(prefix="/drafts", tags=["Drafts"])
@@ -41,6 +58,37 @@ def read_draft(
         raise HTTPException(status_code=404, detail="Draft not found")
 
     return draft
+
+
+@router.get("/{draft_id}/provenance", response_model=list[FieldProvenanceEntry])
+def read_draft_provenance(
+    draft_id: str,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> list[dict]:
+    """Every field Hermes extracted for this draft, with where it came
+    from (deterministic parser, LLM fallback, or a recruiter's own
+    correction) and how confident that pass was -- this is the actual
+    verification surface a reviewer needs, not just the final values.
+    """
+    draft = get_draft_object(draft_id)
+
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    return load_field_provenance(draft_id)
+
+
+@router.get("/{draft_id}/claim", response_model=EmailClaim)
+def read_draft_claim(
+    draft_id: str,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> EmailClaim:
+    claim = get_claim_by_draft(draft_id)
+
+    if not claim:
+        raise HTTPException(status_code=404, detail="No claim exists for this draft")
+
+    return claim
 
 
 @router.post("/{draft_id}/publish", response_model=DraftPublishResult)

@@ -1,19 +1,18 @@
 from pathlib import Path
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
+# Built by the frontend-build Docker stage (see Dockerfile) from frontend/
+# -- a real React app, not a hand-authored static page. This directory
+# only exists inside the built image; created empty here so importing
+# this module never crashes app startup in a context that hasn't run
+# that build stage (e.g. the regression test containers, which mount the
+# raw source tree directly and never build the frontend -- they have no
+# reason to exercise this router's static assets, only the /drafts and
+# /claim APIs it's a client of).
+_REVIEW_DIST = Path(__file__).resolve().parent.parent / "static" / "review"
+_REVIEW_DIST.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter(tags=["Draft Review"])
-_REVIEW_HTML = Path(__file__).resolve().parent.parent / "static" / "draft-review.html"
-
-
-@router.get("/review", response_class=HTMLResponse, include_in_schema=False)
-def draft_review() -> HTMLResponse:
-    """Serve the read-only draft review client.
-
-    Draft data remains protected by the existing /drafts RBAC dependency. The
-    page itself contains no data or credentials; the reviewer supplies their
-    API token directly to the browser client.
-    """
-    return HTMLResponse(_REVIEW_HTML.read_text(encoding="utf-8"))
+router.mount("/review", StaticFiles(directory=_REVIEW_DIST, html=True), name="review")

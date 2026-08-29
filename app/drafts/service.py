@@ -58,6 +58,8 @@ def _row_to_draft(row: dict) -> DraftObject:
         requires_review=row["requires_review"],
         errors=row["errors"],
         metadata=row["metadata"],
+        created_at=row["created_at"].isoformat() if row.get("created_at") else None,
+        updated_at=row["updated_at"].isoformat() if row.get("updated_at") else None,
     )
 
 

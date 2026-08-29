@@ -17,3 +17,5 @@ build/
 *.egg-info/
 Hermes.code-workspace
 docs/Hermes.code-workspace
+frontend/node_modules
+frontend/dist
