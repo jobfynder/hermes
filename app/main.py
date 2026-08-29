@@ -38,6 +38,7 @@ from app.routers.context import router as context_router
 from app.routers.broadcast import router as broadcast_router
 from app.routers.draft_review import router as draft_review_router
 from app.routers.moderation import router as moderation_router
+from app.routers.accuracy import router as accuracy_router
 
 app = FastAPI(
     title=HERMES_SERVICE_NAME,
@@ -71,6 +72,7 @@ app.include_router(onboarding_router)
 app.include_router(drafts_router)
 app.include_router(draft_review_router)
 app.include_router(moderation_router)
+app.include_router(accuracy_router)
 app.include_router(claim_router)
 app.include_router(access_router)
 app.include_router(telegram_provider_router)

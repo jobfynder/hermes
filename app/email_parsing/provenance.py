@@ -247,3 +247,40 @@ def record_recruiter_correction(
     entry['raw_value'] = before
     record_field_provenance(parse_run_id, [entry])
     return entry
+
+
+#: Both correction extractors feed the same accuracy computation
+#: (app/drafts/accuracy.py) -- a wrong field is a wrong field whether the
+#: person who caught it was the original recruiter (via the claim link)
+#: or an internal Hermes reviewer (via inline editing on the review
+#: page). Kept as two distinct extractor values rather than one, purely
+#: so the accuracy dashboard can show which channel is actually catching
+#: errors.
+REVIEWER_CORRECTION_EXTRACTOR = 'reviewer_correction'
+RECRUITER_CORRECTION_EXTRACTOR = 'recruiter_correction'
+CORRECTION_EXTRACTORS = (RECRUITER_CORRECTION_EXTRACTOR, REVIEWER_CORRECTION_EXTRACTOR)
+
+
+def record_reviewer_correction(
+    parse_run_id: str,
+    field_path: str,
+    before: Any,
+    after: Any,
+) -> dict[str, Any]:
+    '''Same accuracy-labeling signal as record_recruiter_correction above,
+    for the other place a human can correct a field: a reviewer editing
+    it directly on the Hermes review page (app/drafts/corrections.py)
+    before publishing, rather than the original recruiter correcting it
+    through their claim link. Every draft passes through review, so this
+    is the higher-volume of the two signals in practice.
+    '''
+    entry = _entry(
+        field_path,
+        after,
+        extractor=REVIEWER_CORRECTION_EXTRACTOR,
+        extraction_method='deterministic',
+        confidence=1.0,
+    )
+    entry['raw_value'] = before
+    record_field_provenance(parse_run_id, [entry])
+    return entry

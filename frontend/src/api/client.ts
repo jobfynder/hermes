@@ -1,4 +1,5 @@
 import type {
+  AccuracySummary,
   BlocklistEntry,
   ClaimPrepareResult,
   DeleteDraftResult,
@@ -112,4 +113,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  correctDraftFields: (
+    id: string,
+    recordType: 'job_requirement' | 'hotlist',
+    recordIndex: number,
+    corrections: Record<string, unknown>,
+  ) =>
+    request<DraftObject>(`/drafts/${id}/fields`, {
+      method: 'PATCH',
+      body: JSON.stringify({ record_type: recordType, record_index: recordIndex, corrections }),
+    }),
+  getAccuracySummary: (days = 30) => request<AccuracySummary>(`/accuracy/summary?days=${days}`),
 }

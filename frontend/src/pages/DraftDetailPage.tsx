@@ -44,6 +44,9 @@ const JOB_FIELDS: [string, keyof JobRequirementRecord][] = [
   ['Preferred skills', 'preferred_skills'],
 ]
 
+const ARRAY_FIELDS = new Set(['required_skills', 'preferred_skills', 'primary_skills'])
+const NUMERIC_FIELDS = new Set(['years_of_experience'])
+
 const HOTLIST_FIELDS: [string, keyof HotlistConsultantRecord][] = [
   ['Name', 'candidate_name'],
   ['Title', 'primary_job_title'],
@@ -224,6 +227,22 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
     }
   }
 
+  async function handleCorrectField(
+    recordType: 'job_requirement' | 'hotlist',
+    recordIndex: number,
+    field: string,
+    newValue: unknown,
+  ) {
+    try {
+      await api.correctDraftFields(draftId, recordType, recordIndex, { [field]: newValue })
+      setActionMessage('Saved.')
+      load()
+    } catch (err) {
+      setActionMessage(err instanceof ApiError ? err.message : 'Could not save correction')
+      throw err
+    }
+  }
+
   if (error) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-8">
@@ -325,6 +344,10 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
                   label={label}
                   value={(parsing.records[0] as JobRequirementRecord)[key]}
                   provenance={pmap.get(`job.${key}`)}
+                  editable={draft.status !== 'published'}
+                  isArray={ARRAY_FIELDS.has(key)}
+                  isNumeric={NUMERIC_FIELDS.has(key)}
+                  onSave={(newValue) => handleCorrectField('job_requirement', 0, key, newValue)}
                 />
               ))}
               <div className="flex items-start justify-between gap-4 border-b border-line py-2.5 last:border-0">
@@ -387,6 +410,10 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
                         label={label}
                         value={record[key]}
                         provenance={pmap.get(`consultant.${i + 1}.${key}`)}
+                        editable={draft.status !== 'published'}
+                        isArray={ARRAY_FIELDS.has(key)}
+                        isNumeric={NUMERIC_FIELDS.has(key)}
+                        onSave={(newValue) => handleCorrectField('hotlist', i, key, newValue)}
                       />
                     ))}
                   </div>

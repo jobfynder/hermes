@@ -1,9 +1,15 @@
 import json
+from typing import Any
 from uuid import uuid4
 
 from psycopg import errors
 
 from app.email_parsing.classification_learning import record_classification_correction
+from app.email_parsing.provenance import (
+    HOTLIST_CONSULTANT_FIELDS,
+    JOB_REQUIREMENT_FIELDS,
+    record_reviewer_correction,
+)
 from app.integrations.core_job_push import push_job_to_core
 from app.runtime.db import cursor
 from app.runtime.events import emit_event
@@ -366,3 +372,107 @@ def delete_draft_object(draft_id: str) -> dict:
         )
 
     return {"deleted": deleted}
+
+
+# Which of each record type's fields a reviewer is allowed to hand-edit on
+# the review page. job_description is deliberately excluded -- it's a
+# free-text block shown in its own collapsible section, not a labeled
+# field row, and editing prose isn't what this correction-tracking loop
+# is for.
+_EDITABLE_FIELDS: dict[str, set[str]] = {
+    "job_requirement": set(JOB_REQUIREMENT_FIELDS) - {"job_description"},
+    "hotlist": set(HOTLIST_CONSULTANT_FIELDS),
+}
+
+
+def apply_field_corrections(
+    draft_id: str,
+    record_type: str,
+    record_index: int,
+    corrections: dict[str, Any],
+) -> DraftObject | None:
+    """Lets a reviewer fix one or more fields on the review page instead
+    of the only two prior options -- publish a draft with a field known
+    to be wrong, or reject the whole thing and lose everything else that
+    parsed correctly. Every actual change is also recorded via
+    record_reviewer_correction (app/email_parsing/provenance.py) as a
+    field_provenance row -- the same accuracy-labeling signal claim-flow
+    corrections already produce, and what app/drafts/accuracy.py reads
+    to compute per-field precision. Silently drops any key in
+    `corrections` that isn't in _EDITABLE_FIELDS for this record_type,
+    rather than raising, so a client sending an unexpected extra key
+    doesn't fail the whole request.
+    """
+    if record_type not in _EDITABLE_FIELDS:
+        raise ValueError(f"unsupported record_type {record_type!r}")
+
+    allowed = _EDITABLE_FIELDS[record_type]
+    corrections = {field: value for field, value in corrections.items() if field in allowed}
+
+    draft = get_draft_object(draft_id)
+    if not draft:
+        return None
+
+    if not corrections:
+        return draft
+
+    email_parsing = (draft.payload.get("structured_data") or {}).get("email_parsing") or {}
+    records = email_parsing.get("records") or []
+
+    if not (0 <= record_index < len(records)):
+        raise ValueError(f"record_index {record_index} out of range (draft has {len(records)} records)")
+
+    record = records[record_index]
+
+    if record_type == "job_requirement":
+        field_prefix = "job."
+    else:
+        # Must match build_hotlist_provenance's own ordinal exactly
+        # (app/email_parsing/provenance.py) -- that's the field_path a
+        # correction here needs to line up with, both so the review
+        # page's provenance chip for this specific consultant stays
+        # correctly matched, and so the accuracy rollup (which strips the
+        # ordinal and groups by field name) sees the correction and the
+        # original extraction as the same field.
+        ordinal = record.get("source_row") or record.get("source_block") or 0
+        field_prefix = f"consultant.{ordinal}."
+
+    changed_fields: list[str] = []
+
+    for field, new_value in corrections.items():
+        old_value = record.get(field)
+        if new_value == old_value:
+            continue
+        record[field] = new_value
+        changed_fields.append(field)
+        record_reviewer_correction(
+            parse_run_id=draft_id,
+            field_path=f"{field_prefix}{field}",
+            before=old_value,
+            after=new_value,
+        )
+
+    if not changed_fields:
+        return draft
+
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE drafts SET payload = %s, updated_at = now() WHERE draft_id = %s RETURNING *",
+            (json.dumps(draft.payload, default=str), draft_id),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return None
+
+    emit_event(
+        "draft.field_corrected",
+        {
+            "draft_id": draft_id,
+            "record_type": record_type,
+            "record_index": record_index,
+            "changed_fields": changed_fields,
+        },
+    )
+
+    return _row_to_draft(row)

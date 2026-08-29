@@ -7,6 +7,7 @@ from app.claim.models import EmailClaim
 from app.claim.service import get_claim_by_draft
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
 from app.drafts.service import (
+    apply_field_corrections,
     delete_draft_object,
     get_draft_object,
     list_draft_objects,
@@ -38,6 +39,12 @@ class BlockSenderRequest(BaseModel):
     # a single junk sender at a domain is usually not a one-off.
     match_type: str = "domain"
     reason: str | None = None
+
+
+class FieldCorrectionRequest(BaseModel):
+    record_type: str  # "job_requirement" | "hotlist"
+    record_index: int = 0
+    corrections: dict[str, Any]
 
 
 class BlockSenderResult(BaseModel):
@@ -207,3 +214,33 @@ def block_draft_sender(
     )
 
     return BlockSenderResult(blocked=True, match_type=row["match_type"], value=row["value"])
+
+
+@router.patch("/{draft_id}/fields", response_model=DraftObject)
+def correct_draft_fields(
+    draft_id: str,
+    body: FieldCorrectionRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> DraftObject:
+    """Fixes one or more fields on a draft in place -- what a reviewer
+    uses instead of publishing a mostly-right draft with one wrong field,
+    or rejecting the whole thing over it. Every actual change is recorded
+    as accuracy-labeling signal (see apply_field_corrections' docstring
+    and app/drafts/accuracy.py) -- this is the same mechanism a
+    recruiter's own claim-link correction already uses, just reachable
+    from the internal review page instead.
+    """
+    try:
+        draft = apply_field_corrections(
+            draft_id=draft_id,
+            record_type=body.record_type,
+            record_index=body.record_index,
+            corrections=body.corrections,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft not found")
+
+    return draft

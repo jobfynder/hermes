@@ -193,3 +193,20 @@ export interface TaxonomyCandidateEntry {
   first_seen_at: string
   last_seen_at: string
 }
+
+export interface FieldAccuracyStat {
+  field: string
+  total_drafts: number
+  filled_count: number
+  fill_rate: number | null
+  corrected_wrong_count: number
+  corrected_missing_count: number
+  precision: number | null
+  reliable: boolean
+}
+
+export interface AccuracySummary {
+  days: number
+  job_requirement_fields: FieldAccuracyStat[]
+  hotlist_fields: FieldAccuracyStat[]
+}
