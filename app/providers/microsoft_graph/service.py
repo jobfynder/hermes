@@ -148,9 +148,45 @@ def fetch_graph_message(resource: str | None) -> dict[str, Any] | None:
         return None
 
 
-def configured_mailboxes() -> list[str]:
+def configured_mailbox_targets() -> list[tuple[str, str | None]]:
+    '''Parses HERMES_MS_GRAPH_MAILBOXES entries as either a bare address
+    (watch its Inbox -- the original, still-default behavior) or
+    "address:FolderDisplayName" (watch that specific folder instead/in
+    addition). Exists because a mailbox-side rule can silently route mail
+    into a folder Hermes was never told to look at -- notifications only
+    fire for the folder actually watched, so mail landing anywhere else
+    (a rule filing job-board mail into a dedicated subfolder, say) is
+    invisible to Hermes no matter how healthy the Inbox subscription is.
+    Same mailbox address can appear more than once with different
+    folders; each becomes its own subscription.
+    '''
     raw = os.getenv('HERMES_MS_GRAPH_MAILBOXES', '')
-    return [mailbox.strip() for mailbox in raw.split(',') if mailbox.strip()]
+    targets: list[tuple[str, str | None]] = []
+
+    for entry in raw.split(','):
+        entry = entry.strip()
+        if not entry:
+            continue
+        mailbox, _, folder = entry.partition(':')
+        mailbox = mailbox.strip()
+        folder = folder.strip() or None
+        if mailbox:
+            targets.append((mailbox, folder))
+
+    return targets
+
+
+def configured_mailboxes() -> list[str]:
+    '''Distinct mailbox addresses across all configured_mailbox_targets()
+    entries, regardless of how many folders each one watches -- what a
+    status/diagnostic view should show, and what
+    _graph_credentials_configured-adjacent "is anything configured at
+    all" checks care about. Order-preserving, de-duplicated.
+    '''
+    seen: dict[str, None] = {}
+    for mailbox, _folder in configured_mailbox_targets():
+        seen.setdefault(mailbox, None)
+    return list(seen)
 
 
 def _client_state() -> str | None:
@@ -220,9 +256,39 @@ def _graph_api_request(
         return json.loads(raw) if raw else {}
 
 
+def _resolve_folder_resource(mailbox: str, folder_name: str | None, access_token: str) -> str:
+    '''Returns the mailFolders(...) resource segment for a subscription's
+    "resource" field. "Inbox" and Graph's other well-known folder names
+    (drafts, sentitems, ...) can be addressed directly by name -- a
+    custom folder (a rule-created one like "Nvoids") can't, Graph only
+    accepts its actual folder id there, so this looks that id up by
+    matching displayName among the mailbox's top-level folders.
+    Raises (propagating to sync_graph_subscriptions()'s existing
+    per-target try/except -> {'status': 'failed', ...}) if no folder
+    with that display name exists -- silently falling back to Inbox
+    would defeat the entire point of asking for a specific folder.
+    '''
+
+    if folder_name is None:
+        return "mailFolders('Inbox')"
+
+    listing = _graph_api_request(
+        'GET',
+        f"/users/{mailbox}/mailFolders?$top=100",
+        access_token,
+    )
+
+    for folder in listing.get('value', []):
+        if folder.get('displayName') == folder_name:
+            return f"mailFolders('{folder['id']}')"
+
+    raise ValueError(f"No mail folder named {folder_name!r} found in {mailbox}")
+
+
 def sync_graph_subscriptions() -> dict[str, Any]:
     '''Creates a Graph change-notification subscription for every mailbox
-    in HERMES_MS_GRAPH_MAILBOXES that doesn't have one yet, and renews
+    (or mailbox+folder -- see configured_mailbox_targets()) in
+    HERMES_MS_GRAPH_MAILBOXES that doesn't have one yet, and renews
     (PATCH expirationDateTime) any that expire within RENEW_WITHIN.
     Already-fresh subscriptions are left untouched. Idempotent -- safe to
     call repeatedly, e.g. from a daily host cron running
@@ -234,10 +300,18 @@ def sync_graph_subscriptions() -> dict[str, Any]:
     Returns {'status': 'blocked', 'reason': ...} without calling Graph at
     all if credentials, the notification URL, the clientState secret, or
     the mailbox list aren't all configured.
+
+    Result/storage keys: a target watching its Inbox (the default, no
+    ":FolderName" suffix in config) keys by the bare mailbox address,
+    unchanged from before this function supported extra folders at all.
+    A target watching a specific named folder keys by
+    "mailbox:FolderName" instead, so the same mailbox can hold more than
+    one subscription (Inbox AND a rule-filed subfolder, say) without
+    them overwriting each other in subscriptions.json.
     '''
     notification_url = _notification_url()
     client_state = _client_state()
-    mailboxes = configured_mailboxes()
+    targets = configured_mailbox_targets()
 
     if not _graph_credentials_configured():
         return {'status': 'blocked', 'reason': 'graph_credentials_not_configured'}
@@ -245,7 +319,7 @@ def sync_graph_subscriptions() -> dict[str, Any]:
         return {'status': 'blocked', 'reason': 'HERMES_PUBLIC_WEBHOOK_BASE_URL_not_set'}
     if not client_state:
         return {'status': 'blocked', 'reason': 'HERMES_MS_GRAPH_CLIENT_STATE_not_set'}
-    if not mailboxes:
+    if not targets:
         return {'status': 'blocked', 'reason': 'HERMES_MS_GRAPH_MAILBOXES_not_set'}
 
     stored = _load_stored_subscriptions()
@@ -255,26 +329,27 @@ def sync_graph_subscriptions() -> dict[str, Any]:
         now + timedelta(minutes=MAX_MESSAGE_SUBSCRIPTION_MINUTES)
     ).strftime('%Y-%m-%dT%H:%M:%S.0000000Z')
 
-    # Acquired lazily, once, only if at least one mailbox actually needs an
+    # Acquired lazily, once, only if at least one target actually needs an
     # API call this run -- avoids a pointless token exchange when every
     # subscription is already fresh.
     access_token: str | None = None
 
-    for mailbox in mailboxes:
-        existing = stored.get(mailbox)
+    for mailbox, folder_name in targets:
+        key = mailbox if folder_name is None else f'{mailbox}:{folder_name}'
+        existing = stored.get(key)
 
         if existing and existing.get('id'):
             expires_at = datetime.fromisoformat(
                 existing['expirationDateTime'].replace('Z', '+00:00')
             )
             if expires_at - now > RENEW_WITHIN:
-                results[mailbox] = {'status': 'still_valid', **existing}
+                results[key] = {'status': 'still_valid', **existing}
                 continue
 
         if access_token is None:
             access_token = _get_graph_access_token()
             if not access_token:
-                results[mailbox] = {'status': 'failed', 'error': 'token_acquisition_failed'}
+                results[key] = {'status': 'failed', 'error': 'token_acquisition_failed'}
                 continue
 
         try:
@@ -285,12 +360,13 @@ def sync_graph_subscriptions() -> dict[str, Any]:
                     access_token,
                     {'expirationDateTime': expiration},
                 )
-                stored[mailbox] = {
+                stored[key] = {
                     'id': existing['id'],
                     'expirationDateTime': updated.get('expirationDateTime', expiration),
                 }
-                results[mailbox] = {'status': 'renewed', **stored[mailbox]}
+                results[key] = {'status': 'renewed', **stored[key]}
             else:
+                folder_resource = _resolve_folder_resource(mailbox, folder_name, access_token)
                 created = _graph_api_request(
                     'POST',
                     '/subscriptions',
@@ -298,18 +374,18 @@ def sync_graph_subscriptions() -> dict[str, Any]:
                     {
                         'changeType': 'created',
                         'notificationUrl': notification_url,
-                        'resource': f"users/{mailbox}/mailFolders('Inbox')/messages",
+                        'resource': f"users/{mailbox}/{folder_resource}/messages",
                         'expirationDateTime': expiration,
                         'clientState': client_state,
                     },
                 )
-                stored[mailbox] = {
+                stored[key] = {
                     'id': created.get('id'),
                     'expirationDateTime': created.get('expirationDateTime', expiration),
                 }
-                results[mailbox] = {'status': 'created', **stored[mailbox]}
+                results[key] = {'status': 'created', **stored[key]}
         except Exception as exc:
-            results[mailbox] = {'status': 'failed', 'error': str(exc)}
+            results[key] = {'status': 'failed', 'error': str(exc)}
 
     _store_subscriptions(stored)
     return {'status': 'completed', 'mailboxes': results}

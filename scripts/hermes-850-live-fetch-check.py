@@ -262,6 +262,54 @@ def test_graph_sync_creates_missing_subscription() -> None:
     )
 
 
+def test_graph_sync_creates_subscription_for_named_folder() -> None:
+    # Regression fixture for the HERMES-850 "emails received in Outlook
+    # but never processed" incident: a mailbox-side rule silently routed
+    # real job postings into a "Nvoids" subfolder Hermes had never been
+    # told to watch -- the Inbox subscription stayed perfectly healthy
+    # the whole time, since it was never asked about that folder at all.
+    # "mailbox:FolderName" in HERMES_MS_GRAPH_MAILBOXES is the fix:
+    # covered here end-to-end, including the folder-name-to-id lookup a
+    # custom (non-well-known) folder needs.
+    _reset_graph_subscriptions()
+    env = {
+        **GRAPH_SUBSCRIPTION_ENV,
+        'HERMES_MS_GRAPH_MAILBOXES': 'requirements@jobfynder.com:Nvoids',
+    }
+    responses = {
+        'login.microsoftonline.com/tenant-1': {'access_token': 'tok'},
+        'graph.microsoft.com/v1.0/users/requirements@jobfynder.com/mailFolders': {
+            'value': [
+                {'id': 'inbox-id', 'displayName': 'Inbox'},
+                {'id': 'nvoids-folder-id', 'displayName': 'Nvoids'},
+            ]
+        },
+        'graph.microsoft.com/v1.0/subscriptions': {
+            'id': 'sub-nvoids',
+            'expirationDateTime': '2099-01-01T00:00:00.0000000Z',
+        },
+    }
+    with env_vars(**env):
+        with patched_urlopen(responses) as calls:
+            result = graph_service.sync_graph_subscriptions()
+
+    key = 'requirements@jobfynder.com:Nvoids'
+    require(result['status'] == 'completed', 'Sync must complete when fully configured')
+    require(
+        result['mailboxes'][key]['status'] == 'created',
+        f"Expected a created subscription for the named-folder target, got {result['mailboxes']}",
+    )
+    require(
+        graph_service.list_stored_subscriptions()[key]['id'] == 'sub-nvoids',
+        'The named-folder subscription must be stored under its own mailbox:FolderName key, '
+        'not overwrite (or be overwritten by) an Inbox subscription for the same mailbox',
+    )
+    require(
+        any('mailFolders' in url for url in calls),
+        f'Must look up the folder id by display name before subscribing, calls were: {calls}',
+    )
+
+
 def test_graph_sync_leaves_still_valid_subscription_untouched() -> None:
     _reset_graph_subscriptions()
     graph_service._store_subscriptions({
@@ -351,6 +399,7 @@ def run() -> None:
         test_graph_sync_blocked_without_client_state,
         test_graph_sync_blocked_without_mailboxes,
         test_graph_sync_creates_missing_subscription,
+        test_graph_sync_creates_subscription_for_named_folder,
         test_graph_sync_leaves_still_valid_subscription_untouched,
         test_graph_sync_renews_expiring_subscription,
         test_graph_client_state_verification,
