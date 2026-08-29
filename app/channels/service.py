@@ -5,6 +5,7 @@ from app.access.service import authorize_action
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse, DocumentKind
 from app.drafts.service import create_draft_object
 from app.email_parsing.dedupe import register_and_check
+from app.email_parsing.llm_fallback import apply_hotlist_fallback, apply_job_requirement_fallback
 from app.email_parsing.parsers import (
     classify_email_by_confidence,
     parse_email_business_records,
@@ -293,6 +294,19 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             text=request.text or "",
             document_kind=document_kind,
         )
+
+        # LLM extraction fallback (spec section 7.5, step 7) -- only
+        # engages below FALLBACK_CONFIDENCE_THRESHOLD, using the same
+        # audited LiteLLM/Langfuse path and the same prompts already
+        # proven elsewhere (jf.jobs.jd.extract, jf.broadcast.hotlist.
+        # extract). The deterministic parsers above never call an LLM
+        # themselves -- this is a strictly separate, later stage. See
+        # app/email_parsing/llm_fallback.py.
+        if document_kind == "job_description":
+            email_parsing, _ = apply_job_requirement_fallback(request.text or "", email_parsing)
+        elif document_kind == "hotlist":
+            email_parsing, _ = apply_hotlist_fallback(request.text or "", email_parsing)
+
         structured_data["email_parsing"] = email_parsing
 
         email_confidence = email_parsing.get("confidence")

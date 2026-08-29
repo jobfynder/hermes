@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from app.email_parsing.llm_fallback import HOTLIST_FALLBACK_PROMPT_ID, JOB_FALLBACK_PROMPT_ID
 from app.runtime.db import cursor
 
 
@@ -35,9 +36,11 @@ HOTLIST_CONSULTANT_FIELDS = [
 ]
 
 
-def _value_kind(value: Any) -> str:
+def _value_kind(value: Any, extraction_method: str) -> str:
     if value is None or value == '' or value == []:
         return 'UNKNOWN'
+    if extraction_method == 'llm_fallback':
+        return 'LLM_EXTRACTED'
     return 'EXTRACTED'
 
 
@@ -58,19 +61,49 @@ def _entry(
         'extractor': extractor,
         'extraction_method': extraction_method,
         'confidence': confidence,
-        'value_kind': _value_kind(value),
+        'value_kind': _value_kind(value, extraction_method),
     }
 
 
-def build_job_requirement_provenance(record: dict[str, Any], extractor: str) -> list[dict[str, Any]]:
+def build_job_requirement_provenance(
+    record: dict[str, Any],
+    extractor: str,
+    llm_filled_fields: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Per-field, not per-record: apply_job_requirement_fallback() only
+    fills fields the deterministic parser left empty, so a single record
+    can legitimately mix deterministic and llm_fallback provenance.
+    """
+    llm_filled_fields = llm_filled_fields or set()
     confidence = float(record.get('parse_confidence', 0.0))
-    return [
-        _entry(f'job.{field}', record.get(field), extractor=extractor, extraction_method='deterministic', confidence=confidence)
-        for field in JOB_REQUIREMENT_FIELDS
-    ]
+    entries = []
+
+    for field in JOB_REQUIREMENT_FIELDS:
+        is_llm = field in llm_filled_fields
+        entries.append(
+            _entry(
+                f'job.{field}',
+                record.get(field),
+                extractor=JOB_FALLBACK_PROMPT_ID if is_llm else extractor,
+                extraction_method='llm_fallback' if is_llm else 'deterministic',
+                confidence=confidence,
+            )
+        )
+
+    return entries
 
 
-def build_hotlist_provenance(record: dict[str, Any], extractor: str) -> list[dict[str, Any]]:
+def build_hotlist_provenance(
+    record: dict[str, Any],
+    extractor: str,
+    extraction_method: str = 'deterministic',
+) -> list[dict[str, Any]]:
+    """extraction_method covers the whole record, unlike the job-
+    requirement case: a low-confidence hotlist split means the record
+    *boundaries* were wrong, so apply_hotlist_fallback() replaces entire
+    records rather than filling individual fields -- see that function's
+    docstring in app/email_parsing/llm_fallback.py.
+    """
     ordinal = record.get('source_row') or record.get('source_block') or 0
     confidence = float(record.get('parse_confidence', 0.0))
     return [
@@ -78,7 +111,7 @@ def build_hotlist_provenance(record: dict[str, Any], extractor: str) -> list[dic
             f'consultant.{ordinal}.{field}',
             record.get(field),
             extractor=extractor,
-            extraction_method='deterministic',
+            extraction_method=extraction_method,
             confidence=confidence,
         )
         for field in HOTLIST_CONSULTANT_FIELDS
@@ -124,11 +157,16 @@ def build_email_parsing_provenance(email_parsing: dict[str, Any]) -> list[dict[s
     extractor = email_parsing.get('parser', {}).get('name', 'hermes_email_deterministic_parser')
     entries: list[dict[str, Any]] = []
 
-    for record in email_parsing.get('records', []):
-        if document_kind == 'job_description':
-            entries.extend(build_job_requirement_provenance(record, extractor))
-        elif document_kind == 'hotlist':
-            entries.extend(build_hotlist_provenance(record, extractor))
+    if document_kind == 'job_description':
+        llm_filled_fields = set(email_parsing.get('llm_filled_fields') or [])
+        for record in email_parsing.get('records', []):
+            entries.extend(build_job_requirement_provenance(record, extractor, llm_filled_fields))
+    elif document_kind == 'hotlist':
+        llm_used = bool((email_parsing.get('llm_fallback') or {}).get('used'))
+        method = 'llm_fallback' if llm_used else 'deterministic'
+        hotlist_extractor = HOTLIST_FALLBACK_PROMPT_ID if llm_used else extractor
+        for record in email_parsing.get('records', []):
+            entries.extend(build_hotlist_provenance(record, hotlist_extractor, method))
 
     return entries
 
