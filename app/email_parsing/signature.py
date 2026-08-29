@@ -6,16 +6,34 @@ Pipeline position (see app/channels/service.py::process_channel_intake):
 
 No LLM calls anywhere in this module -- PARSER_METADATA["uses_llm"] is
 always False, matching the guarantee every other parser in
-app/email_parsing/ makes.
+app/email_parsing/ makes. Name/company extraction has a secondary NER
+fallback (spaCy's en_core_web_sm, already an installed dependency --
+see _extract_person_org_via_ner below) for the specific case the
+regex-only pass structurally can't handle: a bare "Harry / ITECSUS /
+harry@itecsus.com"-style block with no title keyword, no recognizable
+company suffix (Inc/LLC/Staffing/...), and no multi-word name on one
+line to anchor on. This is a small, fully local statistical model, not
+an LLM call -- no network request, no API cost, no per-message latency
+beyond a few milliseconds once loaded -- so "uses_llm" stays accurate.
+It only ever fills a field the regex pass left empty, same
+anti-hallucination rule the rest of this codebase's fallbacks follow;
+tagged with its own low-confidence method name (ner_person/ner_org) so
+a reviewer can see it's a softer signal than a structural match.
 """
 
 import re
+from functools import lru_cache
 from typing import Any
 
 try:
     import phonenumbers
 except ImportError:  # pragma: no cover - exercised only if dependency missing
     phonenumbers = None
+
+try:
+    import spacy
+except ImportError:  # pragma: no cover - exercised only if dependency missing
+    spacy = None
 
 from app.email_parsing.sender_resolver import forwarded_marker_span
 from app.understanding.parsers.contact import EMAIL_PATTERN, LINKEDIN_PATTERN, PHONE_PATTERN
@@ -397,6 +415,105 @@ def _extract_title_and_company(
     return title_field, company_field
 
 
+@lru_cache(maxsize=1)
+def _get_ner_pipeline():
+    """Loaded once per process, not once per email -- a fresh spaCy
+    pipeline load costs real time (well over what one email's worth of
+    processing should spend), lru_cache keeps that cost off the request
+    path entirely. Returns None (never raises) if spacy or its
+    en_core_web_sm model isn't available, so a missing model degrades to
+    "NER fallback finds nothing" rather than breaking signature parsing
+    -- the regex-only pass this augments still runs either way.
+    """
+
+    if spacy is None:
+        return None
+
+    try:
+        return spacy.load("en_core_web_sm")
+    except OSError:
+        return None
+
+
+def _looks_like_a_person_name(candidate: str) -> bool:
+    # A small model with only a few lines of context to work with
+    # regularly mistakes recruiting-jargon acronyms (JD, HR) and
+    # all-caps tech terms for PERSON when the span it's given wasn't a
+    # real signature block to begin with. A real human name is
+    # essentially never written in ALL CAPS in a natural signature, so
+    # that's the cheapest, safest thing to filter on here -- unlike a
+    # company name (ITECSUS, IBM, SAP are all legitimately all-caps),
+    # this check is deliberately PERSON-only; see _looks_like_an_org_name.
+    return (
+        "\n" not in candidate
+        and len(candidate) >= 3
+        and any(ch.islower() for ch in candidate)
+    )
+
+
+def _looks_like_an_org_name(candidate: str) -> bool:
+    # Deliberately more permissive than the PERSON check above -- a real
+    # company name is routinely all-caps (ITECSUS, IBM, SAP) or a short
+    # acronym, so that signal doesn't help filter noise here the way it
+    # does for a person's name. Still reject the cheap, unambiguous junk:
+    # nothing spanning multiple lines, nothing that's really an email/URL
+    # the model mislabeled, nothing implausibly short.
+    return (
+        "\n" not in candidate
+        and len(candidate) >= 2
+        and "@" not in candidate
+        and not candidate.lower().startswith(("http://", "https://"))
+    )
+
+
+def _extract_person_org_via_ner(
+    content_lines: list[str],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Secondary signal for name/company when the regex-only pass above
+    finds neither a multi-word name line (NAME_LINE_RE) nor a recognized
+    company suffix (COMPANY_SUFFIX_RE) -- a bare single-token name and a
+    company with no corporate suffix ("Harry" / "ITECSUS") match neither.
+    Only ever called for whichever of the two the caller still hasn't
+    found; never asked to overrule a structural match.
+    """
+
+    nlp = _get_ner_pipeline()
+    if nlp is None or not content_lines:
+        return None, None
+
+    text = "\n".join(content_lines)
+    doc = nlp(text)
+
+    person: str | None = None
+    org: str | None = None
+
+    for ent in doc.ents:
+        candidate = ent.text.strip().strip(",")
+        if not candidate:
+            continue
+        if (
+            ent.label_ == "PERSON"
+            and person is None
+            and len(candidate.split()) <= 4
+            and _looks_like_a_person_name(candidate)
+        ):
+            person = candidate
+        elif ent.label_ == "ORG" and org is None and _looks_like_an_org_name(candidate):
+            org = candidate
+
+    person_field = (
+        _field(person, raw=person, confidence=0.65, method="ner_person", source=text)
+        if person
+        else None
+    )
+    org_field = (
+        _field(org, raw=org, confidence=0.65, method="ner_org", source=text)
+        if org
+        else None
+    )
+    return person_field, org_field
+
+
 def _extract_email(content_lines: list[str]) -> dict[str, Any] | None:
     for line in content_lines:
         match = EMAIL_PATTERN.search(line)
@@ -659,6 +776,28 @@ def parse_email_signature(
     warnings: list[str] = []
 
     name_field = _extract_name(content_lines, signoff_line)
+    title_field, company_field = _extract_title_and_company(
+        content_lines, name_field["value"] if name_field else None
+    )
+
+    # Structural extraction needs a title keyword, a recognized company
+    # suffix, or 2-4 capitalized words on one line to anchor on -- none
+    # of which a bare "Harry" / "ITECSUS" pair gives it. NER only ever
+    # fills whichever of the two is still missing; a structural match is
+    # never second-guessed. Gated on is_pure_forward specifically: that's
+    # the one case where the span's *position* is structurally justified
+    # (right after a real forwarded-header block, not a last-resort
+    # guess) -- for the generic tail-window fallback the span itself is
+    # already a weaker heuristic, and layering NER guesses on top of an
+    # untrustworthy span just produces confident-looking nonsense instead
+    # of the honest "not detected" that span deserved.
+    if is_pure_forward and (name_field is None or company_field is None):
+        ner_name_field, ner_company_field = _extract_person_org_via_ner(content_lines)
+        if name_field is None:
+            name_field = ner_name_field
+        if company_field is None:
+            company_field = ner_company_field
+
     if name_field:
         contact["full_name"] = name_field
         first, middle, last = _split_name(name_field["value"])
@@ -671,9 +810,6 @@ def parse_email_signature(
     else:
         warnings.append("name_not_detected")
 
-    title_field, company_field = _extract_title_and_company(
-        content_lines, name_field["value"] if name_field else None
-    )
     if title_field:
         contact["job_title"] = title_field
     else:

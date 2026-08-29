@@ -1,0 +1,52 @@
+feat(email-parsing): add NER fallback for fragmented signature blocks
+
+Closes the limitation flagged after the pure-forward signature fix:
+one vendor's postings render the sender's name/company as one bare
+token per line after HTML->text conversion ("From: / / Harry, / /
+ITECSUS / / harry@itecsus.com") -- no title keyword, no recognized
+company suffix, no multi-word name on a single line, so the
+regex-only pass (NAME_LINE_RE, COMPANY_SUFFIX_RE) has nothing to
+anchor on.
+
+spaCy was already an installed dependency (used only for
+tokenization elsewhere in the codebase) -- downloads en_core_web_sm
+(~13MB model, pinned as a wheel URL so it's baked into the image at
+build time, not a runtime `spacy download`) and uses its PERSON/ORG
+recognition as a secondary signal, only for whichever of name/company
+the structural pass left empty. Never overrides a structural match.
+Not an LLM call: no network request, no API cost, a few ms of local
+inference once the model is loaded (cached per-process).
+
+Gated to the is_pure_forward case specifically (see the prior
+signature.py commit), not the generic tail-window fallback: real
+testing against production drafts turned up genuine false positives
+(an all-caps tech term and a stray two-letter acronym both mistaken
+for a person's name) whenever NER ran on a span the tail-window
+heuristic only weakly justified. is_pure_forward's span position is
+structurally justified -- right after a real forwarded-header block --
+so it's the one case worth trusting a secondary guess on; everywhere
+else, an honest "not detected" beats a confident-looking wrong name.
+Also added a lowercase-required filter on PERSON candidates
+specifically (TIBCO, JD read as all-caps and got rejected) -- kept
+separate from the ORG filter, which stays permissive, since a real
+company name is routinely all-caps in a way a person's name never is.
+
+Verified against the same three real production drafts already
+reparsed twice this session: the well-structured AWS Connect/Oncor
+one now recovers "Harry" as full_name via NER (previously nothing);
+the other two -- one hitting the tail-window fallback, one genuinely
+flat single-line text -- correctly stay at their prior (honest, if
+incomplete) output with no new false positives. The existing
+well-formed-signature case (name/title/company/LinkedIn all found
+structurally) is unaffected -- NER never runs when the structural
+pass already found everything.
+
+New coverage in hermes-850-email-signature-check.py: one test
+confirming the NER recovery on the fragmented fixture (and that it's
+tagged with its own ner_person method, not conflated with a
+structural match), one confirming NER stays off and produces no
+fabricated name for a span the tail-window fallback only weakly
+justified. Full regression suite (16 checks across hermes-850-*,
+hermes-400-*, hermes-450-channel-intake-check.py) green against a
+freshly reset schema. Docker image grows ~30MB with the model baked
+in.

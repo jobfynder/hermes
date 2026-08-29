@@ -9,6 +9,11 @@ rapidfuzz
 tiktoken
 python-multipart
 spacy
+# Pinned wheel, not a runtime `spacy download` -- keeps the model baked
+# into the image at build time instead of needing network access (and a
+# few hundred ms of download+unpack) on first use in production. Model
+# major.minor must match the installed spacy version above (3.8.x here).
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 phonenumbers
 pika
 psycopg[binary,pool]

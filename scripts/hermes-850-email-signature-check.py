@@ -121,6 +121,80 @@ Required skills: Amazon Connect, AWS Lambda
     )
 
 
+def test_ner_fallback_recovers_fragmented_name() -> None:
+    # Regression fixture for the specific limitation flagged after the
+    # pure-forward fix above shipped: a real vendor's forwarded postings
+    # render the sender's own name/company as one bare token per line
+    # ("From: / / Harry, / / ITECSUS / / harry@itecsus.com") with no
+    # title keyword, no recognized company suffix, and no multi-word
+    # name on a single line -- nothing the regex-only pass can anchor
+    # on. The NER fallback (en_core_web_sm, gated to only the
+    # is_pure_forward case -- see parse_email_signature) should recover
+    # at least the person's name from this.
+    text = """Subject: FW: AWS Connect Solutions Engineer with IVR Exp : Houston, TX
+
+From: harry@itecsus.com <harry@itecsus.com>
+Sent: Saturday, August 29, 2026 6:38 AM
+To: Jobs Nvoids <jobs@nvoids.com>
+Subject: AWS Connect Solutions Engineer with IVR Exp : Houston, TX
+
+You received this email from harry@itecsus.com via https://jobs.nvoids.com
+Please check the email id in the signature to reply to the correct email id.
+
+From:
+
+Harry,
+
+ITECSUS
+
+harry@itecsus.com
+
+Reply to: harry@itecsus.com
+"""
+
+    sig = parse_email_signature(text=text, sender_email="jobs@jobfynder.com")
+    contact = contact_values(sig)
+
+    require(
+        contact.get("full_name") == "Harry",
+        f"NER fallback should recover the sender's first name from a "
+        f"fragmented one-token-per-line signature: {contact}",
+    )
+    require(
+        sig["contact"]["full_name"]["method"] == "ner_person",
+        f"A NER-recovered field must be tagged with its own method, "
+        f"not attributed to a structural match it isn't: {sig['contact']['full_name']}",
+    )
+
+
+def test_ner_fallback_does_not_fabricate_names_from_an_untrustworthy_span() -> None:
+    # The generic tail-window span-detection fallback (used when a
+    # message isn't a clean single forward -- e.g. no real line breaks
+    # at all) is already a weaker last-resort heuristic. Layering NER
+    # guesses on top of whatever it lands on produced real false
+    # positives while building this feature (an all-caps tech term and
+    # a stray two-letter acronym both got mistaken for a person's name).
+    # The fallback must stay off entirely outside is_pure_forward, so a
+    # message shaped like this keeps its honest "not detected" rather
+    # than a confident-looking wrong name.
+    text = (
+        "Subject: FW: Azure Consultant Sent: Saturday To: Jobs Nvoids "
+        "Subject: Azure Consultant You received this email from "
+        "harry@itecsus.com via https://jobs.nvoids.com Do Not Change "
+        "subject line. Dont remove JD from email. We need TIBCO and Azure "
+        "experience. harry@itecsus.com View this job online here"
+    )
+
+    sig = parse_email_signature(text=text, sender_email="jobs@jobfynder.com")
+    contact = contact_values(sig)
+
+    require(
+        "full_name" not in contact,
+        f"Must not fabricate a name from a span with no real signature "
+        f"content in it, even if NER finds something plausible-looking: {contact}",
+    )
+
+
 def test_deep_quoted_history_still_ignored() -> None:
     # The original Phase 6 protection this module documents: real fresh
     # content above older quoted history must still win -- a stale
@@ -168,6 +242,12 @@ def main() -> int:
 
     test_forwarded_header_block_itself_is_not_mistaken_for_signature()
     print("PASS: forwarded header block's own Subject: line is not mistaken for a job title")
+
+    test_ner_fallback_recovers_fragmented_name()
+    print("PASS: NER fallback recovers a name from a fragmented one-token-per-line signature")
+
+    test_ner_fallback_does_not_fabricate_names_from_an_untrustworthy_span()
+    print("PASS: NER fallback stays off for a span with no real signature content")
 
     test_deep_quoted_history_still_ignored()
     print("PASS: a real quoted reply chain's stale signature is still ignored")
