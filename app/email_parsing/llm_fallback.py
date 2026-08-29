@@ -41,6 +41,7 @@ FALLBACK_CONFIDENCE_THRESHOLD = 0.70
 
 JOB_REQUIREMENT_FIELDS = (
     "job_title",
+    "company",
     "required_skills",
     "preferred_skills",
     "years_of_experience",

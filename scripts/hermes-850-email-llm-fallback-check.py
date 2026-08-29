@@ -44,6 +44,8 @@ def test_low_confidence_job_fills_only_empty_fields() -> None:
         "records": [
             {
                 "job_title": "QA Engineer",  # already found deterministically
+                "company": None,  # empty -- eligible for fallback fill (plain-text mail with
+                # no line breaks to anchor the deterministic "End Client:" regex on)
                 "required_skills": [],  # empty -- eligible for fallback fill
                 "location": None,  # empty -- eligible for fallback fill
                 "rate_or_salary": None,
@@ -62,6 +64,7 @@ def test_low_confidence_job_fills_only_empty_fields() -> None:
             "prompt_id": JOB_FALLBACK_PROMPT_ID,
             "extracted": {
                 "job_title": "Something Else Entirely",  # must NOT overwrite the deterministic hit
+                "company": "Abbott Labs",
                 "required_skills": ["Selenium", "Java"],
                 "location": "Remote",
                 "rate_or_salary": None,  # LLM found nothing either -- must stay null, not guessed
@@ -80,8 +83,9 @@ def test_low_confidence_job_fills_only_empty_fields() -> None:
     )
     require(record["required_skills"] == ["Selenium", "Java"], "Empty field must be filled from the LLM result")
     require(record["location"] == "Remote", "Empty field must be filled from the LLM result")
+    require(record["company"] == "Abbott Labs", "Empty company field must be filled from the LLM result")
     require(record["rate_or_salary"] is None, "A field the LLM also could not find must stay null, not guessed")
-    require(filled == {"required_skills", "location"}, f"Wrong filled-fields set: {filled}")
+    require(filled == {"required_skills", "location", "company"}, f"Wrong filled-fields set: {filled}")
     require(record["parse_confidence"] >= 0.75, "Confidence must rise once the LLM contributed real fields")
 
 
