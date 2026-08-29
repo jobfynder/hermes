@@ -35,16 +35,27 @@ export function DraftListPage({ onSelect }: { onSelect: (id: string) => void }) 
   const [typeFilter, setTypeFilter] = useState<DraftObjectType | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<DraftStatus | 'all'>('needs_review')
   const [search, setSearch] = useState('')
+  const [autoRefresh, setAutoRefresh] = useState(true)
+  const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null)
 
   function load() {
     setError(null)
     api
       .listDrafts()
-      .then(setDrafts)
+      .then((d) => {
+        setDrafts(d)
+        setLastLoadedAt(new Date())
+      })
       .catch((err) => setError(err.message ?? 'Failed to load drafts'))
   }
 
   useEffect(load, [])
+
+  useEffect(() => {
+    if (!autoRefresh) return
+    const id = window.setInterval(load, 30000)
+    return () => window.clearInterval(id)
+  }, [autoRefresh])
 
   const filtered = useMemo(() => {
     if (!drafts) return []
@@ -77,12 +88,28 @@ export function DraftListPage({ onSelect }: { onSelect: (id: string) => void }) 
             {counts.total} total &middot; {counts.needsReview} awaiting review
           </p>
         </div>
-        <button
-          onClick={load}
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {lastLoadedAt && (
+            <span className="text-xs text-ink-soft">
+              Updated {lastLoadedAt.toLocaleTimeString()}
+            </span>
+          )}
+          <label className="flex items-center gap-1.5 text-xs text-ink-soft">
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+              className="accent-accent"
+            />
+            Auto-refresh
+          </label>
+          <button
+            onClick={load}
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
+          >
+            Refresh
+          </button>
+        </div>
       </header>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">

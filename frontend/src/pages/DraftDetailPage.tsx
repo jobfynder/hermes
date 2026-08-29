@@ -5,6 +5,7 @@ import { draftTypeLabel } from '../components/DraftTypeLabel'
 import { FieldRow } from '../components/FieldRow'
 import { StatusBadge } from '../components/StatusBadge'
 import type {
+  ClaimPrepareResult,
   DraftObject,
   DraftObjectType,
   EmailClaim,
@@ -14,6 +15,21 @@ import type {
   JobRequirementRecord,
   SignatureResult,
 } from '../types'
+
+const CLAIMABLE_TYPES: DraftObjectType[] = ['draft_job_requirement', 'draft_hotlist']
+
+function claimLink(claim: Pick<EmailClaim, 'token'>): string {
+  return `${window.location.origin}/claim/${claim.token}`
+}
+
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
 
 const JOB_FIELDS: [string, keyof JobRequirementRecord][] = [
   ['Job title', 'job_title'],
@@ -59,6 +75,7 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
   const [busy, setBusy] = useState(false)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [showRawText, setShowRawText] = useState(false)
+  const [preparedClaim, setPreparedClaim] = useState<ClaimPrepareResult | null>(null)
 
   function load() {
     setError(null)
@@ -71,7 +88,10 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
       .catch((err) => setError(err.message ?? 'Failed to load draft'))
   }
 
-  useEffect(load, [draftId])
+  useEffect(() => {
+    setPreparedClaim(null)
+    load()
+  }, [draftId])
 
   const pmap = useMemo(() => provenanceMap(provenance), [provenance])
 
@@ -120,6 +140,43 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
       load()
     } catch (err) {
       setActionMessage(err instanceof ApiError ? err.message : 'Reclassify failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handlePrepareClaim() {
+    setBusy(true)
+    setActionMessage(null)
+    try {
+      const result = await api.prepareClaim(draftId)
+      setPreparedClaim(result)
+      if (result.status === 'blocked') {
+        setActionMessage(`Could not prepare claim: ${result.errors.join(', ') || 'not eligible yet'}`)
+      } else {
+        setClaim(result.claim)
+      }
+    } catch (err) {
+      setActionMessage(err instanceof ApiError ? err.message : 'Prepare claim failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleCopyClaimLink(c: Pick<EmailClaim, 'token'>) {
+    const ok = await copyToClipboard(claimLink(c))
+    setActionMessage(ok ? 'Claim link copied.' : 'Could not copy — select and copy the link manually.')
+  }
+
+  async function handleMarkClaimSent(claimId: string) {
+    setBusy(true)
+    setActionMessage(null)
+    try {
+      const updated = await api.markClaimSent(claimId)
+      setClaim(updated)
+      setActionMessage('Marked as sent.')
+    } catch (err) {
+      setActionMessage(err instanceof ApiError ? err.message : 'Mark as sent failed')
     } finally {
       setBusy(false)
     }
@@ -280,7 +337,7 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
             )}
           </Card>
 
-          {claim && (
+          {claim ? (
             <Card title="Claim & verify">
               <FieldRow label="Status" value={claim.status} />
               <FieldRow label="Recruiter" value={`${claim.recruiter_name ?? ''} ${claim.recruiter_email}`.trim()} />
@@ -304,14 +361,81 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
                   ))}
                 </div>
               )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => handleCopyClaimLink(claim)}
+                  className="rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:text-ink"
+                >
+                  Copy claim link
+                </button>
+                {claim.status === 'PENDING_CLAIM' && !claim.sent_at && (
+                  <button
+                    disabled={busy}
+                    onClick={() => handleMarkClaimSent(claim.claim_id)}
+                    className="rounded-lg border border-line bg-paper px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:text-ink disabled:opacity-40"
+                  >
+                    Mark link as sent
+                  </button>
+                )}
+              </div>
             </Card>
+          ) : (
+            CLAIMABLE_TYPES.includes(draft.draft_type) && (
+              <Card title="Claim & verify">
+                <p className="text-sm text-ink-soft">
+                  No claim link generated yet. Preparing one lets a recruiter open a prefilled
+                  listing, correct anything wrong, and publish it themselves.
+                </p>
+                <button
+                  disabled={busy}
+                  onClick={handlePrepareClaim}
+                  className="mt-3 rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+                >
+                  Prepare claim link
+                </button>
+                {preparedClaim?.claim && preparedClaim.status !== 'blocked' && (
+                  <div className="mt-3 space-y-2 rounded-lg border border-line bg-paper p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <code className="mono truncate text-xs text-ink">{claimLink(preparedClaim.claim)}</code>
+                      <button
+                        onClick={() => preparedClaim.claim && handleCopyClaimLink(preparedClaim.claim)}
+                        className="shrink-0 rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink-soft transition hover:text-ink"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    {preparedClaim.email_subject && (
+                      <details className="text-xs text-ink-soft">
+                        <summary className="cursor-pointer select-none">Preview email to send</summary>
+                        <p className="mt-2 font-medium text-ink">{preparedClaim.email_subject}</p>
+                        <pre className="mono mt-1 whitespace-pre-wrap text-ink-soft">{preparedClaim.email_body}</pre>
+                      </details>
+                    )}
+                    <button
+                      disabled={busy}
+                      onClick={() => preparedClaim.claim && handleMarkClaimSent(preparedClaim.claim.claim_id)}
+                      className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink-soft transition hover:text-ink disabled:opacity-40"
+                    >
+                      Mark link as sent
+                    </button>
+                  </div>
+                )}
+              </Card>
+            )
           )}
 
           {draft.metadata.core_push && (
             <Card title="Jobfynder Core">
               <FieldRow label="Push status" value={draft.metadata.core_push.status} />
               {draft.metadata.core_push.core_job_url ? (
-                <FieldRow label="Job listing" value={draft.metadata.core_push.core_job_url} />
+                <a
+                  href={draft.metadata.core_push.core_job_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-block text-sm text-accent hover:underline"
+                >
+                  View job listing →
+                </a>
               ) : (
                 <FieldRow label="Reason" value={draft.metadata.core_push.reason} />
               )}

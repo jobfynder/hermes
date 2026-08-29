@@ -1,4 +1,5 @@
 import type {
+  ClaimPrepareResult,
   DraftObject,
   DraftObjectType,
   DraftPublishResult,
@@ -76,4 +77,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ corrected_draft_type: correctedDraftType }),
     }),
+  prepareClaim: (draftId: string) =>
+    request<ClaimPrepareResult>('/claim/prepare', {
+      method: 'POST',
+      body: JSON.stringify({ draft_id: draftId }),
+    }),
+  markClaimSent: (claimId: string) =>
+    request<EmailClaim>(`/claim/${claimId}/mark-sent`, { method: 'POST' }),
 }

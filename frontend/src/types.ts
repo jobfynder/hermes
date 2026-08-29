@@ -147,6 +147,15 @@ export interface EmailClaim {
   expires_at: string
 }
 
+export interface ClaimPrepareResult {
+  status: 'prepared' | 'already_prepared' | 'blocked'
+  claim: EmailClaim | null
+  email_subject: string | null
+  email_body: string | null
+  claim_url_path: string | null
+  errors: string[]
+}
+
 export interface DraftPublishResult {
   status: string
   draft_id: string
