@@ -69,11 +69,17 @@ def add_canonical_skill(
     category: str = "Tool/Technology",
     skill_type: str = "tool",
     aliases: list[str] | None = None,
+    description: str | None = None,
 ) -> None:
     """Appends a human-approved taxonomy candidate to canonical_skills.json
     and immediately busts the cache so extract_skills() picks it up
     without a redeploy. Refuses a name that's already present (by
     normalized key) rather than writing a duplicate entry.
+
+    description is a one-sentence, recruiter-facing definition (see
+    app/understanding/taxonomy/descriptions.py) -- optional here because
+    the caller may not have one yet at approval time and fill it in via
+    set_skill_description() moments later once the LLM call returns.
 
     The read-modify-write of the JSON file is wrapped in a Postgres
     transaction-scoped advisory lock: two approvals landing at the same
@@ -102,10 +108,36 @@ def add_canonical_skill(
                 "related_skills": [],
                 "confidence": "medium",
                 "source": "taxonomy_candidate_approved",
+                "description": description,
             }
         )
         CANONICAL_SKILLS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         clear_taxonomy_cache()
+
+
+def set_skill_description(name: str, description: str) -> bool:
+    """Fills in or overwrites a canonical skill's recruiter-facing
+    description in place -- used both by the one-time backfill script
+    (scripts/hermes-taxonomy-generate-descriptions.py) and by approval-
+    time auto-generation (app/understanding/taxonomy/candidates.py).
+    Same advisory lock as add_canonical_skill, since this is the same
+    read-modify-write of the same file. Returns False if no skill with
+    this normalized name exists (nothing to update).
+    """
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
+
+        data = json.loads(CANONICAL_SKILLS_PATH.read_text(encoding="utf-8"))
+        key = normalize_taxonomy_key(name)
+
+        for entry in data["skills"]:
+            if normalize_taxonomy_key(entry.get("name")) == key:
+                entry["description"] = description
+                CANONICAL_SKILLS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+                clear_taxonomy_cache()
+                return True
+
+        return False
 
 
 def add_canonical_job_title(

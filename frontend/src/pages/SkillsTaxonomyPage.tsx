@@ -36,7 +36,7 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
     let rows = skills.filter((s) => {
       if (category !== 'all' && (s.category || 'Uncategorized') !== category) return false
       if (q) {
-        const haystack = `${s.name} ${s.aliases.join(' ')}`.toLowerCase()
+        const haystack = `${s.name} ${s.aliases.join(' ')} ${s.description || ''}`.toLowerCase()
         if (!haystack.includes(q)) return false
       }
       return true
@@ -110,33 +110,36 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
             <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
               <th className="px-4 py-3 font-medium">Skill</th>
               <th className="px-4 py-3 font-medium">Category</th>
-              <th className="px-4 py-3 font-medium">Aliases</th>
               <th className="px-4 py-3 font-medium">Times seen</th>
               <th className="px-4 py-3 font-medium">Last seen</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((s) => (
-              <tr key={s.name} className="border-b border-line last:border-0">
-                <td className="px-4 py-2.5 font-medium text-ink">{s.name}</td>
-                <td className="px-4 py-2.5 text-ink-soft">{s.category || '—'}</td>
-                <td className="max-w-64 truncate px-4 py-2.5 text-ink-soft">
-                  {s.aliases.length ? s.aliases.join(', ') : '—'}
+              <tr key={s.name} className="border-b border-line last:border-0 align-top">
+                <td className="max-w-xl px-4 py-2.5">
+                  <div className="font-medium text-ink" title={s.aliases.length ? `Aliases: ${s.aliases.join(', ')}` : undefined}>
+                    {s.name}
+                  </div>
+                  <div className="mt-0.5 text-xs text-ink-soft">
+                    {s.description || 'No description yet.'}
+                  </div>
                 </td>
+                <td className="px-4 py-2.5 text-ink-soft">{s.category || '—'}</td>
                 <td className="px-4 py-2.5 text-ink-soft">{s.times_seen}</td>
                 <td className="px-4 py-2.5 text-ink-soft">{timeAgo(s.last_seen_at)}</td>
               </tr>
             ))}
             {skills && filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-ink-soft">
+                <td colSpan={4} className="px-4 py-10 text-center text-ink-soft">
                   No skills match these filters.
                 </td>
               </tr>
             )}
             {!skills && !error && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-ink-soft">
+                <td colSpan={4} className="px-4 py-10 text-center text-ink-soft">
                   Loading…
                 </td>
               </tr>

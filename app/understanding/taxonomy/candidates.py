@@ -24,6 +24,7 @@ from app.understanding.parsers.job_description_fields import (
     extract_preferred_skills_text,
     extract_required_skills_text,
 )
+from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import (
     add_canonical_job_title,
     add_canonical_skill,
@@ -245,7 +246,19 @@ def approve_taxonomy_candidate(
         return {"approved": False, "reason": "candidate_not_found_or_already_reviewed"}
 
     if row["signal_type"] == "skill":
-        add_canonical_skill(name=row["term"], category=category, skill_type=skill_type)
+        # Best-effort: a description is a nice-to-have annotation the
+        # approval itself never depends on. generate_skill_description
+        # already swallows its own failures and returns None rather than
+        # raising, but wrapped again here so a future change to it can't
+        # turn a missing description into a failed approval.
+        try:
+            description = generate_skill_description(row["term"], category=category)
+        except Exception:  # noqa: BLE001
+            description = None
+
+        add_canonical_skill(
+            name=row["term"], category=category, skill_type=skill_type, description=description
+        )
     elif row["signal_type"] == "job_title":
         add_canonical_job_title(title=row["term"], family=family, seniority=seniority)
 

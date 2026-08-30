@@ -219,6 +219,7 @@ export interface CanonicalSkillEntry {
   related_skills: string[]
   confidence: string | null
   source: string | null
+  description: string | null
   times_seen: number
   last_seen_at: string | null
 }

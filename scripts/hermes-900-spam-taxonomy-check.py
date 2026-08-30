@@ -17,10 +17,13 @@ from app.understanding.taxonomy.candidates import (
     record_taxonomy_candidates,
     reject_taxonomy_candidate,
 )
+from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import (
     add_canonical_skill,
     build_skill_alias_index,
     build_title_alias_index,
+    get_canonical_skill_entries,
+    set_skill_description,
 )
 
 
@@ -378,6 +381,61 @@ def test_intake_pipeline_queues_a_real_unrecognized_job_title() -> None:
     require(match is not None, "A real intake with an unrecognized job title must queue it for review")
 
 
+def test_generate_skill_description_without_litellm_configured_returns_none() -> None:
+    # No LITELLM_API_KEY in the test environment -- must return None
+    # cleanly, never raise, since this whole feature is best-effort by
+    # design (a missing description must never break an approval).
+    import os
+
+    saved = os.environ.pop("LITELLM_API_KEY", None)
+    try:
+        result = generate_skill_description("SomeRandomSkillName", category="Tool/Technology")
+        require(result is None, f"Expected None with no LiteLLM key configured, got {result!r}")
+    finally:
+        if saved is not None:
+            os.environ["LITELLM_API_KEY"] = saved
+
+
+def test_set_skill_description_updates_existing_entry() -> None:
+    add_canonical_skill(name="ZDescriptionTestSkill")
+
+    ok = set_skill_description("ZDescriptionTestSkill", "A test skill used only in automated checks.")
+    require(ok is True, "Setting a description on an existing skill must succeed")
+
+    entries = get_canonical_skill_entries()
+    entry = next(e for e in entries if e["name"] == "ZDescriptionTestSkill")
+    require(
+        entry.get("description") == "A test skill used only in automated checks.",
+        f"Expected the description to be persisted, got {entry.get('description')!r}",
+    )
+
+
+def test_set_skill_description_returns_false_for_unknown_skill() -> None:
+    ok = set_skill_description("ZNoSuchSkillNameAtAll", "irrelevant")
+    require(ok is False, "Setting a description on a skill that doesn't exist must report failure, not raise")
+
+
+def test_approve_skill_candidate_does_not_fail_without_litellm() -> None:
+    # generate_skill_description returning None (no LiteLLM key in this
+    # test environment) must not stop the approval itself from
+    # succeeding -- description is an optional annotation, never a
+    # precondition for approval.
+    record_taxonomy_candidates(
+        text="Required Skills: ZApproveWithoutDescriptionTestSkill, Java\n",
+        draft_id=None,
+        sender_domain="nodesctest.com",
+    )
+    pending = list_taxonomy_candidates(status="pending")
+    match = next(c for c in pending if c["term"] == "ZApproveWithoutDescriptionTestSkill")
+
+    result = approve_taxonomy_candidate(match["id"])
+    require(result["approved"] is True, "Approval must succeed even when no description could be generated")
+
+    entries = get_canonical_skill_entries()
+    entry = next(e for e in entries if e["name"] == "ZApproveWithoutDescriptionTestSkill")
+    require(entry.get("description") is None, "No LiteLLM configured -- description must stay unset, not fabricated")
+
+
 def main() -> None:
     test_blocklist_domain_match()
     print("PASS: blocklist domain match")
@@ -441,6 +499,18 @@ def main() -> None:
 
     test_intake_pipeline_queues_a_real_unrecognized_job_title()
     print("PASS: real intake with an unrecognized job title queues it for review")
+
+    test_generate_skill_description_without_litellm_configured_returns_none()
+    print("PASS: description generation returns None cleanly with no LiteLLM key")
+
+    test_set_skill_description_updates_existing_entry()
+    print("PASS: set_skill_description persists a description on an existing skill")
+
+    test_set_skill_description_returns_false_for_unknown_skill()
+    print("PASS: set_skill_description reports failure for an unknown skill without raising")
+
+    test_approve_skill_candidate_does_not_fail_without_litellm()
+    print("PASS: approving a skill candidate succeeds even when description generation is unavailable")
 
     print("HERMES-900 spam/blocklist/taxonomy-candidate check PASSED")
 
