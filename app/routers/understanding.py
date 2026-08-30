@@ -8,6 +8,7 @@ from app.security.rbac import require_permission
 from app.understanding.extractors.local_file import extract_local_file
 from app.understanding.models import DocumentKind, RawDocument, UnderstandingResult
 from app.understanding.service import build_understanding_result, understand_document
+from app.understanding.taxonomy.candidates import get_skill_usage_stats
 from app.understanding.taxonomy.loader import (
     load_canonical_skills_taxonomy,
     load_job_titles_taxonomy,
@@ -79,6 +80,27 @@ def get_skills_taxonomy(user: dict = Depends(require_permission("understanding:r
 @router.get("/taxonomy/skills/canonical")
 def get_canonical_skills_taxonomy(user: dict = Depends(require_permission("understanding:read"))):
     return load_canonical_skills_taxonomy()
+
+
+@router.get("/taxonomy/skills/browse")
+def browse_canonical_skills(user: dict = Depends(require_permission("understanding:read"))) -> list[dict]:
+    """Canonical skills merged with real usage stats (app/understanding/
+    taxonomy/candidates.py: record_skill_usage) -- what the frontend
+    taxonomy browse page reads. A separate endpoint from /taxonomy/
+    skills/canonical rather than changing that one's response shape,
+    since it's an existing contract other callers may already depend on.
+    """
+    taxonomy = load_canonical_skills_taxonomy()
+    usage = get_skill_usage_stats()
+
+    return [
+        {
+            **entry,
+            "times_seen": usage.get(entry.get("name"), {}).get("times_seen", 0),
+            "last_seen_at": usage.get(entry.get("name"), {}).get("last_seen_at"),
+        }
+        for entry in taxonomy.get("skills", [])
+    ]
 
 
 @router.get("/taxonomy/skills/aliases")

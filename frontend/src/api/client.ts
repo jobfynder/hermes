@@ -1,6 +1,7 @@
 import type {
   AccuracySummary,
   BlocklistEntry,
+  CanonicalSkillEntry,
   ClaimPrepareResult,
   DeleteDraftResult,
   DraftObject,
@@ -124,4 +125,5 @@ export const api = {
       body: JSON.stringify({ record_type: recordType, record_index: recordIndex, corrections }),
     }),
   getAccuracySummary: (days = 30) => request<AccuracySummary>(`/accuracy/summary?days=${days}`),
+  browseSkillsTaxonomy: () => request<CanonicalSkillEntry[]>('/understanding/taxonomy/skills/browse'),
 }

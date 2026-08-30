@@ -95,10 +95,10 @@ def get_taxonomy_candidates(
 def approve_candidate(
     candidate_id: int,
     body: ApproveCandidateRequest,
-    _user: dict = Depends(require_permission("drafts:publish")),
+    user: dict = Depends(require_permission("drafts:publish")),
 ) -> CandidateActionResult:
     result = approve_taxonomy_candidate(
-        candidate_id, category=body.category, skill_type=body.skill_type
+        candidate_id, category=body.category, skill_type=body.skill_type, reviewed_by=user.get("id")
     )
     return CandidateActionResult(ok=result.get("approved", False), term=result.get("term"), reason=result.get("reason"))
 
@@ -106,7 +106,7 @@ def approve_candidate(
 @router.post("/taxonomy-candidates/{candidate_id}/reject", response_model=CandidateActionResult)
 def reject_candidate(
     candidate_id: int,
-    _user: dict = Depends(require_permission("drafts:publish")),
+    user: dict = Depends(require_permission("drafts:publish")),
 ) -> CandidateActionResult:
-    result = reject_taxonomy_candidate(candidate_id)
+    result = reject_taxonomy_candidate(candidate_id, reviewed_by=user.get("id"))
     return CandidateActionResult(ok=result.get("rejected", False), term=result.get("term"), reason=result.get("reason"))

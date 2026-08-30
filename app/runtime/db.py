@@ -216,6 +216,24 @@ CREATE TABLE IF NOT EXISTS taxonomy_candidates (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_taxonomy_candidates_term ON taxonomy_candidates (signal_type, normalized_term);
 CREATE INDEX IF NOT EXISTS idx_taxonomy_candidates_status ON taxonomy_candidates (status);
+
+-- Who approved/rejected a candidate, for audit -- added after the table
+-- above already existed in production, so it's an ALTER not part of the
+-- CREATE TABLE, kept idempotent the same way (safe to run every startup).
+ALTER TABLE taxonomy_candidates ADD COLUMN IF NOT EXISTS reviewed_by TEXT;
+
+-- Real usage counts for canonical_skills.json entries -- which canonical
+-- skills actually show up in real postings, how often, and how recently.
+-- Keyed by the skill's canonical name (matches canonical_skills.json's
+-- own "name" field) rather than a new synthetic id, since the JSON file
+-- stays the source of truth for matching -- this table is additive
+-- (stats + display), not a replacement of it.
+CREATE TABLE IF NOT EXISTS skill_usage_stats (
+    skill_name      TEXT PRIMARY KEY,
+    times_seen      INTEGER NOT NULL DEFAULT 0,
+    last_seen_at    TIMESTAMPTZ,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 """
 
 

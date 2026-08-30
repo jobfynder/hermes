@@ -175,6 +175,7 @@ def approve_taxonomy_candidate(
     candidate_id: int,
     category: str = "Tool/Technology",
     skill_type: str = "tool",
+    reviewed_by: str | None = None,
 ) -> dict:
     """Adds the candidate's term to canonical_skills.json (live immediately,
     no redeploy -- see add_canonical_skill) and marks the queue row
@@ -197,19 +198,19 @@ def approve_taxonomy_candidate(
 
     with cursor() as cur:
         cur.execute(
-            "UPDATE taxonomy_candidates SET status = 'approved', reviewed_at = now() WHERE id = %s",
-            (candidate_id,),
+            "UPDATE taxonomy_candidates SET status = 'approved', reviewed_at = now(), reviewed_by = %s WHERE id = %s",
+            (reviewed_by, candidate_id),
         )
 
     return {"approved": True, "term": row["term"]}
 
 
-def reject_taxonomy_candidate(candidate_id: int) -> dict:
+def reject_taxonomy_candidate(candidate_id: int, reviewed_by: str | None = None) -> dict:
     with cursor() as cur:
         cur.execute(
-            "UPDATE taxonomy_candidates SET status = 'rejected', reviewed_at = now() "
+            "UPDATE taxonomy_candidates SET status = 'rejected', reviewed_at = now(), reviewed_by = %s "
             "WHERE id = %s AND status = 'pending' RETURNING term",
-            (candidate_id,),
+            (reviewed_by, candidate_id),
         )
         row = cur.fetchone()
 
@@ -217,3 +218,37 @@ def reject_taxonomy_candidate(candidate_id: int) -> dict:
         return {"rejected": False, "reason": "candidate_not_found_or_already_reviewed"}
 
     return {"rejected": True, "term": row["term"]}
+
+
+def record_skill_usage(skill_names: list[str]) -> None:
+    """Upserts times_seen/last_seen_at for each canonical skill name a
+    parse actually matched -- called once per draft (app/channels/
+    service.py) with that draft's required+preferred (or primary) skills.
+    Best-effort by design at the call site: a failure here must never
+    block draft creation.
+    """
+    if not skill_names:
+        return
+
+    with cursor() as cur:
+        cur.executemany(
+            "INSERT INTO skill_usage_stats (skill_name, times_seen, last_seen_at, updated_at) "
+            "VALUES (%s, 1, now(), now()) "
+            "ON CONFLICT (skill_name) DO UPDATE SET "
+            "times_seen = skill_usage_stats.times_seen + 1, last_seen_at = now(), updated_at = now()",
+            [(name,) for name in dict.fromkeys(skill_names)],
+        )
+
+
+def get_skill_usage_stats() -> dict[str, dict]:
+    with cursor() as cur:
+        cur.execute("SELECT skill_name, times_seen, last_seen_at FROM skill_usage_stats")
+        rows = cur.fetchall()
+
+    return {
+        row["skill_name"]: {
+            "times_seen": row["times_seen"],
+            "last_seen_at": row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
+        }
+        for row in rows
+    }

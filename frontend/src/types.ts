@@ -210,3 +210,15 @@ export interface AccuracySummary {
   job_requirement_fields: FieldAccuracyStat[]
   hotlist_fields: FieldAccuracyStat[]
 }
+
+export interface CanonicalSkillEntry {
+  name: string
+  category: string | null
+  skill_type: string | null
+  aliases: string[]
+  related_skills: string[]
+  confidence: string | null
+  source: string | null
+  times_seen: number
+  last_seen_at: string | null
+}

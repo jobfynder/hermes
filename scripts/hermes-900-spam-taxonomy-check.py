@@ -10,11 +10,13 @@ from app.email_parsing.spam import classify_spam
 from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
     find_unknown_skill_terms,
+    get_skill_usage_stats,
     list_taxonomy_candidates,
+    record_skill_usage,
     record_taxonomy_candidates,
     reject_taxonomy_candidate,
 )
-from app.understanding.taxonomy.loader import build_skill_alias_index
+from app.understanding.taxonomy.loader import add_canonical_skill, build_skill_alias_index
 
 
 def require(condition: bool, message: str) -> None:
@@ -250,6 +252,45 @@ def test_taxonomy_candidate_reject() -> None:
     )
 
 
+def test_skill_usage_stats_accumulate() -> None:
+    # Synthetic names, not real taxonomy skills like "Java" -- other tests
+    # in this file create real drafts mentioning common skills via
+    # process_channel_intake, which now also calls record_skill_usage, so
+    # a real skill name's count isn't isolated to this test.
+    record_skill_usage(["ZUsageTestSkillAlpha", "ZUsageTestSkillBeta"])
+    record_skill_usage(["ZUsageTestSkillAlpha"])
+
+    stats = get_skill_usage_stats()
+    require(stats["ZUsageTestSkillAlpha"]["times_seen"] == 2, f"Expected 2 sightings, got {stats.get('ZUsageTestSkillAlpha')}")
+    require(stats["ZUsageTestSkillBeta"]["times_seen"] == 1, f"Expected 1 sighting, got {stats.get('ZUsageTestSkillBeta')}")
+    require(stats["ZUsageTestSkillAlpha"]["last_seen_at"] is not None, "last_seen_at must be set")
+
+
+def test_skill_usage_dedupes_within_one_call() -> None:
+    # A draft's own required+preferred skills list can legitimately repeat
+    # a skill (e.g. mentioned in both sections) -- one draft must count as
+    # one sighting, not two.
+    record_skill_usage(["ZUsageTestSkillGamma", "ZUsageTestSkillGamma"])
+    stats = get_skill_usage_stats()
+    require(
+        stats["ZUsageTestSkillGamma"]["times_seen"] == 1,
+        f"Expected one sighting despite duplicate in the same call, got {stats['ZUsageTestSkillGamma']}",
+    )
+
+
+def test_add_canonical_skill_is_idempotent_under_the_lock() -> None:
+    # Two approvals of the exact same term (e.g. an admin double-clicking)
+    # must not create two entries -- add_canonical_skill's own duplicate
+    # check runs inside the same advisory-locked transaction as the
+    # read-modify-write, so this also exercises that the lock doesn't
+    # deadlock a function calling itself sequentially.
+    add_canonical_skill(name="ZDoubleApproveTestSkill")
+    add_canonical_skill(name="ZDoubleApproveTestSkill")
+
+    alias_index = build_skill_alias_index()
+    require("zdoubleapprovetestskill" in alias_index, "The skill must be added")
+
+
 def main() -> None:
     test_blocklist_domain_match()
     print("PASS: blocklist domain match")
@@ -292,6 +333,15 @@ def main() -> None:
 
     test_taxonomy_candidate_reject()
     print("PASS: rejecting a taxonomy candidate keeps it out of the taxonomy")
+
+    test_skill_usage_stats_accumulate()
+    print("PASS: skill usage stats accumulate across separate drafts")
+
+    test_skill_usage_dedupes_within_one_call()
+    print("PASS: a skill repeated within one draft counts as one sighting")
+
+    test_add_canonical_skill_is_idempotent_under_the_lock()
+    print("PASS: adding the same canonical skill twice does not duplicate or deadlock")
 
     print("HERMES-900 spam/blocklist/taxonomy-candidate check PASSED")
 

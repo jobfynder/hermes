@@ -20,7 +20,7 @@ from app.email_parsing.provenance import (
 from app.email_parsing.sender_resolver import looks_forwarded, resolve_original_sender
 from app.email_parsing.signature import parse_email_signature
 from app.email_parsing.spam import classify_spam
-from app.understanding.taxonomy.candidates import record_taxonomy_candidates
+from app.understanding.taxonomy.candidates import record_skill_usage, record_taxonomy_candidates
 from app.runtime.events import emit_event
 from app.runtime.intake_log import (
     record_idempotency_key_if_new,
@@ -586,6 +586,22 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
     except Exception as exc:  # noqa: BLE001
         emit_event(
             "taxonomy_candidates.record_failed",
+            {"duplicate_key": duplicate_key, "error": str(exc)},
+        )
+
+    # Skill usage stats: which canonical skills this draft actually
+    # matched, for the taxonomy browse page's "times seen" / "last seen"
+    # columns. Best-effort, same reasoning as the block above.
+    try:
+        matched_skill_names: list[str] = []
+        for record in (email_parsing.get("records") or []):
+            matched_skill_names.extend(record.get("required_skills") or [])
+            matched_skill_names.extend(record.get("preferred_skills") or [])
+            matched_skill_names.extend(record.get("primary_skills") or [])
+        record_skill_usage(matched_skill_names)
+    except Exception as exc:  # noqa: BLE001
+        emit_event(
+            "skill_usage.record_failed",
             {"duplicate_key": duplicate_key, "error": str(exc)},
         )
 

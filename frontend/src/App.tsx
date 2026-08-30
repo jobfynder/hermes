@@ -5,12 +5,14 @@ import { AccuracyPage } from './pages/AccuracyPage'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftListPage } from './pages/DraftListPage'
 import { ModerationPage } from './pages/ModerationPage'
+import { SkillsTaxonomyPage } from './pages/SkillsTaxonomyPage'
 
 type View =
   | { name: 'list' }
   | { name: 'detail'; draftId: string }
   | { name: 'moderation' }
   | { name: 'accuracy' }
+  | { name: 'skills' }
 
 function AppShell() {
   const [view, setView] = useState<View>({ name: 'list' })
@@ -30,6 +32,14 @@ function AppShell() {
               }`}
             >
               Accuracy
+            </button>
+            <button
+              onClick={() => setView({ name: 'skills' })}
+              className={`text-xs font-medium transition ${
+                view.name === 'skills' ? 'text-accent' : 'text-ink-soft hover:text-ink'
+              }`}
+            >
+              Skills taxonomy
             </button>
             <button
               onClick={() => setView({ name: 'moderation' })}
@@ -57,6 +67,7 @@ function AppShell() {
       )}
       {view.name === 'moderation' && <ModerationPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'accuracy' && <AccuracyPage onBack={() => setView({ name: 'list' })} />}
+      {view.name === 'skills' && <SkillsTaxonomyPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'list' && <DraftListPage onSelect={(id) => setView({ name: 'detail', draftId: id })} />}
     </div>
   )
