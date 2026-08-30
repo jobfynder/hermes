@@ -58,9 +58,12 @@ def add_block(
             "RETURNING id, match_type, value, reason, source_draft_id, created_at",
             (match_type, normalized_value, reason, source_draft_id),
         )
-        row = cur.fetchone()
+        row = dict(cur.fetchone())
 
-    return dict(row)
+    if row.get("created_at"):
+        row["created_at"] = row["created_at"].isoformat()
+
+    return row
 
 
 def remove_block(block_id: int) -> bool:
@@ -75,4 +78,14 @@ def list_blocks() -> list[dict]:
             "SELECT id, match_type, value, reason, source_draft_id, created_at "
             "FROM sender_blocklist ORDER BY created_at DESC"
         )
-        return [dict(row) for row in cur.fetchall()]
+        rows = [dict(row) for row in cur.fetchall()]
+
+    # Same fix as list_taxonomy_candidates (app/understanding/taxonomy/
+    # candidates.py): the response model declares created_at as str, but
+    # psycopg hands back a real datetime -- stringify explicitly rather
+    # than let FastAPI's response validation reject it.
+    for row in rows:
+        if row.get("created_at"):
+            row["created_at"] = row["created_at"].isoformat()
+
+    return rows

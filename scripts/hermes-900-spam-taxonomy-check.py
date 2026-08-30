@@ -2,6 +2,8 @@
 candidate detection.
 """
 
+from fastapi.testclient import TestClient
+
 from app.channels.models import ChannelIntakeRequest, ChannelSender
 from app.channels.service import process_channel_intake
 from app.drafts.service import delete_draft_object, get_draft_object
@@ -25,6 +27,9 @@ from app.understanding.taxonomy.loader import (
     get_canonical_skill_entries,
     set_skill_description,
 )
+from app.main import app
+
+client = TestClient(app)
 
 
 def require(condition: bool, message: str) -> None:
@@ -436,6 +441,52 @@ def test_approve_skill_candidate_does_not_fail_without_litellm() -> None:
     require(entry.get("description") is None, "No LiteLLM configured -- description must stay unset, not fabricated")
 
 
+def test_taxonomy_candidates_endpoint_serializes_timestamps() -> None:
+    # Real production regression: GET /taxonomy-candidates 500'd the
+    # moment a real row existed (an empty result never exercised response
+    # serialization). list_taxonomy_candidates() returned raw datetime
+    # objects for first_seen_at/last_seen_at, but the response model
+    # (TaxonomyCandidateEntry) declares them as str -- FastAPI's response
+    # validation rejects a datetime there instead of stringifying it.
+    # Exercises the actual HTTP response path, not just the DB function,
+    # since that's the layer the bug was actually in.
+    record_taxonomy_candidates(
+        text="Required Skills: ZTimestampSerializationTestSkill, Java\n",
+        draft_id=None,
+        sender_domain="tstest.com",
+    )
+
+    response = client.get("/taxonomy-candidates")
+    require(response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}")
+
+    body = response.json()
+    match = next(c for c in body if c["term"] == "ZTimestampSerializationTestSkill")
+    require(isinstance(match["first_seen_at"], str), "first_seen_at must serialize as a string")
+    require(isinstance(match["last_seen_at"], str), "last_seen_at must serialize as a string")
+
+
+def test_blocklist_endpoints_serialize_timestamps() -> None:
+    # Same class of bug as the taxonomy-candidates endpoint above, in
+    # add_block/list_blocks (app/email_parsing/blocklist.py).
+    create_response = client.post(
+        "/blocklist",
+        json={"match_type": "domain", "value": "tstimestamptest.com", "reason": "test fixture"},
+    )
+    require(
+        create_response.status_code == 200,
+        f"Expected 200 creating a block, got {create_response.status_code}: {create_response.text}",
+    )
+    require(
+        isinstance(create_response.json()["created_at"], str),
+        "POST /blocklist's created_at must serialize as a string",
+    )
+
+    list_response = client.get("/blocklist")
+    require(list_response.status_code == 200, f"Expected 200, got {list_response.status_code}: {list_response.text}")
+    match = next(b for b in list_response.json() if b["value"] == "tstimestamptest.com")
+    require(isinstance(match["created_at"], str), "GET /blocklist's created_at must serialize as a string")
+
+
 def main() -> None:
     test_blocklist_domain_match()
     print("PASS: blocklist domain match")
@@ -511,6 +562,12 @@ def main() -> None:
 
     test_approve_skill_candidate_does_not_fail_without_litellm()
     print("PASS: approving a skill candidate succeeds even when description generation is unavailable")
+
+    test_taxonomy_candidates_endpoint_serializes_timestamps()
+    print("PASS: GET /taxonomy-candidates serializes timestamps without a 500")
+
+    test_blocklist_endpoints_serialize_timestamps()
+    print("PASS: POST and GET /blocklist serialize timestamps without a 500")
 
     print("HERMES-900 spam/blocklist/taxonomy-candidate check PASSED")
 

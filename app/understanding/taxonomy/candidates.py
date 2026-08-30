@@ -218,7 +218,21 @@ def list_taxonomy_candidates(status: str = "pending") -> list[dict]:
             "ORDER BY occurrence_count DESC, last_seen_at DESC",
             (status,),
         )
-        return [dict(row) for row in cur.fetchall()]
+        rows = [dict(row) for row in cur.fetchall()]
+
+    # psycopg returns real datetime objects for TIMESTAMPTZ columns, but
+    # the response model (TaxonomyCandidateEntry in app/routers/
+    # moderation.py) declares first_seen_at/last_seen_at as str -- FastAPI
+    # response validation rejects a raw datetime there instead of
+    # stringifying it, which surfaced as a 500 on GET /taxonomy-candidates
+    # the moment a real row existed (empty results never hit this path).
+    for row in rows:
+        if row.get("first_seen_at"):
+            row["first_seen_at"] = row["first_seen_at"].isoformat()
+        if row.get("last_seen_at"):
+            row["last_seen_at"] = row["last_seen_at"].isoformat()
+
+    return rows
 
 
 def approve_taxonomy_candidate(
