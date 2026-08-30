@@ -22,7 +22,10 @@ from app.understanding.taxonomy.candidates import (
 )
 from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import (
+    TAXONOMY_DIR,
     SkillDescriptionLocked,
+    _TAXONOMY_RUNTIME_DIR,
+    _writable_taxonomy_path,
     add_canonical_skill,
     build_skill_alias_index,
     build_title_alias_index,
@@ -543,6 +546,53 @@ def test_update_skill_description_unknown_skill_reports_failure() -> None:
     require(result["updated"] is False, "Updating a nonexistent skill must report failure, not raise")
 
 
+def test_taxonomy_writes_go_to_the_runtime_copy_not_the_git_tree() -> None:
+    # Real production regression: canonical_skills.json/job_titles.json
+    # writes used to go straight into the git-tracked source file
+    # (TAXONOMY_DIR), which `docker compose build` recreates from git on
+    # every deploy -- an entire description backfill was silently wiped
+    # by the next unrelated deploy. Writes must land in _TAXONOMY_RUNTIME_
+    # DIR (a persistent volume in production) instead, leaving the
+    # git-tracked seed file completely untouched.
+    seed_path = TAXONOMY_DIR / "canonical_skills.json"
+    seed_text_before = seed_path.read_text(encoding="utf-8")
+
+    add_canonical_skill(name="ZRuntimePersistenceTestSkill")
+
+    require(
+        seed_path.read_text(encoding="utf-8") == seed_text_before,
+        "The git-tracked seed file must never be modified by a runtime write",
+    )
+
+    runtime_path = _writable_taxonomy_path("canonical_skills.json")
+    require(
+        runtime_path.parent == _TAXONOMY_RUNTIME_DIR,
+        f"Expected the runtime copy under {_TAXONOMY_RUNTIME_DIR}, got {runtime_path.parent}",
+    )
+    require(
+        "ZRuntimePersistenceTestSkill" in runtime_path.read_text(encoding="utf-8"),
+        "The new skill must actually be persisted in the runtime copy",
+    )
+
+
+def test_runtime_copy_is_not_re_seeded_in_a_fresh_process() -> None:
+    # _writable_taxonomy_path is lru_cache'd per-process, so calling it
+    # twice in the same test proves nothing about surviving a restart --
+    # clear the cache to simulate what a fresh hermes-api process does on
+    # its first call after a restart/redeploy: it must find the existing
+    # runtime file and use it as-is, not re-copy the seed over it and
+    # lose every write made since the copy was first created.
+    add_canonical_skill(name="ZPersistAcrossRestartTestSkill")
+
+    _writable_taxonomy_path.cache_clear()
+    runtime_path_fresh = _writable_taxonomy_path("canonical_skills.json")
+
+    require(
+        "ZPersistAcrossRestartTestSkill" in runtime_path_fresh.read_text(encoding="utf-8"),
+        "A fresh process's first call must not re-seed and lose an earlier write",
+    )
+
+
 def main() -> None:
     test_blocklist_domain_match()
     print("PASS: blocklist domain match")
@@ -636,6 +686,12 @@ def main() -> None:
 
     test_update_skill_description_unknown_skill_reports_failure()
     print("PASS: updating a nonexistent skill reports failure, not an exception")
+
+    test_taxonomy_writes_go_to_the_runtime_copy_not_the_git_tree()
+    print("PASS: taxonomy writes land in the persistent runtime copy, never the git-tracked seed file")
+
+    test_runtime_copy_is_not_re_seeded_in_a_fresh_process()
+    print("PASS: a fresh process's first taxonomy write does not re-seed and lose earlier writes")
 
     print("HERMES-900 spam/blocklist/taxonomy-candidate check PASSED")
 

@@ -1,5 +1,7 @@
 import json
+import os
 import re
+import shutil
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -20,6 +22,35 @@ _TITLES_WRITE_LOCK_KEY = 892310476
 
 
 TAXONOMY_DIR = Path(__file__).resolve().parent
+
+# Where canonical_skills.json/job_titles.json actually get read from and
+# written to at runtime -- NOT TAXONOMY_DIR. TAXONOMY_DIR is inside the
+# git-tracked source tree, which `docker compose build` recreates fresh
+# from git on every deploy; a write there (approving a taxonomy
+# candidate, editing a skill description) lives only in that one
+# container's filesystem layer and silently vanishes the next time the
+# image is rebuilt for anything else. Confirmed the hard way: an entire
+# 181-skill description backfill was wiped by the next unrelated deploy.
+# _hermes-runtime is the persistent volume already mounted into both
+# hermes-api and hermes-graph-consumer (docker-compose.yml) for exactly
+# this kind of runtime-mutable state (see HERMES_ACCESS_CONTROL_FILE).
+# On first use in a given environment, the runtime copy is seeded from
+# the git-tracked baseline in TAXONOMY_DIR; every write after that goes
+# straight to the runtime copy, which a rebuild never touches.
+_TAXONOMY_RUNTIME_DIR = Path(os.getenv("HERMES_TAXONOMY_RUNTIME_DIR", "/hermes-runtime/taxonomy"))
+
+
+@lru_cache(maxsize=None)
+def _writable_taxonomy_path(filename: str) -> Path:
+    seed_path = TAXONOMY_DIR / filename
+    runtime_path = _TAXONOMY_RUNTIME_DIR / filename
+
+    if not runtime_path.exists():
+        runtime_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(seed_path, runtime_path)
+
+    return runtime_path
+
 
 CANONICAL_SKILLS_PATH = TAXONOMY_DIR / "canonical_skills.json"
 # skills.json used to be a second, separately-maintained copy of this same
@@ -97,7 +128,7 @@ def add_canonical_skill(
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
 
-        data = json.loads(CANONICAL_SKILLS_PATH.read_text(encoding="utf-8"))
+        data = json.loads(_writable_taxonomy_path("canonical_skills.json").read_text(encoding="utf-8"))
         existing_keys = {normalize_taxonomy_key(entry.get("name")) for entry in data["skills"]}
 
         if normalize_taxonomy_key(name) in existing_keys:
@@ -117,7 +148,7 @@ def add_canonical_skill(
                 "description_source": "ai_generated" if description else None,
             }
         )
-        CANONICAL_SKILLS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         clear_taxonomy_cache()
 
 
@@ -157,7 +188,7 @@ def set_skill_description(
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
 
-        data = json.loads(CANONICAL_SKILLS_PATH.read_text(encoding="utf-8"))
+        data = json.loads(_writable_taxonomy_path("canonical_skills.json").read_text(encoding="utf-8"))
         key = normalize_taxonomy_key(name)
 
         for entry in data["skills"]:
@@ -171,7 +202,7 @@ def set_skill_description(
                     entry["description_edited_by"] = edited_by
                     entry["description_edited_at"] = _utc_now_iso()
 
-                CANONICAL_SKILLS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+                _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
                 clear_taxonomy_cache()
                 return True
 
@@ -192,7 +223,7 @@ def add_canonical_job_title(
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
 
-        data = json.loads(JOB_TITLES_PATH.read_text(encoding="utf-8"))
+        data = json.loads(_writable_taxonomy_path("job_titles.json").read_text(encoding="utf-8"))
         existing_keys = {normalize_taxonomy_key(entry.get("title")) for entry in data["titles"]}
 
         if normalize_taxonomy_key(title) in existing_keys:
@@ -210,18 +241,18 @@ def add_canonical_job_title(
                 "source": "taxonomy_candidate_approved",
             }
         )
-        JOB_TITLES_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         clear_taxonomy_cache()
 
 
 @lru_cache(maxsize=1)
 def load_skills_taxonomy() -> dict[str, Any]:
-    return _load_json(SKILLS_TAXONOMY_PATH)
+    return _load_json(_writable_taxonomy_path("canonical_skills.json"))
 
 
 @lru_cache(maxsize=1)
 def load_canonical_skills_taxonomy() -> dict[str, Any]:
-    return _load_json(CANONICAL_SKILLS_PATH)
+    return _load_json(_writable_taxonomy_path("canonical_skills.json"))
 
 
 @lru_cache(maxsize=1)
@@ -231,7 +262,7 @@ def load_skill_aliases_taxonomy() -> dict[str, Any]:
 
 @lru_cache(maxsize=1)
 def load_job_titles_taxonomy() -> dict[str, Any]:
-    return _load_json(JOB_TITLES_PATH)
+    return _load_json(_writable_taxonomy_path("job_titles.json"))
 
 
 @lru_cache(maxsize=1)
