@@ -578,10 +578,17 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             if request.sender and request.sender.email and "@" in request.sender.email
             else None
         )
+        candidate_job_titles: list[str] = []
+        for record in (email_parsing.get("records") or []):
+            title = record.get("job_title") or record.get("primary_job_title")
+            if title:
+                candidate_job_titles.append(title)
+
         record_taxonomy_candidates(
             text=request.text or "",
             draft_id=draft.draft_id,
             sender_domain=sender_domain,
+            job_titles=candidate_job_titles,
         )
     except Exception as exc:  # noqa: BLE001
         emit_event(

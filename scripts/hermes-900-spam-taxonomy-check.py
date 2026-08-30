@@ -9,6 +9,7 @@ from app.email_parsing.blocklist import add_block, is_blocked, list_blocks, remo
 from app.email_parsing.spam import classify_spam
 from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
+    find_unknown_job_title,
     find_unknown_skill_terms,
     get_skill_usage_stats,
     list_taxonomy_candidates,
@@ -16,7 +17,11 @@ from app.understanding.taxonomy.candidates import (
     record_taxonomy_candidates,
     reject_taxonomy_candidate,
 )
-from app.understanding.taxonomy.loader import add_canonical_skill, build_skill_alias_index
+from app.understanding.taxonomy.loader import (
+    add_canonical_skill,
+    build_skill_alias_index,
+    build_title_alias_index,
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -291,6 +296,88 @@ def test_add_canonical_skill_is_idempotent_under_the_lock() -> None:
     require("zdoubleapprovetestskill" in alias_index, "The skill must be added")
 
 
+def test_unknown_job_title_detected() -> None:
+    # Real production regression: "ORMB Technical Consultant" never
+    # entered the review queue at all -- record_taxonomy_candidates only
+    # ever recorded skill terms, despite the DB schema and admin
+    # endpoints already supporting signal_type='job_title'.
+    require(
+        find_unknown_job_title("ZOrmbTechnicalConsultantXyz") == "ZOrmbTechnicalConsultantXyz",
+        "A genuinely unrecognized job title must be surfaced",
+    )
+    require(
+        find_unknown_job_title("Senior Java Developer") is None,
+        "A job title already in the taxonomy must not be flagged as unknown",
+    )
+    require(find_unknown_job_title(None) is None, "A missing title must not raise or be flagged")
+    require(find_unknown_job_title("") is None, "An empty title must not be flagged")
+
+
+def test_record_taxonomy_candidates_queues_job_titles() -> None:
+    record_taxonomy_candidates(
+        text="Required Skills: Java, Spring Boot",
+        draft_id=None,
+        sender_domain="titletest.com",
+        job_titles=["ZUnknownTitleForQueueTest"],
+    )
+
+    pending = list_taxonomy_candidates(status="pending")
+    match = next((c for c in pending if c["term"] == "ZUnknownTitleForQueueTest"), None)
+
+    require(match is not None, "The unrecognized job title must appear in the pending queue")
+    require(match["signal_type"] == "job_title", f"Expected signal_type='job_title', got {match['signal_type']}")
+
+
+def test_approve_job_title_candidate_adds_it_live() -> None:
+    record_taxonomy_candidates(
+        text="",
+        draft_id=None,
+        sender_domain="titleapprovetest.com",
+        job_titles=["ZApprovedJobTitleTest"],
+    )
+
+    pending = list_taxonomy_candidates(status="pending")
+    match = next(c for c in pending if c["term"] == "ZApprovedJobTitleTest")
+
+    title_index_before = build_title_alias_index()
+    require("zapprovedjobtitletest" not in title_index_before, "Must not be matchable before approval")
+
+    result = approve_taxonomy_candidate(match["id"], family="Test Family", seniority="mid")
+    require(result["approved"] is True, "Approval must succeed")
+
+    title_index_after = build_title_alias_index()
+    require(
+        "zapprovedjobtitletest" in title_index_after,
+        "Approving a job title candidate must make it immediately matchable",
+    )
+
+
+def test_intake_pipeline_queues_a_real_unrecognized_job_title() -> None:
+    request = ChannelIntakeRequest(
+        channel="email",
+        source_message_id="msg-jobtitle-candidate-1",
+        sender=ChannelSender(email="recruiter@jobtitleintaketest.com"),
+        content_type="text",
+        # intended_document_kind pins classification directly (mirrors
+        # what real recipient-address routing does for jobs@/hotlists@)
+        # so this test exercises job-title-candidate queuing specifically,
+        # not the separate hotlist-vs-requirement content classifier.
+        metadata={"intended_document_kind": "job_description"},
+        text=(
+            "Job Title: ZBrandNewRoleNameForIntakeTest\n"
+            "Required Skills: Java, Spring Boot, AWS\n\n"
+            "Long enough body text so the requirement-evidence check passes cleanly.\n"
+        ),
+    )
+
+    response = process_channel_intake(request)
+    require(response.draft_object_type == "draft_job_requirement", "Must still parse as a normal job requirement")
+
+    pending = list_taxonomy_candidates(status="pending")
+    match = next((c for c in pending if c["term"] == "ZBrandNewRoleNameForIntakeTest"), None)
+    require(match is not None, "A real intake with an unrecognized job title must queue it for review")
+
+
 def main() -> None:
     test_blocklist_domain_match()
     print("PASS: blocklist domain match")
@@ -342,6 +429,18 @@ def main() -> None:
 
     test_add_canonical_skill_is_idempotent_under_the_lock()
     print("PASS: adding the same canonical skill twice does not duplicate or deadlock")
+
+    test_unknown_job_title_detected()
+    print("PASS: an unrecognized job title is detected, a known one is not")
+
+    test_record_taxonomy_candidates_queues_job_titles()
+    print("PASS: an unrecognized job title is queued with signal_type='job_title'")
+
+    test_approve_job_title_candidate_adds_it_live()
+    print("PASS: approving a job title candidate adds it to the taxonomy immediately")
+
+    test_intake_pipeline_queues_a_real_unrecognized_job_title()
+    print("PASS: real intake with an unrecognized job title queues it for review")
 
     print("HERMES-900 spam/blocklist/taxonomy-candidate check PASSED")
 

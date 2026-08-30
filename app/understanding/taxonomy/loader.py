@@ -6,10 +6,12 @@ from typing import Any
 
 from app.runtime.db import cursor
 
-# Arbitrary constant identifying this specific lock's purpose (any bigint
-# works -- Postgres advisory locks are just a namespace of integers the
-# application assigns meaning to itself).
+# Arbitrary constants identifying each lock's purpose (any bigint works --
+# Postgres advisory locks are just a namespace of integers the application
+# assigns meaning to itself). Distinct keys so a skill approval and a job
+# title approval -- different files -- never block each other.
 _SKILLS_WRITE_LOCK_KEY = 892310475
+_TITLES_WRITE_LOCK_KEY = 892310476
 
 
 TAXONOMY_DIR = Path(__file__).resolve().parent
@@ -103,6 +105,42 @@ def add_canonical_skill(
             }
         )
         CANONICAL_SKILLS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        clear_taxonomy_cache()
+
+
+def add_canonical_job_title(
+    title: str,
+    family: str = "Unclassified",
+    seniority: str = "unspecified",
+    aliases: list[str] | None = None,
+) -> None:
+    """Same pattern as add_canonical_skill above, for job_titles.json --
+    same advisory lock (a distinct key so a skill approval and a title
+    approval never block each other), same live-immediately-no-redeploy
+    cache bust, same refuse-a-duplicate-by-normalized-key behavior.
+    """
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
+
+        data = json.loads(JOB_TITLES_PATH.read_text(encoding="utf-8"))
+        existing_keys = {normalize_taxonomy_key(entry.get("title")) for entry in data["titles"]}
+
+        if normalize_taxonomy_key(title) in existing_keys:
+            clear_taxonomy_cache()
+            return
+
+        data["titles"].append(
+            {
+                "title": title,
+                "family": family,
+                "seniority": seniority,
+                "aliases": aliases or [],
+                "related_titles": [],
+                "confidence": "medium",
+                "source": "taxonomy_candidate_approved",
+            }
+        )
+        JOB_TITLES_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         clear_taxonomy_cache()
 
 

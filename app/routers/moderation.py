@@ -44,8 +44,12 @@ class TaxonomyCandidateEntry(BaseModel):
 
 
 class ApproveCandidateRequest(BaseModel):
+    # Used when approving a signal_type='skill' candidate.
     category: str = "Tool/Technology"
     skill_type: str = "tool"
+    # Used when approving a signal_type='job_title' candidate.
+    family: str = "Unclassified"
+    seniority: str = "unspecified"
 
 
 class CandidateActionResult(BaseModel):
@@ -98,7 +102,12 @@ def approve_candidate(
     user: dict = Depends(require_permission("drafts:publish")),
 ) -> CandidateActionResult:
     result = approve_taxonomy_candidate(
-        candidate_id, category=body.category, skill_type=body.skill_type, reviewed_by=user.get("id")
+        candidate_id,
+        category=body.category,
+        skill_type=body.skill_type,
+        family=body.family,
+        seniority=body.seniority,
+        reviewed_by=user.get("id"),
     )
     return CandidateActionResult(ok=result.get("approved", False), term=result.get("term"), reason=result.get("reason"))
 
