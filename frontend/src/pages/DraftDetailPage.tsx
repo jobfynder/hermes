@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../api/client'
 import { ConfidenceMeter } from '../components/ConfidenceMeter'
-import { draftTypeLabel } from '../components/DraftTypeLabel'
+import { draftDisplayTitle, draftTypeLabel } from '../components/DraftTypeLabel'
 import { FieldRow } from '../components/FieldRow'
 import { ProvenanceChip } from '../components/ProvenanceChip'
 import { StatusBadge } from '../components/StatusBadge'
@@ -269,7 +269,7 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
       <header className="mt-3 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold text-ink">{draft.title || '(untitled)'}</h1>
+            <h1 className="text-xl font-semibold text-ink">{draftDisplayTitle(draft)}</h1>
             <StatusBadge status={draft.status} />
           </div>
           <p className="mt-1 text-sm text-ink-soft">
