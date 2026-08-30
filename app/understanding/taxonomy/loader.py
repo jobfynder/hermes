@@ -1,10 +1,15 @@
 import json
 import re
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from app.runtime.db import cursor
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).isoformat()
 
 # Arbitrary constants identifying each lock's purpose (any bigint works --
 # Postgres advisory locks are just a namespace of integers the application
@@ -109,20 +114,45 @@ def add_canonical_skill(
                 "confidence": "medium",
                 "source": "taxonomy_candidate_approved",
                 "description": description,
+                "description_source": "ai_generated" if description else None,
             }
         )
         CANONICAL_SKILLS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         clear_taxonomy_cache()
 
 
-def set_skill_description(name: str, description: str) -> bool:
+class SkillDescriptionLocked(Exception):
+    """Raised when an AI-generated write tries to overwrite a
+    human-edited description -- see set_skill_description. Distinct from
+    returning False (that means "no such skill"; this means "the skill
+    exists but a human already made this call, so no")."""
+
+
+def set_skill_description(
+    name: str,
+    description: str,
+    source: str = "ai_generated",
+    edited_by: str | None = None,
+) -> bool:
     """Fills in or overwrites a canonical skill's recruiter-facing
-    description in place -- used both by the one-time backfill script
-    (scripts/hermes-taxonomy-generate-descriptions.py) and by approval-
-    time auto-generation (app/understanding/taxonomy/candidates.py).
+    description in place -- used by the one-time backfill script
+    (scripts/hermes-taxonomy-generate-descriptions.py), approval-time
+    auto-generation, and the reviewer inline-edit endpoint (both in
+    app/understanding/taxonomy/candidates.py). Returns False if no skill
+    with this normalized name exists (nothing to update).
+
+    source is stamped on the entry as description_source so the taxonomy
+    browse page can show "AI" vs "edited" -- and, more importantly, is
+    what a human edit is protected by: once a description carries
+    source="human_edited", a caller passing source="ai_generated" (i.e.
+    an automated regeneration, not a human hitting Save) raises
+    SkillDescriptionLocked instead of silently clobbering the edit. A
+    human calling this again (source="human_edited") always wins,
+    including over another human's earlier edit -- last save wins is the
+    expected behavior for a shared admin field.
+
     Same advisory lock as add_canonical_skill, since this is the same
-    read-modify-write of the same file. Returns False if no skill with
-    this normalized name exists (nothing to update).
+    read-modify-write of the same file.
     """
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
@@ -132,7 +162,15 @@ def set_skill_description(name: str, description: str) -> bool:
 
         for entry in data["skills"]:
             if normalize_taxonomy_key(entry.get("name")) == key:
+                if source == "ai_generated" and entry.get("description_source") == "human_edited":
+                    raise SkillDescriptionLocked(name)
+
                 entry["description"] = description
+                entry["description_source"] = source
+                if source == "human_edited":
+                    entry["description_edited_by"] = edited_by
+                    entry["description_edited_at"] = _utc_now_iso()
+
                 CANONICAL_SKILLS_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
                 clear_taxonomy_cache()
                 return True

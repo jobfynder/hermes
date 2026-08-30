@@ -8,6 +8,7 @@ from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
     list_taxonomy_candidates,
     reject_taxonomy_candidate,
+    update_skill_description,
 )
 
 
@@ -119,3 +120,27 @@ def reject_candidate(
 ) -> CandidateActionResult:
     result = reject_taxonomy_candidate(candidate_id, reviewed_by=user.get("id"))
     return CandidateActionResult(ok=result.get("rejected", False), term=result.get("term"), reason=result.get("reason"))
+
+
+class UpdateSkillDescriptionRequest(BaseModel):
+    name: str
+    description: str
+
+
+class UpdateSkillDescriptionResult(BaseModel):
+    updated: bool
+    reason: str | None = None
+
+
+@router.patch("/taxonomy/skills/description", response_model=UpdateSkillDescriptionResult)
+def edit_skill_description(
+    body: UpdateSkillDescriptionRequest,
+    user: dict = Depends(require_permission("drafts:publish")),
+) -> UpdateSkillDescriptionResult:
+    """The Skills taxonomy page's inline edit. name+body rather than a
+    path param -- skill names can contain characters ("C++", ".NET")
+    that are needlessly fragile to URL-encode/decode correctly for what
+    is already a POST-shaped admin action.
+    """
+    result = update_skill_description(body.name, body.description, edited_by=user.get("id"))
+    return UpdateSkillDescriptionResult(updated=result.get("updated", False), reason=result.get("reason"))

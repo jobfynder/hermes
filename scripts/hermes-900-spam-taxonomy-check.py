@@ -18,9 +18,11 @@ from app.understanding.taxonomy.candidates import (
     record_skill_usage,
     record_taxonomy_candidates,
     reject_taxonomy_candidate,
+    update_skill_description,
 )
 from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import (
+    SkillDescriptionLocked,
     add_canonical_skill,
     build_skill_alias_index,
     build_title_alias_index,
@@ -487,6 +489,60 @@ def test_blocklist_endpoints_serialize_timestamps() -> None:
     require(isinstance(match["created_at"], str), "GET /blocklist's created_at must serialize as a string")
 
 
+def test_human_edit_stamps_source_and_audit_fields() -> None:
+    add_canonical_skill(name="ZHumanEditTestSkill")
+
+    result = update_skill_description("ZHumanEditTestSkill", "A skill used only in automated checks.", edited_by="reviewer-1")
+    require(result["updated"] is True, "Human edit must succeed")
+
+    entries = get_canonical_skill_entries()
+    entry = next(e for e in entries if e["name"] == "ZHumanEditTestSkill")
+    require(entry["description"] == "A skill used only in automated checks.", "Description must be persisted")
+    require(entry["description_source"] == "human_edited", f"Expected source='human_edited', got {entry.get('description_source')!r}")
+    require(entry["description_edited_by"] == "reviewer-1", f"Expected edited_by='reviewer-1', got {entry.get('description_edited_by')!r}")
+    require(entry.get("description_edited_at") is not None, "description_edited_at must be stamped")
+
+
+def test_ai_regeneration_cannot_overwrite_a_human_edit() -> None:
+    add_canonical_skill(name="ZProtectedHumanEditSkill")
+    update_skill_description("ZProtectedHumanEditSkill", "Human-written definition.", edited_by="reviewer-2")
+
+    raised = False
+    try:
+        set_skill_description("ZProtectedHumanEditSkill", "AI would overwrite this.", source="ai_generated")
+    except SkillDescriptionLocked:
+        raised = True
+
+    require(raised, "An ai_generated write must be refused once a description is human_edited")
+
+    entries = get_canonical_skill_entries()
+    entry = next(e for e in entries if e["name"] == "ZProtectedHumanEditSkill")
+    require(
+        entry["description"] == "Human-written definition.",
+        f"The human-written description must survive the blocked AI write attempt, got {entry['description']!r}",
+    )
+
+
+def test_update_skill_description_endpoint() -> None:
+    add_canonical_skill(name="ZEndpointEditTestSkill")
+
+    response = client.patch(
+        "/taxonomy/skills/description",
+        json={"name": "ZEndpointEditTestSkill", "description": "Set through the real HTTP endpoint."},
+    )
+    require(response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}")
+    require(response.json()["updated"] is True, "Endpoint must report the update succeeded")
+
+    entries = get_canonical_skill_entries()
+    entry = next(e for e in entries if e["name"] == "ZEndpointEditTestSkill")
+    require(entry["description"] == "Set through the real HTTP endpoint.", "Description must actually be written")
+
+
+def test_update_skill_description_unknown_skill_reports_failure() -> None:
+    result = update_skill_description("ZNoSuchSkillForEditTest", "irrelevant")
+    require(result["updated"] is False, "Updating a nonexistent skill must report failure, not raise")
+
+
 def main() -> None:
     test_blocklist_domain_match()
     print("PASS: blocklist domain match")
@@ -568,6 +624,18 @@ def main() -> None:
 
     test_blocklist_endpoints_serialize_timestamps()
     print("PASS: POST and GET /blocklist serialize timestamps without a 500")
+
+    test_human_edit_stamps_source_and_audit_fields()
+    print("PASS: a human edit stamps description_source/edited_by/edited_at")
+
+    test_ai_regeneration_cannot_overwrite_a_human_edit()
+    print("PASS: an AI regeneration attempt is refused once a description is human-edited")
+
+    test_update_skill_description_endpoint()
+    print("PASS: PATCH /taxonomy/skills/description updates a real skill")
+
+    test_update_skill_description_unknown_skill_reports_failure()
+    print("PASS: updating a nonexistent skill reports failure, not an exception")
 
     print("HERMES-900 spam/blocklist/taxonomy-candidate check PASSED")
 

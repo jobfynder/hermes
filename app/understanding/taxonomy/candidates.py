@@ -31,6 +31,7 @@ from app.understanding.taxonomy.loader import (
     build_skill_alias_index,
     build_title_alias_index,
     normalize_taxonomy_key,
+    set_skill_description,
 )
 
 # Common non-skill filler that shows up inside skills lists but is not
@@ -332,3 +333,19 @@ def get_skill_usage_stats() -> dict[str, dict]:
         }
         for row in rows
     }
+
+
+def update_skill_description(name: str, description: str, edited_by: str | None = None) -> dict:
+    """The one and only write path for the Skills taxonomy page's inline
+    edit -- always source="human_edited", so this can never be blocked
+    by set_skill_description's own protection against an automated
+    regeneration clobbering a prior human edit (that guard only fires
+    against source="ai_generated" callers). Clearing a description is
+    just editing it to an empty string; there is no separate delete.
+    """
+    ok = set_skill_description(name, description, source="human_edited", edited_by=edited_by)
+
+    if not ok:
+        return {"updated": False, "reason": "skill_not_found"}
+
+    return {"updated": True, "name": name}

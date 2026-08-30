@@ -126,4 +126,9 @@ export const api = {
     }),
   getAccuracySummary: (days = 30) => request<AccuracySummary>(`/accuracy/summary?days=${days}`),
   browseSkillsTaxonomy: () => request<CanonicalSkillEntry[]>('/understanding/taxonomy/skills/browse'),
+  updateSkillDescription: (name: string, description: string) =>
+    request<{ updated: boolean; reason?: string }>('/taxonomy/skills/description', {
+      method: 'PATCH',
+      body: JSON.stringify({ name, description }),
+    }),
 }

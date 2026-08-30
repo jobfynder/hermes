@@ -220,6 +220,9 @@ export interface CanonicalSkillEntry {
   confidence: string | null
   source: string | null
   description: string | null
+  description_source: 'ai_generated' | 'human_edited' | null
+  description_edited_by: string | null
+  description_edited_at: string | null
   times_seen: number
   last_seen_at: string | null
 }

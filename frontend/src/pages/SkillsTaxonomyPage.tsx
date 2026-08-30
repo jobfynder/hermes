@@ -13,6 +13,102 @@ function timeAgo(iso: string | null): string {
   return `${days} days ago`
 }
 
+function DescriptionCell({
+  skill,
+  onSave,
+}: {
+  skill: CanonicalSkillEntry
+  onSave: (name: string, description: string) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  function startEdit() {
+    setDraft(skill.description || '')
+    setSaveError(null)
+    setEditing(true)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSave(skill.name, draft.trim())
+      setEditing(false)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="mt-1">
+        <textarea
+          autoFocus
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setEditing(false)
+          }}
+          rows={2}
+          placeholder="One clear, jargon-free sentence a recruiter would understand instantly."
+          className="w-full rounded-lg border border-accent bg-paper px-2.5 py-1.5 text-xs text-ink outline-none"
+        />
+        {saveError && <div className="mt-1 text-xs text-fail">{saveError}</div>}
+        <div className="mt-1.5 flex gap-2">
+          <button
+            disabled={saving}
+            onClick={handleSave}
+            className="rounded-md bg-accent px-2 py-0.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            disabled={saving}
+            onClick={() => setEditing(false)}
+            className="rounded-md border border-line px-2 py-0.5 text-xs text-ink-soft transition hover:text-ink disabled:opacity-40"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group mt-0.5 flex items-start gap-2">
+      <span className="text-xs text-ink-soft">{skill.description || 'No description yet.'}</span>
+      <button
+        onClick={startEdit}
+        title="Edit description"
+        className="shrink-0 rounded-md px-1 text-xs text-ink-soft opacity-0 transition hover:bg-paper hover:text-ink group-hover:opacity-100"
+      >
+        Edit
+      </button>
+      {skill.description_source === 'human_edited' ? (
+        <span
+          className="shrink-0 rounded-full bg-line px-1.5 py-0.5 text-[10px] font-medium text-ink-soft"
+          title={
+            skill.description_edited_by
+              ? `Edited by ${skill.description_edited_by}${skill.description_edited_at ? ` on ${new Date(skill.description_edited_at).toLocaleDateString()}` : ''}`
+              : 'Edited by a reviewer'
+          }
+        >
+          edited
+        </span>
+      ) : skill.description_source === 'ai_generated' ? (
+        <span className="shrink-0 rounded-full bg-line px-1.5 py-0.5 text-[10px] font-medium text-ink-soft" title="Generated automatically, not yet reviewed">
+          AI
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
   const [skills, setSkills] = useState<CanonicalSkillEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -20,9 +116,29 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
   const [category, setCategory] = useState('all')
   const [sortKey, setSortKey] = useState<SortKey>('times_seen')
 
-  useEffect(() => {
+  function load() {
     api.browseSkillsTaxonomy().then(setSkills).catch((err) => setError(err.message))
-  }, [])
+  }
+
+  useEffect(load, [])
+
+  async function handleSaveDescription(name: string, description: string) {
+    const result = await api.updateSkillDescription(name, description)
+    if (!result.updated) {
+      throw new Error(result.reason || 'Update failed')
+    }
+    // Update in place rather than a full reload, so the rest of the
+    // table (scroll position, other rows) doesn't jump.
+    setSkills((prev) =>
+      prev
+        ? prev.map((s) =>
+            s.name === name
+              ? { ...s, description, description_source: 'human_edited' }
+              : s,
+          )
+        : prev,
+    )
+  }
 
   const categories = useMemo(() => {
     if (!skills) return []
@@ -121,9 +237,7 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
                   <div className="font-medium text-ink" title={s.aliases.length ? `Aliases: ${s.aliases.join(', ')}` : undefined}>
                     {s.name}
                   </div>
-                  <div className="mt-0.5 text-xs text-ink-soft">
-                    {s.description || 'No description yet.'}
-                  </div>
+                  <DescriptionCell skill={s} onSave={handleSaveDescription} />
                 </td>
                 <td className="px-4 py-2.5 text-ink-soft">{s.category || '—'}</td>
                 <td className="px-4 py-2.5 text-ink-soft">{s.times_seen}</td>
