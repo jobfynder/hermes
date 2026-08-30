@@ -5,6 +5,8 @@ from uuid import uuid4
 from psycopg import errors
 
 from app.email_parsing.classification_learning import record_classification_correction
+from app.email_parsing.llm_fallback import apply_hotlist_fallback, apply_job_requirement_fallback
+from app.email_parsing.parsers import parse_email_business_records
 from app.email_parsing.provenance import (
     HOTLIST_CONSULTANT_FIELDS,
     JOB_REQUIREMENT_FIELDS,
@@ -27,9 +29,33 @@ _LEARNABLE_DRAFT_TYPES: dict[DraftObjectType, str] = {
 }
 
 
+def _first_email_record_field(payload: dict, field: str) -> Any:
+    """The real, deterministic-parser-produced job_title/candidate_name
+    lives at payload['structured_data']['email_parsing']['records'][0]
+    [field] -- never at payload[field] directly, which is what every
+    email-channel draft actually has (see create_draft_object's callers
+    in app/channels/service.py: the payload it builds only ever carries
+    top-level "text"/"document_kind"/"structured_data", never a bare
+    "job_title"). _title_from_payload's own payload.get("job_title")
+    check was therefore dead code for every real email draft -- every
+    job-requirement title fell straight through to the generic "Draft
+    Job Requirement" fallback, which is why the whole review list looked
+    identical no matter which posting a row was. Kept payload.get(field)
+    as the first check anyway for any future caller that does pass a
+    flat payload (e.g. a non-email intake path).
+    """
+    records = ((payload.get("structured_data") or {}).get("email_parsing") or {}).get("records") or []
+    return records[0].get(field) if records else None
+
+
 def _title_from_payload(draft_type: DraftObjectType, payload: dict) -> str:
     if draft_type == "draft_job_requirement":
-        return payload.get("job_title") or payload.get("title") or "Draft Job Requirement"
+        return (
+            payload.get("job_title")
+            or _first_email_record_field(payload, "job_title")
+            or payload.get("title")
+            or "Draft Job Requirement"
+        )
 
     if draft_type in {
         "draft_consultant_profile",
@@ -39,7 +65,18 @@ def _title_from_payload(draft_type: DraftObjectType, payload: dict) -> str:
         return payload.get("display_name") or payload.get("name") or "Draft Profile"
 
     if draft_type == "draft_hotlist":
-        return payload.get("name") or "Draft Hotlist"
+        if payload.get("name"):
+            return payload["name"]
+
+        records = ((payload.get("structured_data") or {}).get("email_parsing") or {}).get("records") or []
+        if len(records) == 1:
+            name = records[0].get("candidate_name")
+            if name:
+                return name
+        elif records:
+            return f"Hotlist — {len(records)} consultants"
+
+        return "Draft Hotlist"
 
     if draft_type == "draft_vendor_list":
         return payload.get("name") or "Draft Vendor List"
@@ -292,28 +329,76 @@ def reject_draft_object(draft_id: str, reason: str | None = None) -> DraftPublis
 
 def reclassify_draft_object(draft_id: str, corrected_draft_type: DraftObjectType) -> DraftObject | None:
     """A reviewer determined this draft's document kind was wrong (e.g.
-    parsed as a job requirement but is actually a hotlist, or vice versa).
-    Updates draft_type in place -- this corrects an existing record, it
-    does not create a second draft for the same email.
+    parsed as a resume but is actually a job requirement, or hotlist vs.
+    requirement). Updates draft_type in place -- this corrects an
+    existing record, it does not create a second draft for the same
+    email.
 
-    When both the original and corrected type are one of the two kinds
-    classify_email_by_confidence() actually distinguishes between (hotlist
-    vs job requirement), also records the correction for
-    app/email_parsing/classification_learning.py to learn from. A
-    correction into/out of any other draft type (resume, vendor list,
-    etc.) is still applied but not fed into that loop -- the classifier
-    it teaches never chooses those.
+    Critical, and not obvious from the name: flipping draft_type alone
+    used to leave structured_data.email_parsing exactly as it was under
+    the WRONG original classification -- which for a job_requirement/
+    hotlist correction almost always means an empty records[] (parse_
+    email_business_records refuses to extract job/hotlist fields from a
+    document_kind it wasn't given, see its own "unsupported_email_
+    document_kind" warning). The draft would show the corrected type in
+    the list, but have nothing a reviewer could actually publish.
+    Confirmed against a real production draft: an email correctly
+    misclassified as a resume, reclassified to draft_job_requirement by
+    a reviewer, ended up with zero parsed fields and a stale "Draft
+    Profile" title. Fixed here by actually re-running the deterministic
+    parser (+ LLM fallback, same as real intake) against the draft's own
+    stored text under the corrected document_kind, whenever the
+    correction target is one of the two kinds that has one --
+    reclassifying into/out of a profile/vendor-list/channel-note type
+    has no equivalent business parser and is still just a label flip.
+
+    Separately: when both the original and corrected type are one of the
+    two kinds classify_email_by_confidence() actually distinguishes
+    between (hotlist vs job requirement), also records the correction
+    for app/email_parsing/classification_learning.py to learn from.
     """
     draft = get_draft_object(draft_id)
     if not draft:
         return None
 
     original_draft_type = draft.draft_type
+    reparse_target = _LEARNABLE_DRAFT_TYPES.get(corrected_draft_type)
+
+    payload = draft.payload
+    confidence = draft.confidence
+    requires_review = draft.requires_review
+    title = draft.title
+
+    if reparse_target and draft.channel == "email":
+        text = payload.get("text") or ""
+        email_parsing = parse_email_business_records(text=text, document_kind=reparse_target)
+
+        if reparse_target == "job_description":
+            email_parsing, _ = apply_job_requirement_fallback(text, email_parsing)
+        elif reparse_target == "hotlist":
+            email_parsing, _ = apply_hotlist_fallback(text, email_parsing)
+
+        structured_data = payload.get("structured_data") or {}
+        structured_data["email_parsing"] = email_parsing
+        structured_data["document_kind"] = reparse_target
+        payload = {**payload, "structured_data": structured_data, "document_kind": reparse_target}
+
+        confidence = float(email_parsing.get("confidence", confidence))
+        requires_review = bool(email_parsing.get("requires_review", True))
+        title = _title_from_payload(corrected_draft_type, payload)
 
     with cursor() as cur:
         cur.execute(
-            "UPDATE drafts SET draft_type = %s, updated_at = now() WHERE draft_id = %s RETURNING *",
-            (corrected_draft_type, draft_id),
+            "UPDATE drafts SET draft_type = %s, payload = %s, confidence = %s, "
+            "requires_review = %s, title = %s, updated_at = now() WHERE draft_id = %s RETURNING *",
+            (
+                corrected_draft_type,
+                json.dumps(payload, default=str),
+                confidence,
+                requires_review,
+                title,
+                draft_id,
+            ),
         )
         row = cur.fetchone()
 
@@ -323,7 +408,12 @@ def reclassify_draft_object(draft_id: str, corrected_draft_type: DraftObjectType
     updated = _row_to_draft(row)
     emit_event(
         "draft.reclassified",
-        {"draft_id": draft_id, "from": original_draft_type, "to": corrected_draft_type},
+        {
+            "draft_id": draft_id,
+            "from": original_draft_type,
+            "to": corrected_draft_type,
+            "reparsed": bool(reparse_target and draft.channel == "email"),
+        },
     )
 
     if original_draft_type in _LEARNABLE_DRAFT_TYPES and corrected_draft_type in _LEARNABLE_DRAFT_TYPES:

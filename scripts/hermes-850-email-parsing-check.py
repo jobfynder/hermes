@@ -459,6 +459,29 @@ def test_security_gateway_banner_is_stripped() -> None:
     )
 
 
+def test_pipe_delimited_subject_still_yields_a_title() -> None:
+    # Real production regression: "Senior SAP ERP Developer | Remote |"
+    # never produced a title at all -- extract_probable_title's regex had
+    # no terminator for "|", so the match failed the instant it hit the
+    # pipe character with nothing else in the allowed character class.
+    # Confirmed against three real Jobfynder subjects using this exact
+    # "Title | Location |" / "Title || Location || Duration" shape.
+    text = (
+        "Subject: Senior SAP ERP Developer | Remote |\n\n"
+        "We are looking for a Senior SAP ERP Developer with strong SAP "
+        "ABAP and Fiori expertise.\n\n"
+        "Required Skills: SAP ABAP, SAP Fiori\n"
+    )
+
+    result = parse_requirement_email(text)
+    record = result["records"][0]
+
+    require(
+        record["job_title"] == "Senior SAP ERP Developer",
+        f"Expected the pipe-delimited subject to still yield a title, got {record['job_title']!r}",
+    )
+
+
 def main() -> None:
     test_mailbox_routing()
     test_hotlist_parser()
@@ -468,6 +491,7 @@ def main() -> None:
     test_nvoids_java_posting_regression()
     test_location_does_not_swallow_next_blank_label()
     test_security_gateway_banner_is_stripped()
+    test_pipe_delimited_subject_still_yields_a_title()
 
     print("PASS: exact mailbox routing")
     print("PASS: foreign-domain aliases rejected")
@@ -481,6 +505,7 @@ def main() -> None:
     print("PASS: confidence-based hotlist/requirement classification (shared mailbox)")
     print("PASS: company/work-authorization/LinkedIn/taxonomy-driven skills on a real forwarded posting")
     print("PASS: security-gateway banner ([EXTERNAL]/CAUTION) is stripped from job_description")
+    print("PASS: pipe-delimited subject ('Title | Location |') still yields a title")
     print("PASS: HERMES-850 parser guardrails")
 
 

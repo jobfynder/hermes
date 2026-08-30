@@ -43,8 +43,16 @@ def extract_probable_title(text: str) -> str | None:
     clean_text = re.sub(r"\s+", " ", text or "").strip()
     clean_text = re.sub(r"^(need|hiring|looking for|seeking)\s+", "", clean_text, flags=re.IGNORECASE)
 
+    # "|" (or "||") as a terminator alongside "-"/","/"for" -- real
+    # recruiter subject lines routinely read "Title | Location |" or
+    # "Title || Location || Duration" (confirmed against real Jobfynder
+    # subjects: "Senior SAP ERP Developer | Remote |", "... || 2 Broadway
+    # ... || f2F Interview"). Without it, the whole match fails the
+    # moment it hits the "|" character (not in the allowed char class)
+    # with no valid terminator at that position, so the title-shaped
+    # subject before the pipe was silently lost.
     match = re.search(
-        r"^([A-Za-z][A-Za-z0-9 .+#/-]{2,80}?)(?:\s+with|\s+having|\s+for|\s+-|,|$)",
+        r"^([A-Za-z][A-Za-z0-9 .+#/-]{2,80}?)(?:\s+with|\s+having|\s+for|\s+-|\s*\|+\s*|,|$)",
         clean_text,
         flags=re.IGNORECASE,
     )

@@ -150,6 +150,100 @@ def test_reclassify_unknown_draft_returns_none() -> None:
     )
 
 
+def test_reclassify_reparses_email_content_into_the_corrected_kind() -> None:
+    # Real production regression: a genuine job posting was misclassified
+    # as document_kind="resume" at intake (content-classification miss on
+    # an unstructured vendor-relay email), so create_draft_object stored
+    # an empty email_parsing.records[] -- parse_email_business_records
+    # correctly refuses to extract job/hotlist fields from a document_kind
+    # it wasn't given. A reviewer reclassified it to draft_job_requirement
+    # via the "Mark as..." button, which used to only flip the draft_type
+    # column: the draft then showed as a job requirement in the list with
+    # a stale "Draft Profile" title and zero actual parsed fields --
+    # nothing a reviewer could publish. Fixed by re-running the real
+    # parser against the draft's own stored text once the correct
+    # document_kind is known.
+    text = (
+        "Subject: Senior SAP ERP Developer | Remote |\n\n"
+        "Hiring: Senior SAP ERP Developer | Remote\n\n"
+        "We are looking for a Senior SAP ERP Developer with strong expertise "
+        "in SAP development, integrations, production support, and modern "
+        "SAP technologies.\n\n"
+        "Required Skills: SAP ABAP, SAP Fiori, SAP BTP\n\n"
+        "Interested candidates, please share your updated resume.\n"
+    )
+
+    draft = create_draft_object(
+        draft_type="draft_consultant_profile",
+        source="channel_text_intake",
+        channel="email",
+        payload={
+            "text": text,
+            "document_kind": "resume",
+            "structured_data": {
+                "document_kind": "resume",
+                "email_parsing": {
+                    "document_kind": "resume",
+                    "records": [],
+                    "warnings": ["unsupported_email_document_kind"],
+                    "confidence": 0.0,
+                    "requires_review": True,
+                },
+            },
+        },
+        confidence=0.3,
+        requires_review=True,
+        metadata={"sender": {"email": "sandy@sapreclassifytest.com"}},
+    )
+
+    require(
+        draft.payload["structured_data"]["email_parsing"]["records"] == [],
+        "Fixture must genuinely start with zero parsed records for this test to be meaningful",
+    )
+
+    updated = reclassify_draft_object(draft.draft_id, "draft_job_requirement")
+
+    require(updated is not None, "Reclassify must succeed")
+    require(updated.draft_type == "draft_job_requirement", "draft_type must change")
+
+    records = updated.payload["structured_data"]["email_parsing"]["records"]
+    require(len(records) == 1, f"Expected the real parser to now produce a record, got {records}")
+    require(
+        records[0]["job_title"] == "Senior SAP ERP Developer",
+        f"Expected the actual job title to be extracted after reparse, got {records[0].get('job_title')!r}",
+    )
+    require(
+        "SAP ABAP" in records[0]["required_skills"],
+        f"Expected real skills to be extracted after reparse, got {records[0]['required_skills']}",
+    )
+    require(
+        updated.title == "Senior SAP ERP Developer",
+        f"Expected the stale 'Draft Profile' title to be replaced with the real job title, got {updated.title!r}",
+    )
+    require(
+        updated.payload["structured_data"]["document_kind"] == "job_description",
+        "structured_data.document_kind must be updated to match the correction, not left as 'resume'",
+    )
+
+
+def test_reclassify_reparse_skipped_for_non_email_channel() -> None:
+    # A reclassify on a draft that didn't come from the email channel
+    # (e.g. a channel_text_intake test fixture, or a future non-email
+    # source) has no raw email text to re-run a deterministic email
+    # parser against -- must stay a plain label flip, not raise.
+    draft = create_draft_object(
+        draft_type="draft_consultant_profile",
+        source="channel_text_intake",
+        payload={"text": "some content", "document_kind": "resume"},
+        confidence=0.3,
+        requires_review=True,
+    )
+
+    updated = reclassify_draft_object(draft.draft_id, "draft_job_requirement")
+    require(updated is not None, "Reclassify must still succeed for a non-email draft")
+    require(updated.draft_type == "draft_job_requirement", "draft_type must still change")
+
+
 def test_detect_document_kind_uses_domain_bias_when_content_is_ambiguous() -> None:
     domain = "ambiguoussender.com"
     for i in range(2):
@@ -185,5 +279,7 @@ if __name__ == "__main__":
     test_reclassify_updates_draft_type_and_teaches_the_loop()
     test_reclassify_to_non_learnable_type_does_not_teach_the_loop()
     test_reclassify_unknown_draft_returns_none()
+    test_reclassify_reparses_email_content_into_the_corrected_kind()
+    test_reclassify_reparse_skipped_for_non_email_channel()
     test_detect_document_kind_uses_domain_bias_when_content_is_ambiguous()
     print("hermes-850-self-learning-classification-check: all checks passed")
