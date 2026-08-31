@@ -9,6 +9,7 @@ from app.channels.service import process_channel_intake
 from app.drafts.service import delete_draft_object, get_draft_object
 from app.email_parsing.blocklist import add_block, is_blocked, list_blocks, remove_block
 from app.email_parsing.spam import classify_spam
+from app.runtime.db import cursor
 from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
     bulk_approve_taxonomy_candidates,
@@ -16,8 +17,10 @@ from app.understanding.taxonomy.candidates import (
     edit_taxonomy_candidate,
     find_unknown_job_title,
     find_unknown_skill_terms,
+    get_approved_boilerplate_lines,
     get_skill_usage_stats,
     list_taxonomy_candidates,
+    record_boilerplate_line_candidates,
     record_skill_usage,
     record_taxonomy_candidates,
     reject_taxonomy_candidate,
@@ -450,6 +453,40 @@ def test_unknown_job_title_detected() -> None:
     require(find_unknown_job_title("") is None, "An empty title must not be flagged")
 
 
+def test_find_unknown_job_title_rejects_purely_numeric_values() -> None:
+    # Defense in depth for the "Position: 1" extraction bug (see
+    # app/email_parsing/parsers.py) -- even if a future parser bug hands
+    # a non-title value in here, it must never reach the review queue.
+    require(find_unknown_job_title("1") is None, "A bare digit must never be queued as a job title")
+    require(find_unknown_job_title("25") is None, "A bare number must never be queued as a job title")
+    require(
+        find_unknown_job_title("ZRealTitleWith1NumberXyz") == "ZRealTitleWith1NumberXyz",
+        "A real title that merely contains a digit must still be accepted",
+    )
+
+
+def test_find_unknown_job_title_collapses_location_and_work_mode_variants() -> None:
+    # Real production data: the same role showed up as several separate
+    # candidates purely because a location/work-mode tag was baked onto
+    # the end of the title line.
+    require(
+        find_unknown_job_title("ZDedupeLead- NY Onsite") == "ZDedupeLead",
+        "A trailing '- <location> Onsite/Remote/Hybrid' must be stripped before dedup",
+    )
+    require(
+        find_unknown_job_title("ZDedupeLead IN Brooklyn") == "ZDedupeLead",
+        "A trailing 'IN <City>' must be stripped before dedup",
+    )
+    require(
+        find_unknown_job_title("ZDedupeLead (Remote)") == "ZDedupeLead",
+        "A trailing '(Remote)'/'(Onsite)'/'(Hybrid)' must be stripped before dedup",
+    )
+    require(
+        find_unknown_job_title("ZDedupeLead (Specialized Automation)") == "ZDedupeLead (Specialized Automation)",
+        "A genuinely distinguishing trailing parenthetical must never be stripped",
+    )
+
+
 def test_record_taxonomy_candidates_queues_job_titles() -> None:
     record_taxonomy_candidates(
         text="Required Skills: Java, Spring Boot",
@@ -717,6 +754,83 @@ def test_runtime_copy_is_not_re_seeded_in_a_fresh_process() -> None:
     )
 
 
+def test_boilerplate_line_hidden_until_seen_from_enough_distinct_domains() -> None:
+    line = "Zzz Boilerplate Footer Line For Distinct Domain Test"
+
+    record_boilerplate_line_candidates(f"Real content one.\n{line}", "bp-draft-1", "bpvendora.com")
+    record_boilerplate_line_candidates(f"Different real content.\n{line}", "bp-draft-2", "bpvendorb.com")
+
+    pending = [c for c in list_taxonomy_candidates("pending") if c["term"] == line]
+    require(pending == [], f"A line seen from only 2 distinct domains must not surface yet: {pending}")
+
+    record_boilerplate_line_candidates(f"A third posting's content.\n{line}", "bp-draft-3", "bpvendorc.com")
+
+    pending = [c for c in list_taxonomy_candidates("pending") if c["term"] == line]
+    require(len(pending) == 1, f"A line seen from 3 distinct domains must now be visible: {pending}")
+    require(
+        set(pending[0]["distinct_senders"]) == {"bpvendora.com", "bpvendorb.com", "bpvendorc.com"},
+        f"Wrong distinct_senders: {pending[0]}",
+    )
+
+
+def test_boilerplate_line_ignores_too_short_and_too_long_lines() -> None:
+    record_boilerplate_line_candidates("short", "bp-draft-short", "bpshort.com")
+    record_boilerplate_line_candidates("x" * 250, "bp-draft-long", "bplong.com")
+
+    with cursor() as cur:
+        cur.execute("SELECT count(*) AS n FROM taxonomy_candidates WHERE signal_type = 'boilerplate_line' AND term = 'short'")
+        require(cur.fetchone()["n"] == 0, "A too-short line must never be queued")
+
+        cur.execute("SELECT count(*) AS n FROM taxonomy_candidates WHERE signal_type = 'boilerplate_line' AND term = %s", ("x" * 250,))
+        require(cur.fetchone()["n"] == 0, "A too-long line must never be queued")
+
+
+def test_approving_a_boilerplate_line_strips_it_live_with_no_redeploy() -> None:
+    line = "Zzz Approved Boilerplate Line For Live Strip Test"
+
+    for i, domain in enumerate(["bplivea.com", "bpliveb.com", "bplivec.com"]):
+        record_boilerplate_line_candidates(f"Content {i}.\n{line}", f"bp-live-draft-{i}", domain)
+
+    pending = [c for c in list_taxonomy_candidates("pending") if c["term"] == line]
+    require(len(pending) == 1, f"Expected the line to be visible: {pending}")
+
+    result = approve_taxonomy_candidate(pending[0]["id"])
+    require(result["approved"] is True, f"Approving a boilerplate_line candidate must succeed: {result}")
+
+    with cursor() as cur:
+        cur.execute("SELECT * FROM approved_boilerplate_lines WHERE sample_text = %s", (line,))
+        require(cur.fetchone() is not None, "Approving must insert a row into approved_boilerplate_lines")
+
+    require(
+        line.strip().lower() in get_approved_boilerplate_lines(),
+        "The approved line must be visible via get_approved_boilerplate_lines immediately, no redeploy",
+    )
+
+    from app.email_parsing.parsers import parse_requirement_email
+
+    text = (
+        "Job Title: Boilerplate Strip Test Developer\n"
+        "Required Skills: Java\n\n"
+        "Long enough real job description body text here for the evidence check.\n"
+        f"{line}\n"
+    )
+    parsed = parse_requirement_email(text, extra_boilerplate_lines=get_approved_boilerplate_lines())
+    require(
+        line not in parsed["records"][0]["job_description"],
+        f"The approved boilerplate line must be stripped from a real posting immediately: {parsed['records'][0]['job_description']!r}",
+    )
+
+
+def test_boilerplate_signal_type_never_mixed_into_skill_or_job_title_queue() -> None:
+    line = "Zzz Boilerplate Never Mixed Into Skills Test Line Here"
+    for i, domain in enumerate(["bpmixa.com", "bpmixb.com", "bpmixc.com"]):
+        record_boilerplate_line_candidates(f"Body {i}.\n{line}", f"bp-mix-draft-{i}", domain)
+
+    pending = list_taxonomy_candidates("pending")
+    match = next(c for c in pending if c["term"] == line)
+    require(match["signal_type"] == "boilerplate_line", f"Wrong signal_type: {match}")
+
+
 def main() -> None:
     test_blocklist_domain_match()
     print("PASS: blocklist domain match")
@@ -793,6 +907,12 @@ def main() -> None:
     test_unknown_job_title_detected()
     print("PASS: an unrecognized job title is detected, a known one is not")
 
+    test_find_unknown_job_title_rejects_purely_numeric_values()
+    print("PASS: a bare digit/number is never queued as a job title candidate")
+
+    test_find_unknown_job_title_collapses_location_and_work_mode_variants()
+    print("PASS: location/work-mode title variants collapse into one candidate before dedup")
+
     test_record_taxonomy_candidates_queues_job_titles()
     print("PASS: an unrecognized job title is queued with signal_type='job_title'")
 
@@ -837,6 +957,18 @@ def main() -> None:
 
     test_runtime_copy_is_not_re_seeded_in_a_fresh_process()
     print("PASS: a fresh process's first taxonomy write does not re-seed and lose earlier writes")
+
+    test_boilerplate_line_hidden_until_seen_from_enough_distinct_domains()
+    print("PASS: a boilerplate line stays hidden until seen from 3+ distinct sender domains")
+
+    test_boilerplate_line_ignores_too_short_and_too_long_lines()
+    print("PASS: too-short and too-long lines are never queued as boilerplate candidates")
+
+    test_approving_a_boilerplate_line_strips_it_live_with_no_redeploy()
+    print("PASS: approving a boilerplate line strips it from postings immediately, no redeploy")
+
+    test_boilerplate_signal_type_never_mixed_into_skill_or_job_title_queue()
+    print("PASS: boilerplate_line candidates keep their own signal_type, never mixed with skill/job_title")
 
     print("HERMES-900 spam/blocklist/taxonomy-candidate check PASSED")
 

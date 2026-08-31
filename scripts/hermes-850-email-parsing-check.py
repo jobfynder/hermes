@@ -482,6 +482,37 @@ def test_pipe_delimited_subject_still_yields_a_title() -> None:
     )
 
 
+def test_position_ordinal_label_is_never_read_as_the_job_title() -> None:
+    # Real production regression: a vendor format lists "Position: 1"
+    # (an ordinal) on its own line with the actual title one line later
+    # under "Title:". "Position" being a Job Title alias meant
+    # _extract_labeled_value found "Position: 1" first and returned the
+    # literal digit "1" as job_title -- queued as a taxonomy candidate
+    # 25+ times over (once per ordinal number seen).
+    text = (
+        "Subject: Direct Client Roles\n\n"
+        "Hi,\n\n"
+        "Position: 1\n\n"
+        "Title: Java Developer with NoSQL and State Client Exp\n\n"
+        "Location: Albany, NY\n\n"
+        "Description:\n\n"
+        "84 months of experience in Java applications, long enough body text here.\n\n"
+        "Position: 2\n\n"
+        "Title: Java Developer with State Client Exp and GCP\n\n"
+        "Location: Albany, NY\n\n"
+        "Description:\n\n"
+        "84 months of experience with GCP, long enough body text here too.\n"
+    )
+
+    result = parse_requirement_email(text)
+    titles = [r["job_title"] for r in result["records"]]
+
+    require(
+        titles == ["Java Developer with NoSQL and State Client Exp", "Java Developer with State Client Exp and GCP"],
+        f"Must read the real title from 'Title:', never the ordinal from 'Position:', got {titles}",
+    )
+
+
 def test_job_description_excludes_everything_from_the_signoff_onward() -> None:
     # Real production regression: a footer that never said "Keywords:"/
     # "unsubscribe" (the only two markers _strip_job_description_footer
@@ -618,6 +649,7 @@ def main() -> None:
     test_location_does_not_swallow_next_blank_label()
     test_security_gateway_banner_is_stripped()
     test_pipe_delimited_subject_still_yields_a_title()
+    test_position_ordinal_label_is_never_read_as_the_job_title()
     test_job_description_excludes_everything_from_the_signoff_onward()
     test_numbered_multi_position_email_splits_into_separate_records()
     test_single_numbered_bullet_does_not_trigger_multi_position_split()
@@ -636,6 +668,7 @@ def main() -> None:
     print("PASS: company/work-authorization/LinkedIn/taxonomy-driven skills on a real forwarded posting")
     print("PASS: security-gateway banner ([EXTERNAL]/CAUTION) is stripped from job_description")
     print("PASS: pipe-delimited subject ('Title | Location |') still yields a title")
+    print("PASS: a 'Position: N' ordinal label is never read as the job title")
     print("PASS: job_description excludes everything from the signoff onward, not just known footer markers")
     print("PASS: a numbered multi-position email splits into separate records, not one garbled record")
     print("PASS: a single position's own numbered bullets don't trigger a false multi-position split")

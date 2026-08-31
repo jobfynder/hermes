@@ -21,7 +21,12 @@ from app.email_parsing.sender_resolver import looks_forwarded, resolve_original_
 from app.email_parsing.signature import parse_email_signature
 from app.email_parsing.signature_learning import apply_learned_signature_patterns
 from app.email_parsing.spam import classify_spam
-from app.understanding.taxonomy.candidates import record_skill_usage, record_taxonomy_candidates
+from app.understanding.taxonomy.candidates import (
+    get_approved_boilerplate_lines,
+    record_boilerplate_line_candidates,
+    record_skill_usage,
+    record_taxonomy_candidates,
+)
 from app.runtime.events import emit_event
 from app.runtime.intake_log import (
     record_idempotency_key_if_new,
@@ -358,6 +363,7 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         email_parsing = parse_email_business_records(
             text=request.text or "",
             document_kind=document_kind,
+            extra_boilerplate_lines=get_approved_boilerplate_lines(),
         )
 
         # LLM extraction fallback (spec section 7.5, step 7) -- only
@@ -603,6 +609,14 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             sender_domain=sender_domain,
             job_titles=candidate_job_titles,
         )
+
+        if document_kind == "job_description":
+            for record in (email_parsing.get("records") or []):
+                record_boilerplate_line_candidates(
+                    job_description=record.get("job_description"),
+                    draft_id=draft.draft_id,
+                    sender_domain=sender_domain,
+                )
     except Exception as exc:  # noqa: BLE001
         emit_event(
             "taxonomy_candidates.record_failed",

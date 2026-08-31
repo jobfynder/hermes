@@ -222,6 +222,30 @@ CREATE INDEX IF NOT EXISTS idx_taxonomy_candidates_status ON taxonomy_candidates
 -- CREATE TABLE, kept idempotent the same way (safe to run every startup).
 ALTER TABLE taxonomy_candidates ADD COLUMN IF NOT EXISTS reviewed_by TEXT;
 
+-- 'boilerplate_line' added after the table above already existed in
+-- production, so the CHECK constraint is dropped and re-added rather
+-- than part of the original CREATE TABLE -- idempotent, safe to run
+-- every startup, same pattern as the reviewed_by column above. A
+-- recurring footer/signature line the deterministic cleaner doesn't
+-- already strip (see app/email_parsing/parsers.py) gets queued here the
+-- same way an unrecognized skill or job title does -- see
+-- app/email_parsing/boilerplate_learning.py.
+ALTER TABLE taxonomy_candidates DROP CONSTRAINT IF EXISTS taxonomy_candidates_signal_type_check;
+ALTER TABLE taxonomy_candidates ADD CONSTRAINT taxonomy_candidates_signal_type_check
+    CHECK (signal_type IN ('skill', 'job_title', 'boilerplate_line'));
+
+-- A boilerplate_line candidate a reviewer approved -- job_description
+-- cleaning (app/email_parsing/parsers.py) strips any line matching one
+-- of these, live immediately once approved, no redeploy, the same way
+-- approving a skill/job-title candidate is live immediately.
+CREATE TABLE IF NOT EXISTS approved_boilerplate_lines (
+    id              BIGSERIAL PRIMARY KEY,
+    normalized_line TEXT NOT NULL UNIQUE,
+    sample_text     TEXT NOT NULL,
+    approved_by     TEXT,
+    approved_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Real usage counts for canonical_skills.json entries -- which canonical
 -- skills actually show up in real postings, how often, and how recently.
 -- Keyed by the skill's canonical name (matches canonical_skills.json's

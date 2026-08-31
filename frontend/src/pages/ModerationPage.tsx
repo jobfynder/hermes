@@ -1,6 +1,205 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import type { BlocklistEntry, TaxonomyCandidateEntry } from '../types'
+
+function CandidateSection({
+  title,
+  description,
+  emptyMessage,
+  termLabel,
+  showTypeColumn,
+  candidates,
+  busy,
+  editingId,
+  editValue,
+  selectedIds,
+  onStartEdit,
+  onEditValueChange,
+  onSaveEdit,
+  onCancelEdit,
+  onApprove,
+  onReject,
+  onToggleSelected,
+  onToggleSelectAll,
+  onBulkApprove,
+  onBulkReject,
+}: {
+  title: string
+  description: string
+  emptyMessage: string
+  termLabel: string
+  showTypeColumn?: boolean
+  candidates: TaxonomyCandidateEntry[]
+  busy: boolean
+  editingId: number | null
+  editValue: string
+  selectedIds: Set<number>
+  onStartEdit: (c: TaxonomyCandidateEntry) => void
+  onEditValueChange: (value: string) => void
+  onSaveEdit: (id: number) => void
+  onCancelEdit: () => void
+  onApprove: (id: number) => void
+  onReject: (id: number) => void
+  onToggleSelected: (id: number) => void
+  onToggleSelectAll: (ids: number[]) => void
+  onBulkApprove: (ids: number[]) => void
+  onBulkReject: (ids: number[]) => void
+}) {
+  const ids = candidates.map((c) => c.id)
+  const selectedInSection = ids.filter((id) => selectedIds.has(id))
+
+  return (
+    <section className="mb-8 rounded-xl border border-line bg-surface p-5">
+      <h2 className="mb-3 text-sm font-semibold text-ink">{title}</h2>
+      <p className="mb-4 text-xs text-ink-soft">{description}</p>
+
+      {candidates.length > 0 && (
+        <div className="mb-3 flex items-center justify-between rounded-lg border border-line bg-paper px-3 py-2">
+          <span className="text-xs text-ink-soft">
+            {selectedInSection.length > 0 ? `${selectedInSection.length} selected` : 'Select rows to act on them in bulk'}
+          </span>
+          <div className="flex gap-3">
+            <button
+              disabled={busy || selectedInSection.length === 0}
+              onClick={() => onBulkApprove(selectedInSection)}
+              className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
+            >
+              Approve selected
+            </button>
+            <button
+              disabled={busy || selectedInSection.length === 0}
+              onClick={() => onBulkReject(selectedInSection)}
+              className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
+            >
+              Reject selected
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-lg border border-line">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
+              <th className="w-8 px-3 py-2">
+                {candidates.length > 0 && (
+                  <input
+                    type="checkbox"
+                    checked={selectedInSection.length === ids.length}
+                    onChange={() => onToggleSelectAll(ids)}
+                    className="accent-accent"
+                    aria-label="Select all"
+                  />
+                )}
+              </th>
+              {showTypeColumn && <th className="px-3 py-2 font-medium">Type</th>}
+              <th className="px-3 py-2 font-medium">{termLabel}</th>
+              <th className="px-3 py-2 font-medium">Seen</th>
+              <th className="px-3 py-2 font-medium">Distinct senders</th>
+              <th className="px-3 py-2 font-medium">Last seen</th>
+              <th className="px-3 py-2 font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {candidates.map((c) => (
+              <tr key={c.id} className="border-b border-line last:border-0">
+                <td className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(c.id)}
+                    onChange={() => onToggleSelected(c.id)}
+                    className="accent-accent"
+                    aria-label={`Select ${c.term}`}
+                  />
+                </td>
+                {showTypeColumn && (
+                  <td className="px-3 py-2 text-xs text-ink-soft">
+                    {c.signal_type === 'job_title' ? 'Job title' : 'Skill'}
+                  </td>
+                )}
+                <td className="px-3 py-2 font-medium text-ink">
+                  {editingId === c.id ? (
+                    <input
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => onEditValueChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') onSaveEdit(c.id)
+                        if (e.key === 'Escape') onCancelEdit()
+                      }}
+                      className="w-full rounded border border-accent bg-paper px-2 py-1 text-sm text-ink outline-none"
+                    />
+                  ) : (
+                    <span className="group inline-flex items-center gap-2">
+                      {c.term}
+                      <button
+                        onClick={() => onStartEdit(c)}
+                        className="text-xs font-normal text-ink-soft opacity-0 group-hover:opacity-100 hover:text-accent hover:underline"
+                      >
+                        Edit
+                      </button>
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-ink-soft">{c.occurrence_count}×</td>
+                <td className="max-w-56 truncate px-3 py-2 text-ink-soft">
+                  {c.distinct_senders.length > 0 ? c.distinct_senders.join(', ') : '—'}
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap text-ink-soft">
+                  {new Date(c.last_seen_at).toLocaleDateString()}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  {editingId === c.id ? (
+                    <div className="flex justify-end gap-3">
+                      <button
+                        disabled={busy || !editValue.trim()}
+                        onClick={() => onSaveEdit(c.id)}
+                        className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
+                      >
+                        Save
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={onCancelEdit}
+                        className="text-xs font-medium text-ink-soft hover:underline disabled:opacity-40"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end gap-3">
+                      <button
+                        disabled={busy}
+                        onClick={() => onApprove(c.id)}
+                        className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        disabled={busy}
+                        onClick={() => onReject(c.id)}
+                        className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {candidates.length === 0 && (
+              <tr>
+                <td colSpan={showTypeColumn ? 7 : 6} className="px-3 py-6 text-center text-ink-soft">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
 
 export function ModerationPage({ onBack }: { onBack: () => void }) {
   const [blocklist, setBlocklist] = useState<BlocklistEntry[] | null>(null)
@@ -31,6 +230,15 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
   }
 
   useEffect(load, [])
+
+  const taxonomyCandidates = useMemo(
+    () => candidates?.filter((c) => c.signal_type === 'skill' || c.signal_type === 'job_title') ?? [],
+    [candidates],
+  )
+  const boilerplateCandidates = useMemo(
+    () => candidates?.filter((c) => c.signal_type === 'boilerplate_line') ?? [],
+    [candidates],
+  )
 
   async function handleAddBlock() {
     if (!newValue.trim()) return
@@ -111,16 +319,20 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
     })
   }
 
-  function toggleSelectAll() {
-    if (!candidates) return
-    setSelectedIds((prev) => (prev.size === candidates.length ? new Set() : new Set(candidates.map((c) => c.id))))
+  function toggleSelectAll(ids: number[]) {
+    setSelectedIds((prev) => {
+      const allSelected = ids.every((id) => prev.has(id))
+      const next = new Set(prev)
+      ids.forEach((id) => (allSelected ? next.delete(id) : next.add(id)))
+      return next
+    })
   }
 
-  async function handleBulkApprove() {
-    if (selectedIds.size === 0) return
+  async function handleBulkApprove(ids: number[]) {
+    if (ids.length === 0) return
     setBusy(true)
     try {
-      const result = await api.bulkApproveTaxonomyCandidates([...selectedIds])
+      const result = await api.bulkApproveTaxonomyCandidates(ids)
       setActionMessage(
         result.failed.length === 0
           ? `Approved ${result.ok_count} candidates.`
@@ -135,11 +347,11 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
     }
   }
 
-  async function handleBulkReject() {
-    if (selectedIds.size === 0) return
+  async function handleBulkReject(ids: number[]) {
+    if (ids.length === 0) return
     setBusy(true)
     try {
-      const result = await api.bulkRejectTaxonomyCandidates([...selectedIds])
+      const result = await api.bulkRejectTaxonomyCandidates(ids)
       setActionMessage(
         result.failed.length === 0
           ? `Rejected ${result.ok_count} candidates.`
@@ -152,6 +364,23 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
     } finally {
       setBusy(false)
     }
+  }
+
+  const sharedSectionProps = {
+    busy,
+    editingId,
+    editValue,
+    selectedIds,
+    onStartEdit: startEdit,
+    onEditValueChange: setEditValue,
+    onSaveEdit: handleSaveEdit,
+    onCancelEdit: () => setEditingId(null),
+    onApprove: handleApprove,
+    onReject: handleReject,
+    onToggleSelected: toggleSelected,
+    onToggleSelectAll: toggleSelectAll,
+    onBulkApprove: handleBulkApprove,
+    onBulkReject: handleBulkReject,
   }
 
   return (
@@ -257,156 +486,24 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
         </div>
       </section>
 
-      <section className="rounded-xl border border-line bg-surface p-5">
-        <h2 className="mb-3 text-sm font-semibold text-ink">Taxonomy candidates</h2>
-        <p className="mb-4 text-xs text-ink-soft">
-          Skill- and job-title-shaped terms Hermes doesn't recognize yet, seen in real postings. Approving adds it
-          to the taxonomy immediately &mdash; no redeploy needed.
-        </p>
+      <CandidateSection
+        title="Taxonomy candidates"
+        description={`Skill and job-title terms Hermes doesn't recognize yet, seen in real postings (${taxonomyCandidates.filter((c) => c.signal_type === 'skill').length} skill, ${taxonomyCandidates.filter((c) => c.signal_type === 'job_title').length} job title). Approving adds it to the matching taxonomy immediately — skills and job titles are always kept in separate files, never mixed.`}
+        emptyMessage="No new terms waiting for review."
+        termLabel="Term"
+        showTypeColumn
+        candidates={taxonomyCandidates}
+        {...sharedSectionProps}
+      />
 
-        {candidates && candidates.length > 0 && (
-          <div className="mb-3 flex items-center justify-between rounded-lg border border-line bg-paper px-3 py-2">
-            <span className="text-xs text-ink-soft">
-              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select rows to act on them in bulk'}
-            </span>
-            <div className="flex gap-3">
-              <button
-                disabled={busy || selectedIds.size === 0}
-                onClick={handleBulkApprove}
-                className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
-              >
-                Approve selected
-              </button>
-              <button
-                disabled={busy || selectedIds.size === 0}
-                onClick={handleBulkReject}
-                className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
-              >
-                Reject selected
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="overflow-hidden rounded-lg border border-line">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
-                <th className="w-8 px-3 py-2">
-                  {candidates && candidates.length > 0 && (
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.size === candidates.length}
-                      onChange={toggleSelectAll}
-                      className="accent-accent"
-                      aria-label="Select all"
-                    />
-                  )}
-                </th>
-                <th className="px-3 py-2 font-medium">Type</th>
-                <th className="px-3 py-2 font-medium">Term</th>
-                <th className="px-3 py-2 font-medium">Seen</th>
-                <th className="px-3 py-2 font-medium">Distinct senders</th>
-                <th className="px-3 py-2 font-medium">Last seen</th>
-                <th className="px-3 py-2 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {candidates?.map((c) => (
-                <tr key={c.id} className="border-b border-line last:border-0">
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(c.id)}
-                      onChange={() => toggleSelected(c.id)}
-                      className="accent-accent"
-                      aria-label={`Select ${c.term}`}
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-xs text-ink-soft">
-                    {c.signal_type === 'job_title' ? 'Job title' : 'Skill'}
-                  </td>
-                  <td className="px-3 py-2 font-medium text-ink">
-                    {editingId === c.id ? (
-                      <input
-                        autoFocus
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSaveEdit(c.id)
-                          if (e.key === 'Escape') setEditingId(null)
-                        }}
-                        className="w-full rounded border border-accent bg-paper px-2 py-1 text-sm text-ink outline-none"
-                      />
-                    ) : (
-                      <span className="group inline-flex items-center gap-2">
-                        {c.term}
-                        <button
-                          onClick={() => startEdit(c)}
-                          className="text-xs font-normal text-ink-soft opacity-0 group-hover:opacity-100 hover:text-accent hover:underline"
-                        >
-                          Edit
-                        </button>
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-ink-soft">{c.occurrence_count}×</td>
-                  <td className="max-w-56 truncate px-3 py-2 text-ink-soft">
-                    {c.distinct_senders.length > 0 ? c.distinct_senders.join(', ') : '—'}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-ink-soft">
-                    {new Date(c.last_seen_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {editingId === c.id ? (
-                      <div className="flex justify-end gap-3">
-                        <button
-                          disabled={busy || !editValue.trim()}
-                          onClick={() => handleSaveEdit(c.id)}
-                          className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
-                        >
-                          Save
-                        </button>
-                        <button
-                          disabled={busy}
-                          onClick={() => setEditingId(null)}
-                          className="text-xs font-medium text-ink-soft hover:underline disabled:opacity-40"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex justify-end gap-3">
-                        <button
-                          disabled={busy}
-                          onClick={() => handleApprove(c.id)}
-                          className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          disabled={busy}
-                          onClick={() => handleReject(c.id)}
-                          className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {candidates && candidates.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-ink-soft">
-                    No new terms waiting for review.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <CandidateSection
+        title="Boilerplate patterns"
+        description="Recurring footer/signature lines seen across 3+ different senders that the automatic cleaner doesn't already strip out of job descriptions. Approving removes this exact line from every future posting immediately."
+        emptyMessage="No recurring boilerplate lines waiting for review yet."
+        termLabel="Line"
+        candidates={boilerplateCandidates}
+        {...sharedSectionProps}
+      />
     </div>
   )
 }

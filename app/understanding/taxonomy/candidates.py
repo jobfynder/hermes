@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 
 from app.runtime.db import cursor
 from app.understanding.parsers.job_description_fields import (
@@ -111,14 +112,41 @@ def find_unknown_skill_terms(text: str) -> list[str]:
 # instead of a title.
 _MAX_JOB_TITLE_CANDIDATE_LENGTH = 80
 
+# Real production data: the exact same role shows up as several separate
+# candidates purely because the vendor baked a location/work-mode tag
+# onto the end of the title line -- "AEM Solutions Engineer Lead- NY
+# Onsite", "AEM Solutions Lead IN Brooklyn". Stripping just these two
+# specific, low-risk trailing shapes before dedup collapses that back
+# into one candidate instead of five, without touching a genuinely
+# distinguishing trailing parenthetical like "(Microsoft AI &
+# Automation)" that isn't one of these three work-mode words.
+_TITLE_NOISE_SUFFIX_RE = re.compile(
+    r"(?i)\s*[-–—]\s*[A-Za-z .]{0,40}?\b(?:onsite|remote|hybrid)\b\.?\s*$"
+    r"|\s+in\s+[A-Z][a-zA-Z]+\s*$"
+    r"|\s*\((?:remote|onsite|hybrid)\)\s*$"
+)
+
+
+def _normalize_job_title_for_candidate(title: str) -> str:
+    stripped = _TITLE_NOISE_SUFFIX_RE.sub("", title).strip()
+    return stripped or title
+
 
 def find_unknown_job_title(job_title: str | None) -> str | None:
     if not job_title:
         return None
 
-    cleaned = job_title.strip()
+    cleaned = _normalize_job_title_for_candidate(job_title.strip())
 
     if not cleaned or len(cleaned) > _MAX_JOB_TITLE_CANDIDATE_LENGTH:
+        return None
+
+    # Defense in depth against an extraction bug feeding a non-title
+    # value in here (a real production incident: "Position: 1" being
+    # read as job_title "1", queued 25+ times -- see the job_title
+    # fallback chain in app/email_parsing/parsers.py, which now guards
+    # against this at the source too). A real title always has a letter.
+    if not re.search(r"[A-Za-z]", cleaned):
         return None
 
     key = normalize_taxonomy_key(cleaned)
@@ -210,14 +238,111 @@ def record_taxonomy_candidates(
     return unknown_terms
 
 
+# A line seen from only one or two sender domains is far more likely to
+# just be that posting's own real content coincidentally being short and
+# generic-sounding than actual boilerplate -- real job requirements from
+# unrelated companies are extremely unlikely to be byte-identical to each
+# other, but a relay/template's injected footer text is. Requiring 3+
+# distinct domains before a line surfaces to a reviewer is what keeps
+# this queue small instead of becoming a second flood on top of the one
+# it's meant to reduce.
+_MIN_BOILERPLATE_DISTINCT_SENDERS = 3
+_MIN_BOILERPLATE_LINE_LENGTH = 15
+_MAX_BOILERPLATE_LINE_LENGTH = 200
+
+
+def _normalize_boilerplate_line(line: str) -> str:
+    return re.sub(r"\s+", " ", line.strip().lower())
+
+
+def record_boilerplate_line_candidates(
+    job_description: str | None, draft_id: str | None, sender_domain: str | None
+) -> None:
+    """Tracks every line in a *finished* job_description (after all
+    existing deterministic cleaning -- app/email_parsing/parsers.py --
+    already ran) that recurs verbatim across postings, the same
+    detect-then-human-approves shape as an unrecognized skill or job
+    title, so a vendor/relay footer pattern the cleaner doesn't already
+    catch gets surfaced instead of silently reaching Core forever. Every
+    distinct line seen gets a row (cheap -- just text), but
+    list_taxonomy_candidates only ever shows one once it has crossed
+    _MIN_BOILERPLATE_DISTINCT_SENDERS, so a real posting's own
+    (single-company) content never floods the review queue.
+    """
+    if not job_description:
+        return
+
+    seen_in_this_description: set[str] = set()
+
+    for raw_line in job_description.splitlines():
+        line = raw_line.strip()
+        if not (_MIN_BOILERPLATE_LINE_LENGTH <= len(line) <= _MAX_BOILERPLATE_LINE_LENGTH):
+            continue
+
+        normalized = _normalize_boilerplate_line(line)
+        if not normalized or normalized in seen_in_this_description:
+            continue
+        seen_in_this_description.add(normalized)
+
+        _upsert_candidate("boilerplate_line", line, draft_id, sender_domain)
+
+
+def approve_boilerplate_line_candidate(candidate_id: int, reviewed_by: str | None = None) -> dict:
+    with cursor() as cur:
+        cur.execute(
+            "SELECT term FROM taxonomy_candidates WHERE id = %s AND status = 'pending' "
+            "AND signal_type = 'boilerplate_line'",
+            (candidate_id,),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return {"approved": False, "reason": "candidate_not_found_or_already_reviewed"}
+
+    with cursor() as cur:
+        cur.execute(
+            "INSERT INTO approved_boilerplate_lines (normalized_line, sample_text, approved_by) "
+            "VALUES (%s, %s, %s) ON CONFLICT (normalized_line) DO NOTHING",
+            (_normalize_boilerplate_line(row["term"]), row["term"], reviewed_by),
+        )
+        cur.execute(
+            "UPDATE taxonomy_candidates SET status = 'approved', reviewed_at = now(), reviewed_by = %s "
+            "WHERE id = %s",
+            (reviewed_by, candidate_id),
+        )
+
+    get_approved_boilerplate_lines.cache_clear()
+
+    return {"approved": True, "term": row["term"]}
+
+
+@lru_cache(maxsize=1)
+def get_approved_boilerplate_lines() -> frozenset[str]:
+    """Cached for the same reason canonical taxonomy reads are (this runs
+    on every single job-requirement email parsed) -- cleared the instant
+    a new pattern is approved (approve_boilerplate_line_candidate above),
+    same live-immediately contract as approving a skill or job title.
+    """
+    with cursor() as cur:
+        cur.execute("SELECT normalized_line FROM approved_boilerplate_lines")
+        return frozenset(row["normalized_line"] for row in cur.fetchall())
+
+
 def list_taxonomy_candidates(status: str = "pending") -> list[dict]:
     with cursor() as cur:
         cur.execute(
             "SELECT id, signal_type, term, normalized_term, occurrence_count, "
             "distinct_senders, sample_draft_ids, status, first_seen_at, last_seen_at "
-            "FROM taxonomy_candidates WHERE status = %s "
+            "FROM taxonomy_candidates "
+            "WHERE status = %s "
+            # A boilerplate_line row only becomes visible once it's been
+            # seen from enough distinct sender domains to be a real
+            # pattern, not one company's own content -- see
+            # record_boilerplate_line_candidates. skill/job_title rows
+            # are unaffected, exactly as before.
+            "AND (signal_type != 'boilerplate_line' OR jsonb_array_length(distinct_senders) >= %s) "
             "ORDER BY occurrence_count DESC, last_seen_at DESC",
-            (status,),
+            (status, _MIN_BOILERPLATE_DISTINCT_SENDERS),
         )
         rows = [dict(row) for row in cur.fetchall()]
 
@@ -276,7 +401,21 @@ def approve_taxonomy_candidate(
     add_canonical_job_title) and marks the queue row approved. Only ever
     called from a human clicking "Approve" in the admin UI -- see the
     module docstring for why this never happens automatically.
+
+    signal_type='boilerplate_line' is handled separately by
+    approve_boilerplate_line_candidate -- approving one adds it to
+    approved_boilerplate_lines, not to either taxonomy file.
     """
+    with cursor() as cur:
+        cur.execute(
+            "SELECT signal_type FROM taxonomy_candidates WHERE id = %s AND status = 'pending'",
+            (candidate_id,),
+        )
+        signal_type_row = cur.fetchone()
+
+    if signal_type_row and signal_type_row["signal_type"] == "boilerplate_line":
+        return approve_boilerplate_line_candidate(candidate_id, reviewed_by=reviewed_by)
+
     with cursor() as cur:
         cur.execute(
             "SELECT term, signal_type FROM taxonomy_candidates WHERE id = %s AND status = 'pending'",

@@ -200,7 +200,7 @@ export interface BlocklistEntry {
 
 export interface TaxonomyCandidateEntry {
   id: number
-  signal_type: 'skill' | 'job_title'
+  signal_type: 'skill' | 'job_title' | 'boilerplate_line'
   term: string
   normalized_term: string
   occurrence_count: number
@@ -242,4 +242,14 @@ export interface CanonicalSkillEntry {
   description_edited_at: string | null
   times_seen: number
   last_seen_at: string | null
+}
+
+export interface JobTitleEntry {
+  title: string
+  family: string | null
+  seniority: string | null
+  aliases: string[]
+  related_titles: string[]
+  confidence: string | null
+  source: string | null
 }

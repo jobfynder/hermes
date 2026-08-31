@@ -124,6 +124,19 @@ def _extract_labeled_value(text: str, labels: list[str]) -> str | None:
     return match.group(1).strip()
 
 
+def _is_plausible_job_title(value: str | None) -> bool:
+    """A real job title always has at least one letter and more than a
+    couple of characters -- rejects the "Position: 1" ordinal-number
+    case (see the job_title fallback chain in parse_requirement_email)
+    and any similarly-shaped extraction bug before it ever reaches a
+    record, let alone the taxonomy candidate queue.
+    """
+    if not value:
+        return False
+    stripped = value.strip()
+    return len(stripped) >= 3 and bool(re.search(r"[A-Za-z]", stripped))
+
+
 def _hotlist_record_confidence(record: dict[str, Any]) -> float:
     has_name = bool(record.get("candidate_name"))
     has_role = bool(
@@ -457,13 +470,32 @@ def _strip_job_description_footer(text: str) -> str:
     return text[:cut_at].strip()
 
 
-def _clean_job_description(text: str) -> str:
+def _strip_known_boilerplate_lines(text: str, extra_boilerplate_lines: frozenset[str] | None) -> str:
+    """Removes any line a reviewer has approved as a recurring boilerplate
+    pattern (app/understanding/taxonomy/candidates.py:
+    get_approved_boilerplate_lines) -- unlike the marker/signoff-based
+    cuts above, which only ever trim from a boundary point onward, this
+    can remove a single stray line from anywhere in the text.
+    """
+    if not extra_boilerplate_lines:
+        return text
+
+    kept_lines = [
+        line
+        for line in text.splitlines()
+        if re.sub(r"\s+", " ", line.strip().lower()) not in extra_boilerplate_lines
+    ]
+    return "\n".join(kept_lines)
+
+
+def _clean_job_description(text: str, extra_boilerplate_lines: frozenset[str] | None = None) -> str:
     cleaned = _strip_forwarded_header_block(text)
     cleaned = _strip_job_description_footer(cleaned)
+    cleaned = _strip_known_boilerplate_lines(cleaned, extra_boilerplate_lines)
 
     # Never hand back an empty description over a merely-unpolished one --
     # an over-eager strip losing everything is worse than leaving noise in.
-    return cleaned or text.strip()
+    return cleaned.strip() or text.strip()
 
 
 #: A vendor listing several positions in one email as a numbered list --
@@ -582,7 +614,9 @@ def _score_requirement_record(
     return confidence, warnings
 
 
-def parse_requirement_email(text: str) -> dict[str, Any]:
+def parse_requirement_email(
+    text: str, extra_boilerplate_lines: frozenset[str] | None = None
+) -> dict[str, Any]:
     clean_text = _clean_email_text(text)
 
     if not clean_text:
@@ -638,11 +672,26 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
             if remainder:
                 numbered_title = extract_probable_title(remainder[0].strip())
 
+        # Real production regression: a vendor format lists "Position: 1"
+        # (an ordinal, not a title) on its own line, with the actual
+        # title one line later under "Title:" -- "Position" being listed
+        # as a Job Title alias (below) meant _extract_labeled_value found
+        # "Position: 1" first and returned the literal digit "1" as the
+        # job title, which then got queued as a taxonomy candidate 25+
+        # times over. labeled_title is only trusted if it's plausibly a
+        # real title; otherwise "Title:" is tried as its own explicit
+        # fallback before giving up on labels entirely.
+        labeled_title = _extract_labeled_value(section, ["Job Title", "Position", "Role"])
+        if not _is_plausible_job_title(labeled_title):
+            labeled_title = _extract_labeled_value(section, ["Title"])
+        if not _is_plausible_job_title(labeled_title):
+            labeled_title = None
+
+        if not _is_plausible_job_title(numbered_title):
+            numbered_title = None
+
         job_title = (
-            _extract_labeled_value(
-                section,
-                ["Job Title", "Position", "Role"],
-            )
+            labeled_title
             or numbered_title
             or structured.get("job_title")
             # Only the first section inherits the email's own subject as a
@@ -689,7 +738,7 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
             {
                 "record_type": "job_requirement",
                 "job_title": job_title,
-                "job_description": _clean_job_description(section),
+                "job_description": _clean_job_description(section, extra_boilerplate_lines),
                 "company": structured.get("company"),
                 "linkedin_url": structured.get("linkedin_url"),
                 "required_skills": required_skills,
@@ -775,12 +824,13 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
 def parse_email_business_records(
     text: str,
     document_kind: str,
+    extra_boilerplate_lines: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     if document_kind == "hotlist":
         return parse_hotlist_email(text)
 
     if document_kind == "job_description":
-        return parse_requirement_email(text)
+        return parse_requirement_email(text, extra_boilerplate_lines)
 
     return {
         "parser": PARSER_METADATA,

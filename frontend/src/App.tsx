@@ -4,6 +4,7 @@ import { TokenGate } from './components/TokenGate'
 import { AccuracyPage } from './pages/AccuracyPage'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftListPage } from './pages/DraftListPage'
+import { JobTitlesTaxonomyPage } from './pages/JobTitlesTaxonomyPage'
 import { ModerationPage } from './pages/ModerationPage'
 import { SkillsTaxonomyPage } from './pages/SkillsTaxonomyPage'
 
@@ -13,6 +14,7 @@ type View =
   | { name: 'moderation' }
   | { name: 'accuracy' }
   | { name: 'skills' }
+  | { name: 'job-titles' }
 
 function AppShell() {
   const [view, setView] = useState<View>({ name: 'list' })
@@ -42,6 +44,14 @@ function AppShell() {
               Skills taxonomy
             </button>
             <button
+              onClick={() => setView({ name: 'job-titles' })}
+              className={`text-xs font-medium transition ${
+                view.name === 'job-titles' ? 'text-accent' : 'text-ink-soft hover:text-ink'
+              }`}
+            >
+              Job titles taxonomy
+            </button>
+            <button
               onClick={() => setView({ name: 'moderation' })}
               className={`text-xs font-medium transition ${
                 view.name === 'moderation' ? 'text-accent' : 'text-ink-soft hover:text-ink'
@@ -68,6 +78,7 @@ function AppShell() {
       {view.name === 'moderation' && <ModerationPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'accuracy' && <AccuracyPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'skills' && <SkillsTaxonomyPage onBack={() => setView({ name: 'list' })} />}
+      {view.name === 'job-titles' && <JobTitlesTaxonomyPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'list' && <DraftListPage onSelect={(id) => setView({ name: 'detail', draftId: id })} />}
     </div>
   )

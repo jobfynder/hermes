@@ -10,6 +10,7 @@ import type {
   DraftSummaryEntry,
   EmailClaim,
   FieldProvenanceEntry,
+  JobTitleEntry,
   TaxonomyCandidateEntry,
 } from '../types'
 
@@ -144,6 +145,8 @@ export const api = {
     }),
   getAccuracySummary: (days = 30) => request<AccuracySummary>(`/accuracy/summary?days=${days}`),
   browseSkillsTaxonomy: () => request<CanonicalSkillEntry[]>('/understanding/taxonomy/skills/browse'),
+  browseJobTitlesTaxonomy: () =>
+    request<{ titles: JobTitleEntry[] }>('/understanding/taxonomy/job-titles').then((r) => r.titles),
   updateSkillDescription: (name: string, description: string) =>
     request<{ updated: boolean; reason?: string }>('/taxonomy/skills/description', {
       method: 'PATCH',
