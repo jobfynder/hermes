@@ -482,6 +482,40 @@ def test_pipe_delimited_subject_still_yields_a_title() -> None:
     )
 
 
+def test_job_description_excludes_everything_from_the_signoff_onward() -> None:
+    # Real production regression: a footer that never said "Keywords:"/
+    # "unsubscribe" (the only two markers _strip_job_description_footer
+    # checked for) was leaving a trailing "--" and the sender's contact
+    # block inside job_description. Everything from the signoff itself
+    # onward is never job content.
+    text = (
+        "Subject: Senior Agentic AI Engineer\n\n"
+        "You received this email from recruiter@example.com via https://jobs.nvoids.com\n"
+        "Please check the email id in the signature to reply to the correct email id.\n\n"
+        "Role Senior Agentic AI Engineer\n\n"
+        "JOB SUMMARY\n\n"
+        "Strong hands-on experience designing Agentic AI solutions.\n\n"
+        "--\n\n"
+        "Keywords: artificial intelligence Texas\n"
+        "recruiter@example.com\n\n"
+        "Happy recruiting\n"
+        "https://jobs.nvoids.com\n"
+    )
+
+    result = parse_requirement_email(text)
+    job_description = result["records"][0]["job_description"]
+
+    require("--" not in job_description, f"The signoff marker itself must not remain: {job_description!r}")
+    require(
+        "recruiter@example.com" not in job_description and "jobs.nvoids.com" not in job_description,
+        f"Contact info/relay links from the footer must never leak into job_description: {job_description!r}",
+    )
+    require(
+        job_description.strip().endswith("Agentic AI solutions."),
+        f"The real content must still be there, just nothing after it: {job_description!r}",
+    )
+
+
 def test_numbered_multi_position_email_splits_into_separate_records() -> None:
     # Real production email (jobs.nvoids.com relay): one recruiter
     # posting three distinct positions as a numbered list rather than
@@ -584,6 +618,7 @@ def main() -> None:
     test_location_does_not_swallow_next_blank_label()
     test_security_gateway_banner_is_stripped()
     test_pipe_delimited_subject_still_yields_a_title()
+    test_job_description_excludes_everything_from_the_signoff_onward()
     test_numbered_multi_position_email_splits_into_separate_records()
     test_single_numbered_bullet_does_not_trigger_multi_position_split()
     test_numbered_positions_skip_llm_fallback()
@@ -601,6 +636,7 @@ def main() -> None:
     print("PASS: company/work-authorization/LinkedIn/taxonomy-driven skills on a real forwarded posting")
     print("PASS: security-gateway banner ([EXTERNAL]/CAUTION) is stripped from job_description")
     print("PASS: pipe-delimited subject ('Title | Location |') still yields a title")
+    print("PASS: job_description excludes everything from the signoff onward, not just known footer markers")
     print("PASS: a numbered multi-position email splits into separate records, not one garbled record")
     print("PASS: a single position's own numbered bullets don't trigger a false multi-position split")
     print("PASS: multi-position results skip the single-record LLM fallback entirely")

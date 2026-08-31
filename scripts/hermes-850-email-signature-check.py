@@ -303,6 +303,59 @@ Free resume and job search portal
     )
 
 
+def test_job_board_relay_url_never_captured_as_website() -> None:
+    # Real production regression: "https://jobs.nvoids.com" -- the
+    # relay platform's own URL, appearing twice in the footer -- was
+    # being captured as the recruiter's website. It says nothing about
+    # the recruiter's own company.
+    text = """You received this email from ravisharpedge70@gmail.com via https://jobs.nvoids.com
+Please check the email id in the signature to reply to the correct email id.
+
+--
+
+Keywords: business intelligence information technology California
+ravisharpedge70@gmail.com
+
+View this job online here
+
+Happy recruiting
+https://jobs.nvoids.com
+Free resume and job search portal
+"""
+
+    sig = parse_email_signature(text=text, sender_email="ravisharpedge70@gmail.com")
+    contact = contact_values(sig)
+
+    require(
+        contact.get("website") is None,
+        f"A freemail sender with only a relay URL in the text must get no website at all, got {contact.get('website')!r}",
+    )
+
+
+def test_website_falls_back_to_senders_own_corporate_domain() -> None:
+    text = "Regards,\nJohn Smith\njohn@acmestaffing.com\n"
+
+    sig = parse_email_signature(text=text, sender_email="john@acmestaffing.com")
+    contact = contact_values(sig)
+
+    require(
+        contact.get("website") == "https://acmestaffing.com",
+        f"With no website in the text, a real corporate sender domain must be used, got {contact.get('website')!r}",
+    )
+
+
+def test_website_fallback_never_fires_for_a_freemail_sender() -> None:
+    text = "Regards,\nJohn Smith\n"
+
+    sig = parse_email_signature(text=text, sender_email="john.smith@gmail.com")
+    contact = contact_values(sig)
+
+    require(
+        contact.get("website") is None,
+        f"A freemail domain must never be used as a fallback website, got {contact.get('website')!r}",
+    )
+
+
 def main() -> int:
     print("HERMES-850 email signature check started")
 
@@ -332,6 +385,15 @@ def main() -> int:
 
     test_job_board_relay_boilerplate_is_not_mistaken_for_company()
     print("PASS: a job-board relay's boilerplate footer is not mistaken for a company name or title")
+
+    test_job_board_relay_url_never_captured_as_website()
+    print("PASS: a job-board relay's own URL is never captured as the recruiter's website")
+
+    test_website_falls_back_to_senders_own_corporate_domain()
+    print("PASS: website falls back to the sender's own corporate email domain when none is stated")
+
+    test_website_fallback_never_fires_for_a_freemail_sender()
+    print("PASS: the sender-domain website fallback never fires for a freemail sender")
 
     print("HERMES-850 email signature check PASSED")
     return 0

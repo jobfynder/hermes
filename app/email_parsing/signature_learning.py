@@ -34,7 +34,10 @@ from app.runtime.db import cursor
 # Not exhaustive -- just common enough that a "correction" learned here
 # is guaranteed to belong to one specific person, not their employer.
 # Extend this list rather than ever learning patterns for one of these.
-_FREEMAIL_DOMAINS = {
+# Also reused by signature.py's sender-domain website fallback -- the
+# same reasoning applies: a freemail domain isn't a company's website
+# either.
+FREEMAIL_DOMAINS = {
     "gmail.com",
     "yahoo.com",
     "outlook.com",
@@ -52,7 +55,7 @@ _FREEMAIL_DOMAINS = {
 
 
 def _is_learnable_domain(sender_domain: str | None) -> bool:
-    return bool(sender_domain) and sender_domain not in _FREEMAIL_DOMAINS
+    return bool(sender_domain) and sender_domain not in FREEMAIL_DOMAINS
 
 
 def record_signature_correction(sender_domain: str, field: str, value: str) -> None:

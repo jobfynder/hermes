@@ -443,6 +443,17 @@ def _strip_job_description_footer(text: str) -> str:
         if index != -1:
             cut_at = min(cut_at, index)
 
+    # Everything from the sender's own signoff ("--", "Thanks,",
+    # "Regards,"...) onward is signature/contact-info/disclaimer noise,
+    # never job content -- cut there too, not just at the specific
+    # footer marker strings above, which don't cover every vendor's
+    # footer shape. Confirmed in production: a posting whose footer
+    # never said "Keywords:"/"unsubscribe" was still leaving a trailing
+    # "--" and the relay's contact block in job_description.
+    signoff = SIGNOFF_RE.search(text)
+    if signoff:
+        cut_at = min(cut_at, signoff.start())
+
     return text[:cut_at].strip()
 
 

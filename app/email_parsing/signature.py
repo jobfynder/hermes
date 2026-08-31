@@ -36,6 +36,7 @@ except ImportError:  # pragma: no cover - exercised only if dependency missing
     spacy = None
 
 from app.email_parsing.sender_resolver import forwarded_marker_span
+from app.email_parsing.signature_learning import FREEMAIL_DOMAINS
 from app.understanding.parsers.contact import EMAIL_PATTERN, LINKEDIN_PATTERN, PHONE_PATTERN
 
 
@@ -105,6 +106,13 @@ TRACKING_URL_RE = re.compile(
     r"sendgrid\.net|hubspotlinks\.com|mandrillapp\.com|"
     r"constantcontact\.com|campaign-archive\.com|click\.[\w.-]+)"
 )
+
+# Job-board relay platforms (jobs.nvoids.com and similar) inject their own
+# URL into every posting's signature/footer -- confirmed in production:
+# it was being captured as the recruiter's "website", when it's actually
+# the relay's own platform link and says nothing about the recruiter's
+# company. Extend as more relay platforms show up in traffic.
+JOB_BOARD_RELAY_URL_RE = re.compile(r"(?i)https?://(?:[\w-]+\.)*(?:nvoids\.com)")
 
 
 _FORWARDED_HEADER_LINE_RE = re.compile(
@@ -558,7 +566,11 @@ def _extract_linkedin(content_lines: list[str]) -> dict[str, Any] | None:
 
 def _extract_website(content_lines: list[str]) -> dict[str, Any] | None:
     for line in content_lines:
-        if LINKEDIN_PATTERN.search(line) or TRACKING_URL_RE.search(line):
+        if (
+            LINKEDIN_PATTERN.search(line)
+            or TRACKING_URL_RE.search(line)
+            or JOB_BOARD_RELAY_URL_RE.search(line)
+        ):
             continue
         if SOCIAL_BOILERPLATE_RE.search(line):
             continue
@@ -568,6 +580,33 @@ def _extract_website(content_lines: list[str]) -> dict[str, Any] | None:
             return _field(value, raw=match.group(0), confidence=0.90,
                           method="url_regex", source=line.strip())
     return None
+
+
+def _sender_domain_website_fallback(sender_email: str | None) -> dict[str, Any] | None:
+    """When no real website/company URL was found in the signature text
+    itself, the sender's own email domain is a safe, honest fallback --
+    it isn't a guess about wording (unlike inferring a company *name*
+    from a domain string, deliberately not done, see signature_learning.
+    py), it's literally the domain the email came from. Never used for a
+    freemail sender (gmail.com etc.) -- that domain identifies the
+    person's mail provider, not their employer -- so "no website found"
+    stays honestly blank for those, exactly as it should.
+    """
+    if not sender_email or "@" not in sender_email:
+        return None
+
+    domain = sender_email.rsplit("@", 1)[-1].strip().lower()
+
+    if not domain or domain in FREEMAIL_DOMAINS or JOB_BOARD_RELAY_URL_RE.search(f"https://{domain}"):
+        return None
+
+    return _field(
+        f"https://{domain}",
+        raw=None,
+        confidence=0.6,
+        method="derived_from_sender_domain",
+        source=sender_email,
+    )
 
 
 def _extract_location(content_lines: list[str]) -> dict[str, Any] | None:
@@ -857,7 +896,7 @@ def parse_email_signature(
     if linkedin_field:
         contact["linkedin_url"] = linkedin_field
 
-    website_field = _extract_website(content_lines)
+    website_field = _extract_website(content_lines) or _sender_domain_website_fallback(sender_email)
     if website_field:
         contact["website"] = website_field
 
