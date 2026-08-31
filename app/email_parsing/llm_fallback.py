@@ -113,10 +113,24 @@ def apply_job_requirement_fallback(clean_text: str, email_parsing: dict[str, Any
     else in the record stays attributed to the deterministic parser,
     because it was.
     """
+    records = email_parsing.get("records") or []
+
+    # This only ever fills gaps on records[0] -- built for the single-
+    # job-per-email case. A multi-position email (a numbered list or
+    # repeated "Job Title:" labels, see _split_requirement_sections in
+    # app/email_parsing/parsers.py) is deliberately never sent through
+    # it: silently patching only the first of several positions and
+    # leaving the rest untouched would be worse than leaving all of them
+    # for a human reviewer to see clearly as separate, still-incomplete
+    # records. clean_jd would also only ever be the *whole* email's text
+    # anyway, not any one position's own section, so the LLM would be
+    # asked to extract "the" job out of text that describes several.
+    if len(records) > 1:
+        return email_parsing, set()
+
     if email_parsing.get("confidence", 0.0) >= FALLBACK_CONFIDENCE_THRESHOLD:
         return email_parsing, set()
 
-    records = email_parsing.get("records") or []
     record = records[0] if records else _empty_job_record()
 
     outcome = run_llm_fallback(

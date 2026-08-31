@@ -1,6 +1,7 @@
 import re
 from typing import Any
 
+from app.email_parsing.signature import SIGNOFF_RE
 from app.services.consultant_service import parse_consultant_text
 from app.understanding.models import RawDocument
 from app.understanding.parsers.basic import extract_probable_title
@@ -454,6 +455,60 @@ def _clean_job_description(text: str) -> str:
     return cleaned or text.strip()
 
 
+#: A vendor listing several positions in one email as a numbered list --
+#: "1) Power Platform Developer", "2 )Power BI Developer / BI Consultant"
+#: -- rather than repeating a "Job Title:" label per posting (the format
+#: _split_requirement_sections already handled). Tolerates a space before
+#: the closing paren ("2 )") and with/without one after it, both seen in
+#: production. Deliberately "\)" only (not ".", not "-") -- a numbered
+#: list of REQUIREMENTS inside a single position ("1. 5+ years Java")
+#: almost always uses "." or "-", so restricting to ")" keeps this from
+#: firing on an ordinary single-position email's own numbered bullets.
+_NUMBERED_POSITION_RE = re.compile(r"(?im)^[ \t]*(\d{1,2})[ \t]*\)[ \t]*")
+
+
+def _numbered_position_sections(text: str) -> list[str] | None:
+    matches = list(_NUMBERED_POSITION_RE.finditer(text))
+
+    # Require the list to actually start at 1 -- a stray "12) call
+    # backup" line deep in an unrelated single-position email shouldn't
+    # be mistaken for the start of a multi-position list.
+    if len(matches) < 2 or matches[0].group(1) != "1":
+        return None
+
+    # Multi-position emails from job-board relays (jobs.nvoids.com and
+    # similar) end the actual listing with a "--"/"Thanks"/"Regards"
+    # signoff, followed by boilerplate that repeats the whole subject
+    # line and a "Keywords:" dump -- never part of the last position.
+    # Without this cap the last section would swallow that entire footer
+    # as its own job_description.
+    signoff = SIGNOFF_RE.search(text)
+    limit = signoff.start() if signoff else len(text)
+
+    matches = [m for m in matches if m.start() < limit]
+    if len(matches) < 2:
+        return None
+
+    return _sections_from_matches(text, matches, end_limit=limit)
+
+
+def _sections_from_matches(
+    text: str, matches: list[re.Match[str]], end_limit: int | None = None
+) -> list[str]:
+    end_limit = len(text) if end_limit is None else end_limit
+    sections: list[str] = []
+
+    for index, match in enumerate(matches):
+        start = match.start()
+        end = matches[index + 1].start() if index + 1 < len(matches) else end_limit
+        section = text[start:end].strip()
+
+        if section:
+            sections.append(section)
+
+    return sections or [text]
+
+
 def _split_requirement_sections(text: str) -> list[str]:
     matches = list(
         re.finditer(
@@ -462,25 +517,58 @@ def _split_requirement_sections(text: str) -> list[str]:
         )
     )
 
-    if len(matches) <= 1:
-        return [text]
+    if len(matches) > 1:
+        return _sections_from_matches(text, matches)
 
-    sections: list[str] = []
+    return _numbered_position_sections(text) or [text]
 
-    for index, match in enumerate(matches):
-        start = match.start()
-        end = (
-            matches[index + 1].start()
-            if index + 1 < len(matches)
-            else len(text)
+
+def _score_requirement_record(
+    has_title: bool, has_requirement_evidence: bool, has_company: bool
+) -> tuple[float, list[str]]:
+    """Shared by the per-section loop in parse_requirement_email and by
+    the multi-position fill-forward pass that follows it (a record whose
+    `company` got filled in by inheriting another position's value needs
+    its confidence/warnings recomputed the same way, not left stale).
+
+    A posting with a clear title and a real skills list used to score
+    0.92 -- comfortably above FALLBACK_CONFIDENCE_THRESHOLD (0.70) --
+    even when company came back empty, because confidence only ever
+    looked at title/skills. That silently skipped the LLM fallback
+    (app/email_parsing/llm_fallback.py) on exactly the emails it exists
+    for: real-world recruiter/vendor prose ("Hi, this is Francis from
+    Indus River Technologies...") that COMPANY_PATTERN's label-based
+    regex (app/understanding/parsers/job_description_fields.py) can't
+    reasonably generalize across dozens of vendor templates. Measured
+    against production: 94 of the last 105 job postings (90%) had a null
+    company field, all scoring >=0.92 and never reaching the fallback.
+    Capping at 0.65 when company is the only gap routes these into the
+    already-enabled, already-credentialed Haiku fallback without
+    changing behavior for postings that are actually incomplete on
+    title/skills too.
+    """
+    confidence = (
+        0.92
+        if has_title and has_requirement_evidence and has_company
+        else (
+            0.65
+            if has_title and has_requirement_evidence
+            else (0.62 if has_title or has_requirement_evidence else 0.35)
         )
+    )
 
-        section = text[start:end].strip()
+    warnings: list[str] = []
 
-        if section:
-            sections.append(section)
+    if not has_title:
+        warnings.append("job_title_missing")
 
-    return sections or [text]
+    if not has_requirement_evidence:
+        warnings.append("required_skills_not_identified")
+
+    if not has_company:
+        warnings.append("company_missing")
+
+    return confidence, warnings
 
 
 def parse_requirement_email(text: str) -> dict[str, Any]:
@@ -504,6 +592,11 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
 
     sections = _split_requirement_sections(clean_text)
     records: list[dict[str, Any]] = []
+    # Parallel to `records` -- has_title/has_requirement_evidence per
+    # record, needed to recompute confidence below if a later fill-
+    # forward pass fills in `company` for a record that didn't have it
+    # (see _score_requirement_record).
+    evidence: list[tuple[bool, bool]] = []
 
     for index, section in enumerate(sections, start=1):
         understanding = understand_document(
@@ -527,11 +620,19 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
             if isinstance(item, dict) and item.get("name")
         ]
 
+        numbered_marker = _NUMBERED_POSITION_RE.match(section)
+        numbered_title = None
+        if numbered_marker:
+            remainder = section[numbered_marker.end():].splitlines()
+            if remainder:
+                numbered_title = extract_probable_title(remainder[0].strip())
+
         job_title = (
             _extract_labeled_value(
                 section,
                 ["Job Title", "Position", "Role"],
             )
+            or numbered_title
             or structured.get("job_title")
             # Only the first section inherits the email's own subject as a
             # title guess -- a multi-posting email splitting into several
@@ -570,46 +671,8 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
             )
         )
         has_company = bool(structured.get("company"))
-
-        # A posting with a clear title and a real skills list used to score
-        # 0.92 -- comfortably above FALLBACK_CONFIDENCE_THRESHOLD (0.70) --
-        # even when company came back empty, because confidence only ever
-        # looked at title/skills. That silently skipped the LLM fallback
-        # (app/email_parsing/llm_fallback.py) on exactly the emails it
-        # exists for: real-world recruiter/vendor prose ("Hi, this is
-        # Francis from Indus River Technologies...") that COMPANY_PATTERN's
-        # label-based regex (app/understanding/parsers/job_description_
-        # fields.py) can't reasonably generalize across dozens of vendor
-        # templates. Measured against production: 94 of the last 105 job
-        # postings (90%) had a null company field, all scoring >=0.92 and
-        # never reaching the fallback. Capping at 0.65 when company is the
-        # only gap routes these into the already-enabled, already-
-        # credentialed Haiku fallback without changing behavior for
-        # postings that are actually incomplete on title/skills too.
-        confidence = (
-            0.92
-            if has_title and has_requirement_evidence and has_company
-            else (
-                0.65
-                if has_title and has_requirement_evidence
-                else (
-                    0.62
-                    if has_title or has_requirement_evidence
-                    else 0.35
-                )
-            )
-        )
-
-        warnings: list[str] = []
-
-        if not has_title:
-            warnings.append("job_title_missing")
-
-        if not has_requirement_evidence:
-            warnings.append("required_skills_not_identified")
-
-        if not has_company:
-            warnings.append("company_missing")
+        confidence, warnings = _score_requirement_record(has_title, has_requirement_evidence, has_company)
+        evidence.append((has_title, has_requirement_evidence))
 
         records.append(
             {
@@ -639,6 +702,38 @@ def parse_requirement_email(text: str) -> dict[str, Any]:
                 "warnings": warnings,
             }
         )
+
+    # A multi-position email often states shared context (location, most
+    # often) once for the whole listing rather than repeating it under
+    # every numbered item -- a position with no location of its own
+    # inherits whichever value another position in the same email did
+    # find, rather than being left blank when the information was right
+    # there in the email. Never runs for a single-record email: nothing
+    # to inherit from, and a solo posting's own missing location should
+    # surface as requires_review as it always has.
+    if len(records) > 1:
+        for field in ("location", "company"):
+            shared_value = next(
+                (record[field] for record in records if record.get(field)), None
+            )
+            if shared_value is None:
+                continue
+            for record, (has_title, has_requirement_evidence) in zip(records, evidence):
+                if record.get(field):
+                    continue
+                record[field] = shared_value
+                if field == "company":
+                    # Company just went from missing to present -- the
+                    # confidence/warnings computed during the loop above
+                    # are now stale (see _score_requirement_record).
+                    confidence, warnings = _score_requirement_record(
+                        has_title, has_requirement_evidence, has_company=True
+                    )
+                    record["parse_confidence"] = confidence
+                    record["requires_review"] = confidence < 0.70
+                    record["warnings"] = warnings
+                else:
+                    record["warnings"] = [w for w in record["warnings"] if w != f"{field}_missing"]
 
     confidence = min(
         (

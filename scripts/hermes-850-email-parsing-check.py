@@ -482,6 +482,98 @@ def test_pipe_delimited_subject_still_yields_a_title() -> None:
     )
 
 
+def test_numbered_multi_position_email_splits_into_separate_records() -> None:
+    # Real production email (jobs.nvoids.com relay): one recruiter
+    # posting three distinct positions as a numbered list rather than
+    # repeating a "Job Title:" label per posting. Previously produced a
+    # single garbled record: job_title=None, required_skills mixing junk
+    # tokens like "https" pulled off the footer URL, and the entire
+    # three-position block dumped into one job_description.
+    text = """Subject: Requirement : Power Platform Developer : Sacramento, CA
+
+You received this email from ravisharpedge70@gmail.com via https://jobs.nvoids.com
+Please check the email id in the signature to reply to the correct email id.
+
+HI everyone,
+we have requirement on
+
+1)Power Platform Developer
+Sacramento, CA
+- Power Apps, Dataverse, Power Automate, SharePoint
+
+2 )Power BI Developer / BI Consultant
+Sacramento, CA
+- Power BI dashboards, data modeling, reporting/analytics
+
+3) PPM Functional/Technical Consultant
+Sacramento, CA
+- Planner/Project, PPM workflows, resource management, implementation/training
+
+--
+
+Keywords: business intelligence information technology California
+Requirement : Power Platform Developer : Sacramento, CA
+ravisharpedge70@gmail.com
+
+View this job online here
+
+Happy recruiting
+https://jobs.nvoids.com
+Free resume and job search portal
+"""
+
+    result = parse_requirement_email(text)
+
+    require(result["record_count"] == 3, f"Expected 3 separate positions, got {result['record_count']}: {result['records']}")
+
+    titles = [r["job_title"] for r in result["records"]]
+    require(
+        titles == ["Power Platform Developer", "Power BI Developer / BI Consultant", "PPM Functional/Technical Consultant"],
+        f"Wrong titles or wrong order: {titles}",
+    )
+
+    for record in result["records"]:
+        require(
+            "Keywords:" not in record["job_description"] and "jobs.nvoids.com" not in record["job_description"],
+            f"The relay's footer boilerplate must never leak into a position's job_description: {record['job_description']!r}",
+        )
+        require(
+            record["location"] == "Sacramento, CA",
+            f"Every position must get the shared location, got {record['location']!r}",
+        )
+
+
+def test_single_numbered_bullet_does_not_trigger_multi_position_split() -> None:
+    # A single position whose own requirements happen to be numbered
+    # ("1) 5+ years Java") must not be mistaken for a second job.
+    text = (
+        "Job Title: Java Developer\n"
+        "Required Skills: Java, Spring\n\n"
+        "Requirements:\n"
+        "1) 5+ years of Java experience\n"
+        "Additional context about the one role, long enough to read as real body text here.\n"
+    )
+
+    result = parse_requirement_email(text)
+    require(result["record_count"] == 1, f"A single numbered bullet must not split into multiple records: {result}")
+
+
+def test_numbered_positions_skip_llm_fallback() -> None:
+    from app.email_parsing.llm_fallback import apply_job_requirement_fallback
+
+    text = (
+        "We have two openings:\n\n"
+        "1)Backend Engineer\nRemote\n- Java, Spring\n\n"
+        "2)Frontend Engineer\nRemote\n- React, TypeScript\n"
+    )
+    result = parse_requirement_email(text)
+    require(result["record_count"] == 2, f"Fixture must actually produce multiple records: {result}")
+
+    updated, filled_fields = apply_job_requirement_fallback(text, result)
+    require(filled_fields == set(), "The LLM fallback must never run against a multi-position result")
+    require("llm_fallback" not in updated, "No llm_fallback metadata should be attached when the fallback was skipped")
+
+
 def main() -> None:
     test_mailbox_routing()
     test_hotlist_parser()
@@ -492,6 +584,9 @@ def main() -> None:
     test_location_does_not_swallow_next_blank_label()
     test_security_gateway_banner_is_stripped()
     test_pipe_delimited_subject_still_yields_a_title()
+    test_numbered_multi_position_email_splits_into_separate_records()
+    test_single_numbered_bullet_does_not_trigger_multi_position_split()
+    test_numbered_positions_skip_llm_fallback()
 
     print("PASS: exact mailbox routing")
     print("PASS: foreign-domain aliases rejected")
@@ -506,6 +601,9 @@ def main() -> None:
     print("PASS: company/work-authorization/LinkedIn/taxonomy-driven skills on a real forwarded posting")
     print("PASS: security-gateway banner ([EXTERNAL]/CAUTION) is stripped from job_description")
     print("PASS: pipe-delimited subject ('Title | Location |') still yields a title")
+    print("PASS: a numbered multi-position email splits into separate records, not one garbled record")
+    print("PASS: a single position's own numbered bullets don't trigger a false multi-position split")
+    print("PASS: multi-position results skip the single-record LLM fallback entirely")
     print("PASS: HERMES-850 parser guardrails")
 
 
