@@ -95,7 +95,7 @@ def _job_draft(**overrides):
         source="channel_text_intake",
         payload=payload,
         confidence=0.9,
-        requires_review=False,
+        requires_review=overrides.pop("requires_review", False),
         metadata=metadata,
         **overrides,
     )
@@ -234,6 +234,60 @@ def test_publish_draft_object_pushes_and_survives_push_failure() -> None:
     )
 
 
+def test_publish_blocked_when_requires_review_and_no_job_title() -> None:
+    """Hermes is the staging layer in front of the live Jobfynder Core
+    site now -- a draft that was never actually reviewed and has no job
+    title must not be publishable at all, since it would otherwise reach
+    the live job board as a blank/broken posting."""
+    draft = _job_draft(requires_review=True)
+    draft.payload["structured_data"]["email_parsing"]["records"][0]["job_title"] = ""
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE drafts SET payload = %s WHERE draft_id = %s",
+            (json.dumps(draft.payload), draft.draft_id),
+        )
+
+    result = publish_draft_object(draft.draft_id)
+
+    require(result.status == "blocked", f"Must be blocked, no job title and still needing review: {result}")
+    require(
+        "job_title" in result.errors[0],
+        f"The block reason must say why: {result.errors}",
+    )
+
+    with cursor() as cur:
+        cur.execute("SELECT status FROM drafts WHERE draft_id = %s", (draft.draft_id,))
+        row = cur.fetchone()
+    require(row["status"] != "published", "A blocked publish must not have changed the draft's status")
+
+
+def test_publish_allowed_when_requires_review_but_job_title_present() -> None:
+    """The gate only catches the "no title at all" case -- any other
+    requires_review draft a reviewer has actually looked at must still be
+    publishable normally."""
+    draft = _job_draft(requires_review=True)
+
+    with patch("app.integrations.core_job_push.core_push_configured", return_value=False):
+        result = publish_draft_object(draft.draft_id)
+
+    require(result.status == "published", f"A requires_review draft with a job title must still publish: {result}")
+
+
+def test_publish_not_blocked_for_non_job_requirement_drafts() -> None:
+    draft = create_draft_object(
+        draft_type="draft_hotlist",
+        source="channel_text_intake",
+        payload={"text": "a hotlist"},
+        confidence=0.9,
+        requires_review=True,
+    )
+
+    with patch("app.integrations.core_job_push.core_push_configured", return_value=False):
+        result = publish_draft_object(draft.draft_id)
+
+    require(result.status == "published", f"The publish gate only applies to draft_job_requirement: {result}")
+
+
 if __name__ == "__main__":
     test_parse_rate_hourly()
     test_parse_rate_range()
@@ -250,4 +304,7 @@ if __name__ == "__main__":
     test_push_http_error_never_raises_and_is_recorded()
     test_push_not_configured_fails_gracefully()
     test_publish_draft_object_pushes_and_survives_push_failure()
+    test_publish_blocked_when_requires_review_and_no_job_title()
+    test_publish_allowed_when_requires_review_but_job_title_present()
+    test_publish_not_blocked_for_non_job_requirement_drafts()
     print("hermes-850-core-job-push-check: all checks passed")

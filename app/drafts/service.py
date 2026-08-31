@@ -12,6 +12,7 @@ from app.email_parsing.provenance import (
     JOB_REQUIREMENT_FIELDS,
     record_reviewer_correction,
 )
+from app.email_parsing.signature_learning import record_signature_correction
 from app.integrations.core_job_push import push_job_to_core
 from app.runtime.db import cursor
 from app.runtime.events import emit_event
@@ -241,7 +242,48 @@ def update_draft_metadata(draft_id: str, extra_metadata: dict) -> DraftObject | 
     return _row_to_draft(row) if row else None
 
 
+def _publish_block_reason(draft: DraftObject) -> str | None:
+    """A hard stop before a job requirement reaches Jobfynder Core: Hermes
+    is the staging layer in front of the live site now, so a draft still
+    flagged requires_review with no job title would otherwise go live as
+    a blank/broken posting. Deliberately narrow -- a reviewer can still
+    publish any other requires_review draft they've actually looked at
+    (corrections don't clear the flag, see apply_field_corrections), this
+    only catches the "never opened it, still missing the one field a live
+    posting can't do without" case.
+    """
+    if draft.draft_type != "draft_job_requirement" or not draft.requires_review:
+        return None
+
+    records = ((draft.payload.get("structured_data") or {}).get("email_parsing") or {}).get("records") or []
+    if not records:
+        return "job_requirement_missing_records"
+
+    if not (records[0].get("job_title") or "").strip():
+        return "job_requirement_missing_job_title"
+
+    return None
+
+
 def publish_draft_object(draft_id: str) -> DraftPublishResult:
+    existing = get_draft_object(draft_id)
+    if not existing:
+        return DraftPublishResult(
+            status="blocked",
+            draft_id=draft_id,
+            draft_type="draft_channel_note",
+            errors=["draft_not_found"],
+        )
+
+    block_reason = _publish_block_reason(existing)
+    if block_reason:
+        return DraftPublishResult(
+            status="blocked",
+            draft_id=existing.draft_id,
+            draft_type=existing.draft_type,
+            errors=[block_reason],
+        )
+
     with cursor() as cur:
         cur.execute(
             "UPDATE drafts SET status = 'published', updated_at = now() "
@@ -492,7 +534,16 @@ def apply_field_corrections(
     `corrections` that isn't in _EDITABLE_FIELDS for this record_type,
     rather than raising, so a client sending an unexpected extra key
     doesn't fail the whole request.
+
+    record_type="signature" is handled separately by
+    _apply_signature_corrections -- the signature block isn't a fixed
+    schema like job_requirement/hotlist (see app/email_parsing/
+    signature.py), so "allowed" there is whatever fields this specific
+    draft's signature actually detected, not a static set.
     """
+    if record_type == "signature":
+        return _apply_signature_corrections(draft_id, corrections)
+
     if record_type not in _EDITABLE_FIELDS:
         raise ValueError(f"unsupported record_type {record_type!r}")
 
@@ -563,6 +614,75 @@ def apply_field_corrections(
             "record_index": record_index,
             "changed_fields": changed_fields,
         },
+    )
+
+    return _row_to_draft(row)
+
+
+def _apply_signature_corrections(draft_id: str, corrections: dict[str, Any]) -> DraftObject | None:
+    """Corrects sender-signature fields (name/email/company/title, etc. --
+    deterministically extracted from the email's own signature block, see
+    app/email_parsing/signature.py) the same way apply_field_corrections
+    does for job_requirement/hotlist fields, plus one more step: also
+    remembers the correction per sender domain (signature_corrections
+    table) so the next email from that domain gets the gap filled in
+    automatically instead of a reviewer fixing the same field forever --
+    see app/email_parsing/signature_learning.py.
+    """
+    draft = get_draft_object(draft_id)
+    if not draft:
+        return None
+
+    structured_data = draft.payload.get("structured_data") or {}
+    signature = structured_data.get("signature") or {}
+    contact = signature.get("contact") or {}
+
+    # Only a field the parser actually detected for this draft is
+    # editable -- no injecting brand-new keys the signature parser
+    # doesn't produce.
+    corrections = {field: value for field, value in corrections.items() if field in contact}
+    if not corrections:
+        return draft
+
+    sender_email = (draft.metadata or {}).get("sender", {}).get("email") or ""
+    sender_domain = sender_email.rsplit("@", 1)[-1].lower() if "@" in sender_email else None
+
+    changed_fields: list[str] = []
+
+    for field, new_value in corrections.items():
+        old_value = contact[field].get("value")
+        if new_value == old_value:
+            continue
+
+        contact[field] = {**contact[field], "value": new_value, "method": "human_edited", "confidence": 1.0}
+        changed_fields.append(field)
+
+        record_reviewer_correction(
+            parse_run_id=draft_id,
+            field_path=f"signature.{field}",
+            before=old_value,
+            after=new_value,
+        )
+
+        if sender_domain and isinstance(new_value, str) and new_value.strip():
+            record_signature_correction(sender_domain, field, new_value.strip())
+
+    if not changed_fields:
+        return draft
+
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE drafts SET payload = %s, updated_at = now() WHERE draft_id = %s RETURNING *",
+            (json.dumps(draft.payload, default=str), draft_id),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return None
+
+    emit_event(
+        "draft.field_corrected",
+        {"draft_id": draft_id, "record_type": "signature", "record_index": 0, "changed_fields": changed_fields},
     )
 
     return _row_to_draft(row)

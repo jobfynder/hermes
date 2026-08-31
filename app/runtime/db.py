@@ -234,6 +234,19 @@ CREATE TABLE IF NOT EXISTS skill_usage_stats (
     last_seen_at    TIMESTAMPTZ,
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- A reviewer's correction to a signature field (sender name/email/company/
+-- title, etc.), remembered per sender domain so the same fix doesn't have
+-- to be made on every email from that domain -- see
+-- app/email_parsing/signature_learning.py. One row per (domain, field);
+-- a later correction for the same pair replaces the earlier one.
+CREATE TABLE IF NOT EXISTS signature_corrections (
+    sender_domain   TEXT NOT NULL,
+    field           TEXT NOT NULL,
+    corrected_value TEXT NOT NULL,
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (sender_domain, field)
+);
 """
 
 

@@ -19,6 +19,7 @@ from app.email_parsing.provenance import (
 )
 from app.email_parsing.sender_resolver import looks_forwarded, resolve_original_sender
 from app.email_parsing.signature import parse_email_signature
+from app.email_parsing.signature_learning import apply_learned_signature_patterns
 from app.email_parsing.spam import classify_spam
 from app.understanding.taxonomy.candidates import record_skill_usage, record_taxonomy_candidates
 from app.runtime.events import emit_event
@@ -388,6 +389,18 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             text=request.text or "",
             sender_email=request.sender.email if request.sender else None,
         )
+
+        # Fills in any field the deterministic extraction above missed
+        # using values a reviewer already confirmed for this same sender
+        # domain (never overrides a value the parser did find) -- see
+        # app/email_parsing/signature_learning.py.
+        signature_sender_domain = (
+            request.sender.email.rsplit("@", 1)[-1].lower()
+            if request.sender and request.sender.email and "@" in request.sender.email
+            else None
+        )
+        apply_learned_signature_patterns(signature.get("contact", {}), signature_sender_domain)
+
         structured_data["signature"] = signature
 
         emit_event(

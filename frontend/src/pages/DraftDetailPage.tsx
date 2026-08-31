@@ -228,7 +228,7 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
   }
 
   async function handleCorrectField(
-    recordType: 'job_requirement' | 'hotlist',
+    recordType: 'job_requirement' | 'hotlist' | 'signature',
     recordIndex: number,
     field: string,
     newValue: unknown,
@@ -430,6 +430,8 @@ export function DraftDetailPage({ draftId, onBack }: { draftId: string; onBack: 
                   label={field.replace(/_/g, ' ')}
                   value={data.value}
                   provenance={pmap.get(`signature.${field}`)}
+                  editable={draft.status !== 'published'}
+                  onSave={(newValue) => handleCorrectField('signature', 0, field, newValue)}
                 />
               ))}
             </Card>

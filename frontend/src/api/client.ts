@@ -121,7 +121,7 @@ export const api = {
     }),
   correctDraftFields: (
     id: string,
-    recordType: 'job_requirement' | 'hotlist',
+    recordType: 'job_requirement' | 'hotlist' | 'signature',
     recordIndex: number,
     corrections: Record<string, unknown>,
   ) =>
