@@ -6,6 +6,8 @@ from app.channels.models import ChannelIntakeRequest, ChannelSender
 from app.channels.service import process_channel_intake
 from app.drafts.accuracy import compute_accuracy_summary
 from app.drafts.service import apply_field_corrections, get_draft_object
+from app.email_parsing.signature_learning import apply_learned_signature_patterns, record_signature_correction
+from app.runtime.db import cursor
 
 
 def require(condition: bool, message: str) -> None:
@@ -293,6 +295,30 @@ sam.recruiter@noverride-pattern.example.com
     )
 
 
+def test_signature_learning_never_records_or_applies_a_freemail_domain() -> None:
+    """Regression test for a real production incident: a single
+    correction learned for one gmail.com sender got applied to 700+
+    unrelated drafts from other people who also happen to use gmail.com,
+    because a job-board relay sends on behalf of many different
+    recruiters through their own personal addresses. A sender domain only
+    identifies one company for a real corporate domain, never a shared
+    public mail provider.
+    """
+    record_signature_correction("gmail.com", "company_name", "Should Never Be Recorded")
+
+    with cursor() as cur:
+        cur.execute(
+            "SELECT * FROM signature_corrections WHERE sender_domain = 'gmail.com' AND field = 'company_name'"
+        )
+        row = cur.fetchone()
+    require(row is None, f"A freemail domain must never get a row in signature_corrections: {row}")
+
+    contact: dict = {}
+    applied = apply_learned_signature_patterns(contact, "gmail.com")
+    require(applied == [], f"Nothing must be applied for a freemail domain, got {applied}")
+    require(contact == {}, f"contact must be left untouched for a freemail domain, got {contact}")
+
+
 def test_accuracy_summary_flags_small_samples_as_unreliable() -> None:
     summary = compute_accuracy_summary(days=1)
     # A 1-day window in a fresh test database has near-zero samples for
@@ -327,6 +353,9 @@ def main() -> None:
 
     test_signature_learning_never_overrides_a_field_the_parser_did_detect()
     print("PASS: a learned signature pattern never overrides a value the parser actually detected")
+
+    test_signature_learning_never_records_or_applies_a_freemail_domain()
+    print("PASS: signature pattern learning never records or applies patterns for a shared freemail domain")
 
     test_accuracy_summary_reflects_a_correction()
     print("PASS: accuracy summary separates 'filled a gap' from 'fixed a wrong value'")

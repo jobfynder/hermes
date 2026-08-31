@@ -43,11 +43,12 @@ export function DraftListPage({
   const [search, setSearch] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null)
+  const [showDuplicates, setShowDuplicates] = useState(false)
 
   function load() {
     setError(null)
     api
-      .listDraftSummaries()
+      .listDraftSummaries(showDuplicates)
       .then((d) => {
         setDrafts(d)
         setLastLoadedAt(new Date())
@@ -55,13 +56,13 @@ export function DraftListPage({
       .catch((err) => setError(err.message ?? 'Failed to load drafts'))
   }
 
-  useEffect(load, [])
+  useEffect(load, [showDuplicates])
 
   useEffect(() => {
     if (!autoRefresh) return
     const id = window.setInterval(load, 30000)
     return () => window.clearInterval(id)
-  }, [autoRefresh])
+  }, [autoRefresh, showDuplicates])
 
   const filtered = useMemo(() => {
     if (!drafts) return []
@@ -115,6 +116,15 @@ export function DraftListPage({
               Updated {lastLoadedAt.toLocaleTimeString()}
             </span>
           )}
+          <label className="flex items-center gap-1.5 text-xs text-ink-soft">
+            <input
+              type="checkbox"
+              checked={showDuplicates}
+              onChange={(e) => setShowDuplicates(e.target.checked)}
+              className="accent-accent"
+            />
+            Show duplicates
+          </label>
           <label className="flex items-center gap-1.5 text-xs text-ink-soft">
             <input
               type="checkbox"
@@ -187,7 +197,14 @@ export function DraftListPage({
                 onClick={() => onSelect(d.draft_id)}
                 className="cursor-pointer border-b border-line last:border-0 hover:bg-paper"
               >
-                <td className="max-w-72 truncate px-4 py-3 font-medium text-ink">{d.display_title}</td>
+                <td className="max-w-72 truncate px-4 py-3 font-medium text-ink">
+                  {d.display_title}
+                  {d.is_duplicate && (
+                    <span className="ml-2 rounded bg-paper px-1.5 py-0.5 text-xs font-normal text-ink-soft">
+                      duplicate
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">{draftTypeLabel(d.draft_type)}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={d.status} />

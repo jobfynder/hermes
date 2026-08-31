@@ -262,6 +262,47 @@ DOCKER, IOT, ETL TOOLS, LINUX BASIC, DATA ANALYTICS (TABLEAU), AZURE IOT HUB AND
     )
 
 
+def test_job_board_relay_boilerplate_is_not_mistaken_for_company() -> None:
+    # Real production regression: a jobs.nvoids.com relay footer --
+    # "Keywords: artificial intelligence information technology Texas" --
+    # matched COMPANY_SUFFIX_RE on the word "technology" and was captured
+    # as the sender's company name. None of this footer is a real
+    # signature; the email genuinely has no company name in it.
+    text = """Subject: New Requirement Senior Agentic AI Engineer / AI Engineer |||| Dallas , TX (Hybrid role) ||| TCS
+
+Role Senior Agentic AI Engineer / AI Engineer
+
+JOB SUMMARY
+
+Strong hands-on experience designing Agentic AI solutions.
+
+--
+
+Keywords: artificial intelligence information technology Texas
+New Requirement Senior Agentic AI Engineer / AI Engineer |||| Dallas , TX (Hybrid role) ||| TCS
+princeengineersmind@gmail.com
+
+View this job online here
+
+Happy recruiting
+https://jobs.nvoids.com
+Free resume and job search portal
+"""
+
+    sig = parse_email_signature(text=text, sender_email="princeengineersmind@gmail.com")
+    contact = contact_values(sig)
+
+    company_name = contact.get("company_name")
+    require(
+        company_name is None or "Keywords" not in company_name,
+        f"The relay's 'Keywords:' footer line must never be read as a company name, got {company_name!r}",
+    )
+    require(
+        contact.get("job_title") is None,
+        f"This footer has no real job title in it, must not fabricate one, got {contact.get('job_title')!r}",
+    )
+
+
 def main() -> int:
     print("HERMES-850 email signature check started")
 
@@ -288,6 +329,9 @@ def main() -> int:
 
     test_long_skills_paragraph_is_not_mistaken_for_company()
     print("PASS: a long skills paragraph is not mistaken for a company name")
+
+    test_job_board_relay_boilerplate_is_not_mistaken_for_company()
+    print("PASS: a job-board relay's boilerplate footer is not mistaken for a company name or title")
 
     print("HERMES-850 email signature check PASSED")
     return 0

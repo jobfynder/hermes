@@ -66,7 +66,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   listDrafts: () => request<DraftObject[]>('/drafts'),
-  listDraftSummaries: () => request<DraftSummaryEntry[]>('/drafts/summary'),
+  listDraftSummaries: (includeDuplicates = false) =>
+    request<DraftSummaryEntry[]>(`/drafts/summary?include_duplicates=${includeDuplicates}`),
   getDraft: (id: string) => request<DraftObject>(`/drafts/${id}`),
   getProvenance: (id: string) => request<FieldProvenanceEntry[]>(`/drafts/${id}/provenance`),
   getClaim: (id: string) => request<EmailClaim | null>(`/drafts/${id}/claim`).catch((err) => {

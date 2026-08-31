@@ -136,6 +136,44 @@ def test_summary_endpoint_hotlist_titles() -> None:
     )
 
 
+def test_summary_endpoint_hides_exact_content_duplicates_by_default() -> None:
+    canonical = create_draft_object(
+        draft_type="draft_job_requirement",
+        source="channel_text_intake",
+        payload={"structured_data": {"email_parsing": {"records": [{"job_title": "Dedupe Test Developer"}]}}},
+        confidence=0.9,
+        requires_review=False,
+        metadata={"exact_content_duplicate_of": None},
+    )
+    duplicate = create_draft_object(
+        draft_type="draft_job_requirement",
+        source="channel_text_intake",
+        payload={"structured_data": {"email_parsing": {"records": [{"job_title": "Dedupe Test Developer"}]}}},
+        confidence=0.9,
+        requires_review=False,
+        metadata={"exact_content_duplicate_of": f"email:{canonical.draft_id}"},
+    )
+
+    default_entries = client.get("/drafts/summary", headers={"Authorization": "Bearer x"}).json()
+    default_ids = {e["draft_id"] for e in default_entries}
+    require(canonical.draft_id in default_ids, "The canonical draft must still show by default")
+    require(
+        duplicate.draft_id not in default_ids,
+        "A job-board relay resending the same requirement must not clutter the queue as a separate row by default",
+    )
+
+    all_entries = client.get(
+        "/drafts/summary?include_duplicates=true", headers={"Authorization": "Bearer x"}
+    ).json()
+    all_ids = {e["draft_id"] for e in all_entries}
+    require(duplicate.draft_id in all_ids, "include_duplicates=true must still surface it for anyone who wants it")
+
+    duplicate_entry = next(e for e in all_entries if e["draft_id"] == duplicate.draft_id)
+    canonical_entry = next(e for e in all_entries if e["draft_id"] == canonical.draft_id)
+    require(duplicate_entry["is_duplicate"] is True, f"Wrong is_duplicate flag: {duplicate_entry}")
+    require(canonical_entry["is_duplicate"] is False, f"Wrong is_duplicate flag: {canonical_entry}")
+
+
 def test_claim_endpoint_404_when_no_claim_exists() -> None:
     draft = create_draft_object(
         draft_type="draft_job_requirement",
@@ -154,5 +192,6 @@ if __name__ == "__main__":
     test_provenance_endpoint_empty_list_for_draft_with_no_provenance()
     test_summary_endpoint_omits_payload_but_computes_title()
     test_summary_endpoint_hotlist_titles()
+    test_summary_endpoint_hides_exact_content_duplicates_by_default()
     test_claim_endpoint_404_when_no_claim_exists()
     print("hermes-850-review-endpoints-check: all checks passed")

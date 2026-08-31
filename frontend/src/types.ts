@@ -45,6 +45,7 @@ export interface DraftSummaryEntry {
   metadata: DraftMetadata
   source_message_id: string | null
   display_title: string
+  is_duplicate: boolean
 }
 
 export interface DraftMetadata {

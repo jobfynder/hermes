@@ -192,6 +192,16 @@ NAME_LINE_RE = re.compile(
     r"^[A-Z][a-zA-Z'.\-]+(?:\s+[A-Z][a-zA-Z'.\-]+){1,3}$"
 )
 
+# Boilerplate footer lines from job-board relay services (jobs.nvoids.com
+# and similar), never a real person's signature -- confirmed in
+# production: "Keywords: artificial intelligence information technology
+# Texas" was matching COMPANY_SUFFIX_RE on the word "technology" and
+# getting captured as the sender's company name.
+BOILERPLATE_LINE_RE = re.compile(
+    r"(?i)^(?:keywords:|view this job online|happy recruiting|"
+    r"free resume and job search portal|you received this email from)"
+)
+
 CITY_STATE_RE = re.compile(
     r"\b([A-Z][a-zA-Z. ]{1,30}?),\s*([A-Z]{2})\b(?:\s+(\d{5})(?:-\d{4})?)?"
 )
@@ -363,6 +373,9 @@ def _extract_title_and_company(
     for line in content_lines:
         stripped = line.strip()
         if stripped == (name_line or "").strip():
+            continue
+
+        if BOILERPLATE_LINE_RE.search(stripped):
             continue
 
         # A real title or company name in a signature is short -- a line

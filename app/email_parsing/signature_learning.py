@@ -13,15 +13,50 @@ Deliberately gap-filling only, never overwriting: a domain where the
 signature genuinely varies per sender (a staffing company with many
 recruiters, each with their own title) never gets one recruiter's
 corrected value silently stamped onto another's email.
+
+A sender domain only means "one company" for a real corporate domain.
+Shared public mail providers (gmail.com, yahoo.com, ...) are used by
+thousands of unrelated senders -- one recruiter's corrected name/company
+learned there and applied to every other gmail.com sender is not a
+pattern, it's a false identity stamped onto strangers. Confirmed in
+production: a single correction for one gmail.com sender ("Sekhar U,
+Sr.IT Technical Recruiter, Tekwings LLC") got applied to 700+ unrelated
+drafts from other recruiters who also happen to mail from gmail.com,
+because a job-board relay (jobs.nvoids.com) sends on behalf of many
+different people through their own personal gmail addresses. Freemail
+domains are excluded from both recording and applying learned patterns.
 """
 
 from __future__ import annotations
 
 from app.runtime.db import cursor
 
+# Not exhaustive -- just common enough that a "correction" learned here
+# is guaranteed to belong to one specific person, not their employer.
+# Extend this list rather than ever learning patterns for one of these.
+_FREEMAIL_DOMAINS = {
+    "gmail.com",
+    "yahoo.com",
+    "outlook.com",
+    "hotmail.com",
+    "live.com",
+    "msn.com",
+    "aol.com",
+    "icloud.com",
+    "me.com",
+    "protonmail.com",
+    "gmx.com",
+    "ymail.com",
+    "rediffmail.com",
+}
+
+
+def _is_learnable_domain(sender_domain: str | None) -> bool:
+    return bool(sender_domain) and sender_domain not in _FREEMAIL_DOMAINS
+
 
 def record_signature_correction(sender_domain: str, field: str, value: str) -> None:
-    if not sender_domain or not field or not value:
+    if not _is_learnable_domain(sender_domain) or not field or not value:
         return
 
     with cursor() as cur:
@@ -39,7 +74,7 @@ def apply_learned_signature_patterns(contact: dict, sender_domain: str | None) -
     reviewer previously confirmed for the same sender domain. Mutates
     `contact` in place and returns the list of fields it filled in.
     """
-    if not sender_domain:
+    if not _is_learnable_domain(sender_domain):
         return []
 
     with cursor() as cur:

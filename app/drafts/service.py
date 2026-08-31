@@ -239,7 +239,7 @@ def _draft_summary_title(row: dict) -> str:
     return row.get("title") or "(untitled)"
 
 
-def list_draft_summaries() -> list[dict]:
+def list_draft_summaries(include_duplicates: bool = False) -> list[dict]:
     """What the drafts list page actually renders per row -- type,
     status, confidence, sender, and a title -- without ever pulling the
     full `payload` column (raw email text, complete parsed records,
@@ -249,6 +249,17 @@ def list_draft_summaries() -> list[dict]:
     displayed in the list. Only the two JSON paths the title needs are
     extracted, straight in SQL, instead of shipping the whole payload
     to Python (and then to the browser) just to read one field out of it.
+
+    Excludes exact-content duplicates by default (metadata.
+    exact_content_duplicate_of, set in app/channels/service.py) -- a
+    job-board relay (e.g. jobs.nvoids.com) re-sending the identical
+    requirement under a new message id was showing up as several
+    separate rows in the review queue for the same actual posting.
+    Dedupe detection already links each one back to the canonical
+    delivery; this just stops the queue from *displaying* every one of
+    them as if they were distinct requirements. Nothing is deleted -- a
+    duplicate is still a real row, still reachable with
+    include_duplicates=True, just not cluttering the default view.
     """
     with cursor() as cur:
         cur.execute(
@@ -269,7 +280,7 @@ def list_draft_summaries() -> list[dict]:
         )
         rows = cur.fetchall()
 
-    return [
+    summaries = [
         {
             "draft_id": str(row["draft_id"]),
             "draft_type": row["draft_type"],
@@ -279,9 +290,15 @@ def list_draft_summaries() -> list[dict]:
             "metadata": row["metadata"],
             "source_message_id": row["source_message_id"],
             "display_title": _draft_summary_title(row),
+            "is_duplicate": bool((row["metadata"] or {}).get("exact_content_duplicate_of")),
         }
         for row in rows
     ]
+
+    if include_duplicates:
+        return summaries
+
+    return [s for s in summaries if not s["is_duplicate"]]
 
 
 def update_draft_metadata(draft_id: str, extra_metadata: dict) -> DraftObject | None:

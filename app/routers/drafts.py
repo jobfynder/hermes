@@ -76,6 +76,7 @@ class DraftSummaryEntry(BaseModel):
     metadata: dict[str, Any]
     source_message_id: str | None = None
     display_title: str
+    is_duplicate: bool = False
 
 
 router = APIRouter(prefix="/drafts", tags=["Drafts"])
@@ -90,13 +91,14 @@ def list_drafts(
 
 @router.get("/summary", response_model=list[DraftSummaryEntry])
 def list_drafts_summary(
+    include_duplicates: bool = False,
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> list[dict]:
     """What the drafts list page actually uses -- see
     list_draft_summaries' docstring. Registered ahead of /{draft_id} so
     "summary" is never swallowed as a draft_id path param.
     """
-    return list_draft_summaries()
+    return list_draft_summaries(include_duplicates=include_duplicates)
 
 
 @router.get("/{draft_id}", response_model=DraftObject)
