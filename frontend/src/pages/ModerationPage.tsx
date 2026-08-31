@@ -10,6 +10,8 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
   const [newMatchType, setNewMatchType] = useState<'domain' | 'email'>('domain')
   const [newReason, setNewReason] = useState('')
   const [busy, setBusy] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editValue, setEditValue] = useState('')
 
   function load() {
     setError(null)
@@ -65,6 +67,25 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
       load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reject candidate')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function startEdit(c: TaxonomyCandidateEntry) {
+    setEditingId(c.id)
+    setEditValue(c.term)
+  }
+
+  async function handleSaveEdit(id: number) {
+    if (!editValue.trim()) return
+    setBusy(true)
+    try {
+      await api.editTaxonomyCandidate(id, editValue.trim())
+      setEditingId(null)
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update term')
     } finally {
       setBusy(false)
     }
@@ -189,7 +210,30 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
             <tbody>
               {candidates?.map((c) => (
                 <tr key={c.id} className="border-b border-line last:border-0">
-                  <td className="px-3 py-2 font-medium text-ink">{c.term}</td>
+                  <td className="px-3 py-2 font-medium text-ink">
+                    {editingId === c.id ? (
+                      <input
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEdit(c.id)
+                          if (e.key === 'Escape') setEditingId(null)
+                        }}
+                        className="w-full rounded border border-accent bg-paper px-2 py-1 text-sm text-ink outline-none"
+                      />
+                    ) : (
+                      <span className="group inline-flex items-center gap-2">
+                        {c.term}
+                        <button
+                          onClick={() => startEdit(c)}
+                          className="text-xs font-normal text-ink-soft opacity-0 group-hover:opacity-100 hover:text-accent hover:underline"
+                        >
+                          Edit
+                        </button>
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-ink-soft">{c.occurrence_count}×</td>
                   <td className="max-w-56 truncate px-3 py-2 text-ink-soft">
                     {c.distinct_senders.length > 0 ? c.distinct_senders.join(', ') : '—'}
@@ -198,22 +242,41 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
                     {new Date(c.last_seen_at).toLocaleDateString()}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    <div className="flex justify-end gap-3">
-                      <button
-                        disabled={busy}
-                        onClick={() => handleApprove(c.id)}
-                        className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() => handleReject(c.id)}
-                        className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
-                      >
-                        Reject
-                      </button>
-                    </div>
+                    {editingId === c.id ? (
+                      <div className="flex justify-end gap-3">
+                        <button
+                          disabled={busy || !editValue.trim()}
+                          onClick={() => handleSaveEdit(c.id)}
+                          className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
+                        >
+                          Save
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => setEditingId(null)}
+                          className="text-xs font-medium text-ink-soft hover:underline disabled:opacity-40"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex justify-end gap-3">
+                        <button
+                          disabled={busy}
+                          onClick={() => handleApprove(c.id)}
+                          className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          disabled={busy}
+                          onClick={() => handleReject(c.id)}
+                          className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

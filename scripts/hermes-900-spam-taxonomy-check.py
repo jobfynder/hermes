@@ -11,6 +11,7 @@ from app.email_parsing.blocklist import add_block, is_blocked, list_blocks, remo
 from app.email_parsing.spam import classify_spam
 from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
+    edit_taxonomy_candidate,
     find_unknown_job_title,
     find_unknown_skill_terms,
     get_skill_usage_stats,
@@ -250,6 +251,72 @@ def test_taxonomy_candidate_queue_and_approve() -> None:
     require(
         all(c["term"] != "ZzzBrandNewFramework" for c in still_pending),
         "An approved candidate must leave the pending queue",
+    )
+
+
+def test_edit_taxonomy_candidate_corrects_a_parser_artifact() -> None:
+    # "!!" survives extraction (not one of the characters the parser
+    # strips), a realistic stand-in for stray formatting/OCR noise that
+    # leaks into a term -- something a reviewer should fix before it
+    # becomes a permanent, wrong entry in the canonical taxonomy.
+    text = "Job Title: X\nRequired Skills: ZzzCloudTool!!, Java\n"
+    record_taxonomy_candidates(text=text, draft_id=None, sender_domain="edittest.com")
+
+    pending = list_taxonomy_candidates(status="pending")
+    match = next(c for c in pending if c["term"] == "ZzzCloudTool!!")
+
+    result = edit_taxonomy_candidate(match["id"], "ZzzCloudTool")
+    require(result["edited"] is True, "Editing a pending candidate's term must succeed")
+    require(result["term"] == "ZzzCloudTool", f"Expected the corrected term back, got {result['term']}")
+
+    pending_after = list_taxonomy_candidates(status="pending")
+    updated = next(c for c in pending_after if c["id"] == match["id"])
+    require(updated["term"] == "ZzzCloudTool", "The stored term must reflect the edit")
+    require(
+        updated["normalized_term"] == "zzzcloudtool",
+        f"normalized_term must be recomputed from the edited term, got {updated['normalized_term']}",
+    )
+
+    approved = approve_taxonomy_candidate(match["id"])
+    require(
+        approved["term"] == "ZzzCloudTool", "Approval after an edit must use the corrected term, not the original"
+    )
+
+
+def test_edit_taxonomy_candidate_rejects_empty_term() -> None:
+    text = "Job Title: X\nRequired Skills: SomeEditGuardTerm, Java\n"
+    record_taxonomy_candidates(text=text, draft_id=None, sender_domain="editguard.com")
+
+    pending = list_taxonomy_candidates(status="pending")
+    match = next(c for c in pending if c["term"] == "SomeEditGuardTerm")
+
+    result = edit_taxonomy_candidate(match["id"], "   ")
+    require(result["edited"] is False, "An empty/whitespace-only term must be refused")
+
+
+def test_edit_taxonomy_candidate_only_touches_pending_rows() -> None:
+    text = "Job Title: X\nRequired Skills: AlreadyReviewedTermXyz, Java\n"
+    record_taxonomy_candidates(text=text, draft_id=None, sender_domain="reviewed.com")
+
+    pending = list_taxonomy_candidates(status="pending")
+    match = next(c for c in pending if c["term"] == "AlreadyReviewedTermXyz")
+    reject_taxonomy_candidate(match["id"])
+
+    result = edit_taxonomy_candidate(match["id"], "SomethingElse")
+    require(result["edited"] is False, "A candidate that is already reviewed (rejected/approved) must not be editable")
+
+
+def test_deterministic_glossary_is_used_before_the_llm() -> None:
+    description = generate_skill_description("AWS", category="Tool/Technology")
+    require(
+        description == "Amazon's cloud platform for hosting apps, storage, and databases online instead of on physical servers.",
+        f"A glossary term must return the curated deterministic description, got {description!r}",
+    )
+
+    description_case_insensitive = generate_skill_description("aws")
+    require(
+        description_case_insensitive == description,
+        "Deterministic lookup must be case/formatting-insensitive, same as taxonomy key normalization",
     )
 
 
@@ -635,6 +702,18 @@ def main() -> None:
 
     test_taxonomy_candidate_reject()
     print("PASS: rejecting a taxonomy candidate keeps it out of the taxonomy")
+
+    test_edit_taxonomy_candidate_corrects_a_parser_artifact()
+    print("PASS: editing a pending candidate's term corrects it before approval")
+
+    test_edit_taxonomy_candidate_rejects_empty_term()
+    print("PASS: editing a candidate to an empty term is refused")
+
+    test_edit_taxonomy_candidate_only_touches_pending_rows()
+    print("PASS: editing an already-reviewed candidate is refused")
+
+    test_deterministic_glossary_is_used_before_the_llm()
+    print("PASS: a known skill's description comes from the deterministic glossary, not the LLM")
 
     test_skill_usage_stats_accumulate()
     print("PASS: skill usage stats accumulate across separate drafts")

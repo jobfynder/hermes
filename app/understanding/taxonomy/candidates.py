@@ -236,6 +236,33 @@ def list_taxonomy_candidates(status: str = "pending") -> list[dict]:
     return rows
 
 
+def edit_taxonomy_candidate(candidate_id: int, term: str) -> dict:
+    """Corrects a pending candidate's term before approval -- e.g. a parser
+    artifact like a stray "AWS (required)" or a truncated title. Only ever
+    touches `pending` rows; a candidate already approved/rejected is final.
+    Does not itself approve anything, so the reviewer still makes that call
+    afterward with the corrected term.
+    """
+    cleaned = (term or "").strip()
+    if not cleaned:
+        return {"edited": False, "reason": "term_cannot_be_empty"}
+    if len(cleaned) > 120:
+        return {"edited": False, "reason": "term_too_long"}
+
+    with cursor() as cur:
+        cur.execute(
+            "UPDATE taxonomy_candidates SET term = %s, normalized_term = %s "
+            "WHERE id = %s AND status = 'pending' RETURNING term",
+            (cleaned, normalize_taxonomy_key(cleaned), candidate_id),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        return {"edited": False, "reason": "candidate_not_found_or_already_reviewed"}
+
+    return {"edited": True, "term": row["term"]}
+
+
 def approve_taxonomy_candidate(
     candidate_id: int,
     category: str = "Tool/Technology",

@@ -114,6 +114,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+  editTaxonomyCandidate: (id: number, term: string) =>
+    request<{ ok: boolean; term?: string; reason?: string }>(`/taxonomy-candidates/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ term }),
+    }),
   correctDraftFields: (
     id: string,
     recordType: 'job_requirement' | 'hotlist',
