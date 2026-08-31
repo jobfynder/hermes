@@ -328,6 +328,44 @@ def reject_taxonomy_candidate(candidate_id: int, reviewed_by: str | None = None)
     return {"rejected": True, "term": row["term"]}
 
 
+def bulk_approve_taxonomy_candidates(candidate_ids: list[int], reviewed_by: str | None = None) -> dict:
+    """Approves a batch of pending candidates in one call -- the review
+    page's "Approve selected" action. Each candidate keeps its own
+    signal_type (skill vs job_title), so approve_taxonomy_candidate's
+    normal per-type handling (description generation for skills, etc.)
+    still runs individually per id; this is just a loop over it with a
+    default category/skill_type/family/seniority, the same defaults the
+    page's single "Approve" button already uses. One candidate failing
+    (already reviewed by someone else in the meantime, say) never stops
+    the rest of the batch.
+    """
+    approved: list[str] = []
+    failed: list[dict] = []
+
+    for candidate_id in candidate_ids:
+        result = approve_taxonomy_candidate(candidate_id, reviewed_by=reviewed_by)
+        if result.get("approved"):
+            approved.append(result["term"])
+        else:
+            failed.append({"candidate_id": candidate_id, "reason": result.get("reason")})
+
+    return {"approved_count": len(approved), "approved_terms": approved, "failed": failed}
+
+
+def bulk_reject_taxonomy_candidates(candidate_ids: list[int], reviewed_by: str | None = None) -> dict:
+    rejected: list[str] = []
+    failed: list[dict] = []
+
+    for candidate_id in candidate_ids:
+        result = reject_taxonomy_candidate(candidate_id, reviewed_by=reviewed_by)
+        if result.get("rejected"):
+            rejected.append(result["term"])
+        else:
+            failed.append({"candidate_id": candidate_id, "reason": result.get("reason")})
+
+    return {"rejected_count": len(rejected), "rejected_terms": rejected, "failed": failed}
+
+
 def record_skill_usage(skill_names: list[str]) -> None:
     """Upserts times_seen/last_seen_at for each canonical skill name a
     parse actually matched -- called once per draft (app/channels/

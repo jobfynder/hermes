@@ -6,6 +6,8 @@ from app.email_parsing.blocklist import add_block, list_blocks, remove_block
 from app.security.rbac import require_permission
 from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
+    bulk_approve_taxonomy_candidates,
+    bulk_reject_taxonomy_candidates,
     edit_taxonomy_candidate,
     list_taxonomy_candidates,
     reject_taxonomy_candidate,
@@ -138,6 +140,38 @@ def reject_candidate(
 ) -> CandidateActionResult:
     result = reject_taxonomy_candidate(candidate_id, reviewed_by=user.get("id"))
     return CandidateActionResult(ok=result.get("rejected", False), term=result.get("term"), reason=result.get("reason"))
+
+
+class BulkCandidateActionRequest(BaseModel):
+    candidate_ids: list[int]
+
+
+class BulkCandidateActionResult(BaseModel):
+    ok_count: int
+    ok_terms: list[str]
+    failed: list[dict]
+
+
+@router.post("/taxonomy-candidates/bulk-approve", response_model=BulkCandidateActionResult)
+def bulk_approve_candidates(
+    body: BulkCandidateActionRequest,
+    user: dict = Depends(require_permission("drafts:publish")),
+) -> BulkCandidateActionResult:
+    result = bulk_approve_taxonomy_candidates(body.candidate_ids, reviewed_by=user.get("id"))
+    return BulkCandidateActionResult(
+        ok_count=result["approved_count"], ok_terms=result["approved_terms"], failed=result["failed"]
+    )
+
+
+@router.post("/taxonomy-candidates/bulk-reject", response_model=BulkCandidateActionResult)
+def bulk_reject_candidates(
+    body: BulkCandidateActionRequest,
+    user: dict = Depends(require_permission("drafts:publish")),
+) -> BulkCandidateActionResult:
+    result = bulk_reject_taxonomy_candidates(body.candidate_ids, reviewed_by=user.get("id"))
+    return BulkCandidateActionResult(
+        ok_count=result["rejected_count"], ok_terms=result["rejected_terms"], failed=result["failed"]
+    )
 
 
 class UpdateSkillDescriptionRequest(BaseModel):

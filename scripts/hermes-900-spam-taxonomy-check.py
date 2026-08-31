@@ -11,6 +11,8 @@ from app.email_parsing.blocklist import add_block, is_blocked, list_blocks, remo
 from app.email_parsing.spam import classify_spam
 from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
+    bulk_approve_taxonomy_candidates,
+    bulk_reject_taxonomy_candidates,
     edit_taxonomy_candidate,
     find_unknown_job_title,
     find_unknown_skill_terms,
@@ -334,6 +336,61 @@ def test_taxonomy_candidate_reject() -> None:
     require(
         "sometypotermxyz123" not in alias_index,
         "A rejected candidate must never be added to the taxonomy",
+    )
+
+
+def test_bulk_approve_taxonomy_candidates() -> None:
+    text = "Job Title: X\nRequired Skills: ZzzBulkApproveOne, ZzzBulkApproveTwo, Java\n"
+    record_taxonomy_candidates(text=text, draft_id=None, sender_domain="bulkapprove.com")
+
+    pending = list_taxonomy_candidates(status="pending")
+    ids = [c["id"] for c in pending if c["term"] in {"ZzzBulkApproveOne", "ZzzBulkApproveTwo"}]
+    require(len(ids) == 2, f"Expected both candidates queued, got {pending}")
+
+    result = bulk_approve_taxonomy_candidates(ids)
+    require(result["approved_count"] == 2, f"Expected both approved, got {result}")
+    require(result["failed"] == [], f"Expected no failures, got {result['failed']}")
+
+    alias_index = build_skill_alias_index()
+    require("zzzbulkapproveone" in alias_index, "First candidate must be live in the taxonomy immediately")
+    require("zzzbulkapprovetwo" in alias_index, "Second candidate must be live in the taxonomy immediately")
+
+    still_pending = list_taxonomy_candidates(status="pending")
+    require(
+        all(c["id"] not in ids for c in still_pending),
+        "Bulk-approved candidates must leave the pending queue",
+    )
+
+
+def test_bulk_reject_taxonomy_candidates() -> None:
+    text = "Job Title: X\nRequired Skills: ZzzBulkRejectOne, ZzzBulkRejectTwo, Java\n"
+    record_taxonomy_candidates(text=text, draft_id=None, sender_domain="bulkreject.com")
+
+    pending = list_taxonomy_candidates(status="pending")
+    ids = [c["id"] for c in pending if c["term"] in {"ZzzBulkRejectOne", "ZzzBulkRejectTwo"}]
+
+    result = bulk_reject_taxonomy_candidates(ids)
+    require(result["rejected_count"] == 2, f"Expected both rejected, got {result}")
+
+    alias_index = build_skill_alias_index()
+    require("zzzbulkrejectone" not in alias_index, "A bulk-rejected candidate must never enter the taxonomy")
+    require("zzzbulkrejecttwo" not in alias_index, "A bulk-rejected candidate must never enter the taxonomy")
+
+
+def test_bulk_approve_reports_partial_failure_without_stopping() -> None:
+    text = "Job Title: X\nRequired Skills: ZzzBulkPartialOne, Java\n"
+    record_taxonomy_candidates(text=text, draft_id=None, sender_domain="bulkpartial.com")
+
+    pending = list_taxonomy_candidates(status="pending")
+    real_id = next(c["id"] for c in pending if c["term"] == "ZzzBulkPartialOne")
+    already_reviewed_id = 999999999  # doesn't exist -- stands in for "someone else already reviewed it"
+
+    result = bulk_approve_taxonomy_candidates([real_id, already_reviewed_id])
+    require(result["approved_count"] == 1, f"The valid candidate must still be approved: {result}")
+    require(len(result["failed"]) == 1, f"The bad id must be reported as a failure, not raise: {result}")
+    require(
+        result["failed"][0]["candidate_id"] == already_reviewed_id,
+        f"The failure must identify which id it was: {result['failed']}",
     )
 
 
@@ -714,6 +771,15 @@ def main() -> None:
 
     test_deterministic_glossary_is_used_before_the_llm()
     print("PASS: a known skill's description comes from the deterministic glossary, not the LLM")
+
+    test_bulk_approve_taxonomy_candidates()
+    print("PASS: bulk-approving candidates adds all of them to the taxonomy immediately")
+
+    test_bulk_reject_taxonomy_candidates()
+    print("PASS: bulk-rejecting candidates keeps all of them out of the taxonomy")
+
+    test_bulk_approve_reports_partial_failure_without_stopping()
+    print("PASS: one bad id in a bulk approve does not stop the rest of the batch")
 
     test_skill_usage_stats_accumulate()
     print("PASS: skill usage stats accumulate across separate drafts")

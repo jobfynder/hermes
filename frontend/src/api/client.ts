@@ -119,6 +119,16 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ term }),
     }),
+  bulkApproveTaxonomyCandidates: (ids: number[]) =>
+    request<{ ok_count: number; ok_terms: string[]; failed: { candidate_id: number; reason?: string }[] }>(
+      '/taxonomy-candidates/bulk-approve',
+      { method: 'POST', body: JSON.stringify({ candidate_ids: ids }) },
+    ),
+  bulkRejectTaxonomyCandidates: (ids: number[]) =>
+    request<{ ok_count: number; ok_terms: string[]; failed: { candidate_id: number; reason?: string }[] }>(
+      '/taxonomy-candidates/bulk-reject',
+      { method: 'POST', body: JSON.stringify({ candidate_ids: ids }) },
+    ),
   correctDraftFields: (
     id: string,
     recordType: 'job_requirement' | 'hotlist' | 'signature',

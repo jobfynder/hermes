@@ -6,17 +6,28 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
   const [blocklist, setBlocklist] = useState<BlocklistEntry[] | null>(null)
   const [candidates, setCandidates] = useState<TaxonomyCandidateEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [newValue, setNewValue] = useState('')
   const [newMatchType, setNewMatchType] = useState<'domain' | 'email'>('domain')
   const [newReason, setNewReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editValue, setEditValue] = useState('')
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   function load() {
     setError(null)
     api.listBlocklist().then(setBlocklist).catch((err) => setError(err.message))
-    api.listTaxonomyCandidates('pending').then(setCandidates).catch((err) => setError(err.message))
+    api
+      .listTaxonomyCandidates('pending')
+      .then((list) => {
+        setCandidates(list)
+        setSelectedIds((prev) => {
+          const stillPending = new Set(list.map((c) => c.id))
+          return new Set([...prev].filter((id) => stillPending.has(id)))
+        })
+      })
+      .catch((err) => setError(err.message))
   }
 
   useEffect(load, [])
@@ -91,6 +102,58 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
     }
   }
 
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (!candidates) return
+    setSelectedIds((prev) => (prev.size === candidates.length ? new Set() : new Set(candidates.map((c) => c.id))))
+  }
+
+  async function handleBulkApprove() {
+    if (selectedIds.size === 0) return
+    setBusy(true)
+    try {
+      const result = await api.bulkApproveTaxonomyCandidates([...selectedIds])
+      setActionMessage(
+        result.failed.length === 0
+          ? `Approved ${result.ok_count} candidates.`
+          : `Approved ${result.ok_count}, ${result.failed.length} failed (already reviewed by someone else?).`,
+      )
+      setSelectedIds(new Set())
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk approve failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleBulkReject() {
+    if (selectedIds.size === 0) return
+    setBusy(true)
+    try {
+      const result = await api.bulkRejectTaxonomyCandidates([...selectedIds])
+      setActionMessage(
+        result.failed.length === 0
+          ? `Rejected ${result.ok_count} candidates.`
+          : `Rejected ${result.ok_count}, ${result.failed.length} failed (already reviewed by someone else?).`,
+      )
+      setSelectedIds(new Set())
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk reject failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <header className="mb-6 flex items-baseline justify-between">
@@ -109,6 +172,11 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
       </header>
 
       {error && <div className="mb-4 rounded-lg bg-fail-soft px-4 py-3 text-sm text-fail">{error}</div>}
+      {actionMessage && (
+        <div className="mb-4 rounded-lg border border-line bg-paper px-4 py-3 text-sm text-ink-soft">
+          {actionMessage}
+        </div>
+      )}
 
       <section className="mb-8 rounded-xl border border-line bg-surface p-5">
         <h2 className="mb-3 text-sm font-semibold text-ink">Sender blocklist</h2>
@@ -192,14 +260,50 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
       <section className="rounded-xl border border-line bg-surface p-5">
         <h2 className="mb-3 text-sm font-semibold text-ink">Taxonomy candidates</h2>
         <p className="mb-4 text-xs text-ink-soft">
-          Skill-shaped terms Hermes doesn't recognize yet, seen in real postings. Approving adds it to the
-          taxonomy immediately &mdash; no redeploy needed.
+          Skill- and job-title-shaped terms Hermes doesn't recognize yet, seen in real postings. Approving adds it
+          to the taxonomy immediately &mdash; no redeploy needed.
         </p>
+
+        {candidates && candidates.length > 0 && (
+          <div className="mb-3 flex items-center justify-between rounded-lg border border-line bg-paper px-3 py-2">
+            <span className="text-xs text-ink-soft">
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Select rows to act on them in bulk'}
+            </span>
+            <div className="flex gap-3">
+              <button
+                disabled={busy || selectedIds.size === 0}
+                onClick={handleBulkApprove}
+                className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
+              >
+                Approve selected
+              </button>
+              <button
+                disabled={busy || selectedIds.size === 0}
+                onClick={handleBulkReject}
+                className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
+              >
+                Reject selected
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-lg border border-line">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
+                <th className="w-8 px-3 py-2">
+                  {candidates && candidates.length > 0 && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.size === candidates.length}
+                      onChange={toggleSelectAll}
+                      className="accent-accent"
+                      aria-label="Select all"
+                    />
+                  )}
+                </th>
+                <th className="px-3 py-2 font-medium">Type</th>
                 <th className="px-3 py-2 font-medium">Term</th>
                 <th className="px-3 py-2 font-medium">Seen</th>
                 <th className="px-3 py-2 font-medium">Distinct senders</th>
@@ -210,6 +314,18 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
             <tbody>
               {candidates?.map((c) => (
                 <tr key={c.id} className="border-b border-line last:border-0">
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleSelected(c.id)}
+                      className="accent-accent"
+                      aria-label={`Select ${c.term}`}
+                    />
+                  </td>
+                  <td className="px-3 py-2 text-xs text-ink-soft">
+                    {c.signal_type === 'job_title' ? 'Job title' : 'Skill'}
+                  </td>
                   <td className="px-3 py-2 font-medium text-ink">
                     {editingId === c.id ? (
                       <input
@@ -282,7 +398,7 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
               ))}
               {candidates && candidates.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-ink-soft">
+                  <td colSpan={7} className="px-3 py-6 text-center text-ink-soft">
                     No new terms waiting for review.
                   </td>
                 </tr>
