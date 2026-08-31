@@ -11,6 +11,7 @@ from app.drafts.service import (
     delete_draft_object,
     get_draft_object,
     list_draft_objects,
+    list_draft_summaries,
     publish_draft_object,
     reclassify_draft_object,
     reject_draft_object,
@@ -66,6 +67,17 @@ class FieldProvenanceEntry(BaseModel):
     recorded_at: str
 
 
+class DraftSummaryEntry(BaseModel):
+    draft_id: str
+    draft_type: DraftObjectType
+    status: str
+    confidence: float
+    created_at: str | None = None
+    metadata: dict[str, Any]
+    source_message_id: str | None = None
+    display_title: str
+
+
 router = APIRouter(prefix="/drafts", tags=["Drafts"])
 
 
@@ -74,6 +86,17 @@ def list_drafts(
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> list[DraftObject]:
     return list_draft_objects()
+
+
+@router.get("/summary", response_model=list[DraftSummaryEntry])
+def list_drafts_summary(
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> list[dict]:
+    """What the drafts list page actually uses -- see
+    list_draft_summaries' docstring. Registered ahead of /{draft_id} so
+    "summary" is never swallowed as a draft_id path param.
+    """
+    return list_draft_summaries()
 
 
 @router.get("/{draft_id}", response_model=DraftObject)

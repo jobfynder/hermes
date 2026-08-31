@@ -68,6 +68,74 @@ def test_provenance_endpoint_empty_list_for_draft_with_no_provenance() -> None:
     require(response.json() == [], "A draft with no provenance rows must return an empty list, not 404")
 
 
+def test_summary_endpoint_omits_payload_but_computes_title() -> None:
+    draft = create_draft_object(
+        draft_type="draft_job_requirement",
+        source="channel_text_intake",
+        payload={
+            "text": "raw email body that must never appear in the summary response",
+            "structured_data": {
+                "email_parsing": {"records": [{"job_title": "Summary Test Developer", "job_description": "long prose"}]}
+            },
+        },
+        confidence=0.9,
+        requires_review=False,
+        metadata={"sender": {"email": "recruiter@summarytest.example.com"}},
+    )
+
+    response = client.get("/drafts/summary", headers={"Authorization": "Bearer x"})
+    require(response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}")
+
+    entries = response.json()
+    entry = next(e for e in entries if e["draft_id"] == draft.draft_id)
+
+    require("payload" not in entry, f"The summary row must never include the full payload: {entry.keys()}")
+    require(
+        entry["display_title"] == "Summary Test Developer",
+        f"Expected the record's job_title as display_title, got {entry['display_title']!r}",
+    )
+    require(
+        entry["metadata"]["sender"]["email"] == "recruiter@summarytest.example.com",
+        f"metadata must still be present for the sender column: {entry['metadata']}",
+    )
+
+
+def test_summary_endpoint_hotlist_titles() -> None:
+    single = create_draft_object(
+        draft_type="draft_hotlist",
+        source="channel_text_intake",
+        payload={
+            "structured_data": {"email_parsing": {"records": [{"candidate_name": "Priya Summary"}]}},
+        },
+        confidence=0.9,
+        requires_review=False,
+    )
+    multi = create_draft_object(
+        draft_type="draft_hotlist",
+        source="channel_text_intake",
+        payload={
+            "structured_data": {
+                "email_parsing": {"records": [{"candidate_name": "A"}, {"candidate_name": "B"}]}
+            },
+        },
+        confidence=0.9,
+        requires_review=False,
+    )
+
+    entries = client.get("/drafts/summary", headers={"Authorization": "Bearer x"}).json()
+    single_entry = next(e for e in entries if e["draft_id"] == single.draft_id)
+    multi_entry = next(e for e in entries if e["draft_id"] == multi.draft_id)
+
+    require(
+        single_entry["display_title"] == "Priya Summary",
+        f"A one-consultant hotlist must show the candidate's name, got {single_entry['display_title']!r}",
+    )
+    require(
+        multi_entry["display_title"] == "Hotlist — 2 consultants",
+        f"A multi-consultant hotlist must show a count, got {multi_entry['display_title']!r}",
+    )
+
+
 def test_claim_endpoint_404_when_no_claim_exists() -> None:
     draft = create_draft_object(
         draft_type="draft_job_requirement",
@@ -84,5 +152,7 @@ if __name__ == "__main__":
     test_provenance_endpoint_returns_recorded_fields()
     test_provenance_endpoint_404_for_unknown_draft()
     test_provenance_endpoint_empty_list_for_draft_with_no_provenance()
+    test_summary_endpoint_omits_payload_but_computes_title()
+    test_summary_endpoint_hotlist_titles()
     test_claim_endpoint_404_when_no_claim_exists()
     print("hermes-850-review-endpoints-check: all checks passed")

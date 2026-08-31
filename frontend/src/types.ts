@@ -31,6 +31,22 @@ export interface DraftObject {
   updated_at: string | null
 }
 
+// What the drafts list page actually renders per row -- see
+// list_draft_summaries (app/drafts/service.py). Deliberately excludes
+// `payload` (raw email text, full parsed records) since the list view
+// never needs it -- display_title is computed server-side from the same
+// fields draftDisplayTitle() used to read out of payload client-side.
+export interface DraftSummaryEntry {
+  draft_id: string
+  draft_type: DraftObjectType
+  status: DraftStatus
+  confidence: number
+  created_at: string | null
+  metadata: DraftMetadata
+  source_message_id: string | null
+  display_title: string
+}
+
 export interface DraftMetadata {
   duplicate_key?: string
   content_type?: string

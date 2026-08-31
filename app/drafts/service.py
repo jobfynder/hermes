@@ -220,6 +220,70 @@ def list_draft_objects() -> list[DraftObject]:
     return [_row_to_draft(row) for row in rows]
 
 
+def _draft_summary_title(row: dict) -> str:
+    """Mirrors the frontend's draftDisplayTitle() (app/components/
+    DraftTypeLabel.tsx) so the list page shows the same title either way
+    -- computed here in SQL/Python instead so the list endpoint never has
+    to pull the full payload just to read one or two fields out of it.
+    """
+    if row["draft_type"] == "draft_job_requirement" and row.get("record_job_title"):
+        return row["record_job_title"]
+
+    if row["draft_type"] == "draft_hotlist":
+        record_count = row.get("record_count") or 0
+        if record_count == 1 and row.get("record_candidate_name"):
+            return row["record_candidate_name"]
+        if record_count > 1:
+            return f"Hotlist — {record_count} consultants"
+
+    return row.get("title") or "(untitled)"
+
+
+def list_draft_summaries() -> list[dict]:
+    """What the drafts list page actually renders per row -- type,
+    status, confidence, sender, and a title -- without ever pulling the
+    full `payload` column (raw email text, complete parsed records,
+    provenance-sized JSON; averages several KB per draft). Once the
+    drafts table passed a thousand rows this was the single biggest cost
+    in loading the review page, and almost none of that data was ever
+    displayed in the list. Only the two JSON paths the title needs are
+    extracted, straight in SQL, instead of shipping the whole payload
+    to Python (and then to the browser) just to read one field out of it.
+    """
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                draft_id, draft_type, status, confidence, created_at, metadata,
+                source_message_id, title,
+                payload->'structured_data'->'email_parsing'->'records'->0->>'job_title'
+                    AS record_job_title,
+                payload->'structured_data'->'email_parsing'->'records'->0->>'candidate_name'
+                    AS record_candidate_name,
+                jsonb_array_length(
+                    COALESCE(payload->'structured_data'->'email_parsing'->'records', '[]'::jsonb)
+                ) AS record_count
+            FROM drafts
+            ORDER BY created_at DESC
+            """
+        )
+        rows = cur.fetchall()
+
+    return [
+        {
+            "draft_id": str(row["draft_id"]),
+            "draft_type": row["draft_type"],
+            "status": row["status"],
+            "confidence": row["confidence"],
+            "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
+            "metadata": row["metadata"],
+            "source_message_id": row["source_message_id"],
+            "display_title": _draft_summary_title(row),
+        }
+        for row in rows
+    ]
+
+
 def update_draft_metadata(draft_id: str, extra_metadata: dict) -> DraftObject | None:
     """Merge additional keys into a draft's metadata without touching its
     status. Used by the claim-and-verify loop (app/claim/service.py) to

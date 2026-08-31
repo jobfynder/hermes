@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { ConfidenceMeter } from '../components/ConfidenceMeter'
-import { draftDisplayTitle, draftTypeLabel } from '../components/DraftTypeLabel'
+import { draftTypeLabel } from '../components/DraftTypeLabel'
 import { StatusBadge } from '../components/StatusBadge'
-import type { DraftObject, DraftObjectType, DraftStatus } from '../types'
+import type { DraftObjectType, DraftStatus, DraftSummaryEntry } from '../types'
 
 const TYPE_FILTERS: (DraftObjectType | 'all')[] = [
   'all',
@@ -36,7 +36,7 @@ export function DraftListPage({
   onSelect: (id: string) => void
   onOpenModeration?: () => void
 }) {
-  const [drafts, setDrafts] = useState<DraftObject[] | null>(null)
+  const [drafts, setDrafts] = useState<DraftSummaryEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<DraftObjectType | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<DraftStatus | 'all'>('all')
@@ -47,7 +47,7 @@ export function DraftListPage({
   function load() {
     setError(null)
     api
-      .listDrafts()
+      .listDraftSummaries()
       .then((d) => {
         setDrafts(d)
         setLastLoadedAt(new Date())
@@ -70,7 +70,7 @@ export function DraftListPage({
       if (typeFilter !== 'all' && d.draft_type !== typeFilter) return false
       if (statusFilter !== 'all' && d.status !== statusFilter) return false
       if (q) {
-        const haystack = `${draftDisplayTitle(d)} ${d.metadata.sender?.email ?? ''} ${d.source_message_id ?? ''}`.toLowerCase()
+        const haystack = `${d.display_title} ${d.metadata.sender?.email ?? ''} ${d.source_message_id ?? ''}`.toLowerCase()
         if (!haystack.includes(q)) return false
       }
       return true
@@ -187,7 +187,7 @@ export function DraftListPage({
                 onClick={() => onSelect(d.draft_id)}
                 className="cursor-pointer border-b border-line last:border-0 hover:bg-paper"
               >
-                <td className="max-w-72 truncate px-4 py-3 font-medium text-ink">{draftDisplayTitle(d)}</td>
+                <td className="max-w-72 truncate px-4 py-3 font-medium text-ink">{d.display_title}</td>
                 <td className="px-4 py-3">{draftTypeLabel(d.draft_type)}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={d.status} />
