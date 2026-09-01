@@ -2,6 +2,9 @@
 candidate detection.
 """
 
+import json
+import os
+
 from fastapi.testclient import TestClient
 
 from app.channels.models import ChannelIntakeRequest, ChannelSender
@@ -754,6 +757,41 @@ def test_runtime_copy_is_not_re_seeded_in_a_fresh_process() -> None:
     )
 
 
+def test_alias_index_notices_a_write_this_process_never_made() -> None:
+    # Real production incident: hermes-api and hermes-graph-consumer are
+    # two separate OS processes, each with its own independent in-memory
+    # cache. Approving a candidate only ever busts the *approving*
+    # process's cache (clear_taxonomy_cache(), called from inside
+    # add_canonical_skill) -- the other process kept serving its stale
+    # copy for its entire uptime, so a term approved through the review
+    # UI could get flagged as "unknown" again by the very next email
+    # hermes-graph-consumer parsed, silently re-queuing work a human had
+    # just finished. This reproduces that exact shape: warm this
+    # process's cache, then change the file WITHOUT calling
+    # clear_taxonomy_cache() at all (standing in for "some other process
+    # wrote it") -- the mtime check must still pick it up.
+    warm_index = build_skill_alias_index()
+    require(
+        "zmtimecachetestskill" not in warm_index,
+        "Fixture skill must not already be present before this test writes it",
+    )
+
+    path = _writable_taxonomy_path("canonical_skills.json")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["skills"].append({"name": "ZMtimeCacheTestSkill", "category": "Tool/Technology", "aliases": []})
+    path.write_text(json.dumps(data), encoding="utf-8")
+    # Force a detectable mtime change regardless of this filesystem's
+    # timer resolution -- a real second process's write could otherwise
+    # land in the same tick as the warm-up read above.
+    os.utime(path, (path.stat().st_atime, path.stat().st_mtime + 5))
+
+    index_after = build_skill_alias_index()
+    require(
+        "zmtimecachetestskill" in index_after,
+        "This process's own cache must notice a file change it never triggered itself, with no clear_taxonomy_cache() call",
+    )
+
+
 def test_boilerplate_line_hidden_until_seen_from_enough_distinct_domains() -> None:
     # Real production incident: at a 3-domain threshold this flooded the
     # queue with 13,000+ candidates in under a day, almost all of them
@@ -973,6 +1011,9 @@ def main() -> None:
 
     test_runtime_copy_is_not_re_seeded_in_a_fresh_process()
     print("PASS: a fresh process's first taxonomy write does not re-seed and lose earlier writes")
+
+    test_alias_index_notices_a_write_this_process_never_made()
+    print("PASS: a process with an already-warm cache notices a taxonomy write it never made itself")
 
     test_boilerplate_line_hidden_until_seen_from_enough_distinct_domains()
     print("PASS: a boilerplate line stays hidden until seen from 8+ distinct sender domains")

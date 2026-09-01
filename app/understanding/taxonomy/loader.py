@@ -83,21 +83,52 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+# hermes-api and hermes-graph-consumer are two separate OS processes,
+# each with its own independent in-memory cache -- a plain @lru_cache
+# only ever gets busted in whichever process actually calls
+# clear_taxonomy_cache() (approvals only ever happen through hermes-api).
+# Real incident: hermes-graph-consumer -- the process that actually
+# parses live incoming mail -- kept its stale copy of canonical_skills.
+# json/job_titles.json for its entire uptime, so a term approved through
+# the review UI could get flagged as "unknown" again by the very next
+# email that mentioned it, silently re-queuing work a human had just
+# finished. Keyed on the file's own mtime instead of a plain forever-
+# cache: any process, on its own next read, notices the file changed
+# (written by ANY process, since both read the same file on the shared
+# runtime volume -- app/understanding/taxonomy/loader.py's
+# _writable_taxonomy_path) and reloads -- no cross-process messaging
+# needed, just a stat() call, cheap enough to do on every access.
+_mtime_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _load_json_cached_by_mtime(path: Path) -> dict[str, Any]:
+    key = str(path)
+    mtime = path.stat().st_mtime
+    cached = _mtime_cache.get(key)
+
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+
+    data = _load_json(path)
+    _mtime_cache[key] = (mtime, data)
+    return data
+
+
 def clear_taxonomy_cache() -> None:
-    """Busts every lru_cache below so a taxonomy file edit takes effect on
-    the very next request, in the same running process -- no redeploy.
-    The one caller today is approving a taxonomy candidate (HERMES-900,
-    app/understanding/taxonomy/candidates.py), which writes the approved
-    term straight into canonical_skills.json on disk right before calling
-    this.
+    """Evicts the mtime-cache entries for the two files taxonomy
+    candidate approval writes to, in this process -- immediate effect
+    here regardless of filesystem mtime-resolution granularity, on top
+    of the mtime check above already making every *other* process (this
+    one's own next read included, belt and suspenders) pick up the
+    change on its own. The one caller today is approving a taxonomy
+    candidate (HERMES-900, app/understanding/taxonomy/candidates.py),
+    which writes the approved term straight into canonical_skills.json/
+    job_titles.json on disk right before calling this.
     """
-    load_skills_taxonomy.cache_clear()
-    load_canonical_skills_taxonomy.cache_clear()
     load_skill_aliases_taxonomy.cache_clear()
-    load_job_titles_taxonomy.cache_clear()
     load_title_aliases_taxonomy.cache_clear()
-    build_skill_alias_index.cache_clear()
-    build_title_alias_index.cache_clear()
+    _mtime_cache.pop(str(_writable_taxonomy_path("canonical_skills.json")), None)
+    _mtime_cache.pop(str(_writable_taxonomy_path("job_titles.json")), None)
 
 
 def add_canonical_skill(
@@ -245,14 +276,12 @@ def add_canonical_job_title(
         clear_taxonomy_cache()
 
 
-@lru_cache(maxsize=1)
 def load_skills_taxonomy() -> dict[str, Any]:
-    return _load_json(_writable_taxonomy_path("canonical_skills.json"))
+    return _load_json_cached_by_mtime(_writable_taxonomy_path("canonical_skills.json"))
 
 
-@lru_cache(maxsize=1)
 def load_canonical_skills_taxonomy() -> dict[str, Any]:
-    return _load_json(_writable_taxonomy_path("canonical_skills.json"))
+    return _load_json_cached_by_mtime(_writable_taxonomy_path("canonical_skills.json"))
 
 
 @lru_cache(maxsize=1)
@@ -260,9 +289,8 @@ def load_skill_aliases_taxonomy() -> dict[str, Any]:
     return _load_json(SKILL_ALIASES_PATH)
 
 
-@lru_cache(maxsize=1)
 def load_job_titles_taxonomy() -> dict[str, Any]:
-    return _load_json(_writable_taxonomy_path("job_titles.json"))
+    return _load_json_cached_by_mtime(_writable_taxonomy_path("job_titles.json"))
 
 
 @lru_cache(maxsize=1)
@@ -324,8 +352,13 @@ def get_canonical_job_titles() -> list[str]:
     ]
 
 
-@lru_cache(maxsize=1)
 def build_skill_alias_index() -> dict[str, str]:
+    """Deliberately uncached, unlike the load_* functions it's built from
+    -- those already handle staleness (mtime-checked), and reconstructing
+    this dict from their result is a rebuild over a few hundred entries,
+    microseconds, not worth a second caching layer that would need its
+    own invalidation story on top of theirs.
+    """
     index: dict[str, str] = {}
 
     for entry in get_canonical_skill_entries():
@@ -351,7 +384,6 @@ def build_skill_alias_index() -> dict[str, str]:
     return index
 
 
-@lru_cache(maxsize=1)
 def build_title_alias_index() -> dict[str, str]:
     index: dict[str, str] = {}
 
