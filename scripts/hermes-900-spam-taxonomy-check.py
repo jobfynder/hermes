@@ -245,6 +245,25 @@ def test_unknown_skill_term_detected() -> None:
     require("Java" not in unknown, "A term already in the taxonomy must not be flagged as unknown")
 
 
+def test_plain_english_stopwords_are_never_queued_as_skill_candidates() -> None:
+    # Real incident: 37 plain English words -- "on", "The", "no", "must",
+    # "rate", "location", "team", "core", "Able" among them -- got queued
+    # as taxonomy candidates (a comma/newline split running into ordinary
+    # prose) and were eventually approved as canonical "skills", each
+    # with an LLM-generated description that was itself visibly
+    # hallucinated. Cleaned up after the fact; this guards against it
+    # recurring.
+    text = (
+        "Job Title: Integration Engineer\n"
+        "Required Skills: SomeBrandNewTool2027, on, The, no, must, rate, location, team, Java\n"
+    )
+
+    unknown = find_unknown_skill_terms(text)
+    for stopword in ("on", "The", "no", "must", "rate", "location", "team"):
+        require(stopword not in unknown, f"A plain English stopword must never be queued as a skill candidate: {unknown}")
+    require("SomeBrandNewTool2027" in unknown, f"A genuine new term must still be surfaced: {unknown}")
+
+
 def test_taxonomy_candidate_queue_and_approve() -> None:
     text = "Job Title: Integration Engineer\nRequired Skills: ZzzBrandNewFramework, Java\n"
 
@@ -1384,6 +1403,9 @@ def main() -> None:
 
     test_unknown_skill_term_detected()
     print("PASS: an unrecognized skill term in a Required Skills section is detected")
+
+    test_plain_english_stopwords_are_never_queued_as_skill_candidates()
+    print("PASS: plain English stopwords are never queued as skill candidates")
 
     test_taxonomy_candidate_queue_and_approve()
     print("PASS: taxonomy candidate queue accumulates occurrences and approval is live immediately")

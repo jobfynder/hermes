@@ -50,6 +50,37 @@ _FILLER_TERMS = {
     "good to have", "knowledge of", "hands on", "hands-on",
 }
 
+# Plain English stopwords/filler that a comma/newline split can hand back
+# as a lone "term" when a skills section runs into ordinary prose (e.g.
+# a listed sentence fragment like "...deployment  on  the  cloud").
+# Real incident: 37 of these ended up approved as canonical "skills" --
+# "on", "The", "no", "must", "rate", "location", "team", "core", "Able",
+# "Show" -- with LLM-generated descriptions that were themselves visibly
+# hallucinated (the description generator's own output for "Able" was
+# literally "I'm not able to provide a glossary entry for 'Able' as it's
+# a common English word rather than..."), because nothing checked the
+# term itself before it ever reached a human reviewer, only the
+# generated description after the fact. Checked case-insensitively, on
+# top of _FILLER_TERMS above, so a real short tech acronym that happens
+# to also spell an English word ("AS", "IT", "OR" the surgical term)
+# would need a second look before being re-added -- deliberately erring
+# toward one more manual glance over silently repeating this incident.
+_ENGLISH_STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "if", "as", "of", "at", "by",
+    "for", "with", "about", "against", "between", "into", "through",
+    "during", "before", "after", "above", "below", "to", "from", "up",
+    "down", "in", "out", "on", "off", "over", "under", "again", "then",
+    "once", "here", "there", "when", "where", "why", "how", "all", "any",
+    "both", "each", "few", "more", "most", "other", "some", "such",
+    "no", "nor", "not", "only", "own", "same", "so", "than", "too",
+    "very", "can", "will", "just", "should", "now", "am", "is", "are",
+    "was", "were", "be", "been", "being", "have", "has", "had", "having",
+    "do", "does", "did", "doing", "must", "able", "show", "care", "team",
+    "lot", "lots", "member", "core", "rate", "cost", "time", "desk",
+    "lead", "pull", "push", "tune", "chat", "www", "com", "onsite",
+    "hybrid", "location", "compensation", "projects", "solid",
+}
+
 _SPLIT_RE = re.compile(r"[,\n|/••]+")
 _PARENTHETICAL_RE = re.compile(r"\([^)]*\)")
 
@@ -69,6 +100,14 @@ def _candidate_terms(section_text: str | None) -> list[str]:
         lowered = item.lower()
 
         if lowered in _FILLER_TERMS:
+            continue
+
+        # A plain English stopword/filler word on its own (not part of a
+        # longer real term -- "on the cloud" already fails this check
+        # since it's split into separate single-word items). See
+        # _ENGLISH_STOPWORDS' docstring above for the incident this
+        # guards against.
+        if lowered in _ENGLISH_STOPWORDS:
             continue
 
         # A real skill token is short -- "Amazon Connect", "TIBCO
