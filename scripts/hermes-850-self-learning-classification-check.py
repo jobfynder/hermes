@@ -244,6 +244,70 @@ def test_reclassify_reparse_skipped_for_non_email_channel() -> None:
     require(updated.draft_type == "draft_job_requirement", "draft_type must still change")
 
 
+def test_detect_document_kind_ignores_a_job_board_relays_resume_tagline() -> None:
+    # Regression test: real production email, jobs.nvoids.com relay.
+    # This is a pure job REQUIREMENT with zero resume content -- the
+    # only reason it used to classify as document_kind="resume" was the
+    # relay's own "Free resume and job search portal" footer tagline
+    # containing the word "resume", which reached the keyword-marker
+    # fallback classifier unstripped. That misclassification skipped the
+    # structured job-requirement parser entirely (email_parsing.records
+    # stayed empty), the "only partial information parsed" symptom
+    # reported for this class of email.
+    text = (
+        "Subject: UI Front End Engineer (Micro Frontend Specialist) || F2F Interview\n\n"
+        "You received this email from khushank@sourceinfotech.com via https://jobs.nvoids.com \n"
+        "Please check the email id in the signature to reply to the correct email id.\n\n"
+        "From:\n\nKhushankChauhan,\n\nSource Infotech\n\nkhushank@sourceinfotech.com\n\n"
+        "Reply to: khushank@sourceinfotech.com\n\n"
+        "UI /Front End Engineer (Micro Frontend Specialist) || F2F Interview \n\n"
+        "Mesa, AZ- Hybrid Local Only \n\nDuration: 6+months\n\n"
+        "Interview process: Phone + F2F Interview\n\n"
+        "LinkedIn is must ! Only local candidates! \n\nMandatory Skills :\n\n"
+        "Looking for a strong Front-End Engineer with 10+ years of experience "
+        "with the ability to lead our team\n\n"
+        "Strong expertise in React.js (functional components, hooks, context API)\n\n"
+        "Keywords: continuous integration continuous deployment user interface javascript "
+        "information technology card Arizona \n"
+        "UI Front End Engineer (Micro Frontend Specialist) || F2F Interview\n"
+        "khushank@sourceinfotech.com\n\nView this job online here \n\n"
+        "Happy recruiting \nhttps://jobs.nvoids.com \nFree resume and job search portal"
+    )
+    request = ChannelIntakeRequest(
+        channel="email",
+        source_message_id="relay-resume-tagline-1",
+        content_type="text",
+        sender=ChannelSender(email="khushank@sourceinfotech.com"),
+        text=text,
+    )
+
+    kind = detect_document_kind(request)
+    require(
+        kind == "job_description",
+        f"A job posting must not be misclassified as a resume just because the relay's own footer "
+        f"tagline says 'Free resume and job search portal': got {kind}",
+    )
+
+
+def test_detect_document_kind_recognizes_mandatory_skills_phrasing() -> None:
+    # Some vendors say "Mandatory Skills" instead of "Required Skills" --
+    # the jd_markers list only covered the latter, so a real posting
+    # using this exact phrasing (and none of the other jd_markers) fell
+    # all the way through to plain_message, same "partial parsing" bug
+    # class as the resume-tagline case above.
+    text = "Mandatory Skills:\n\nStrong Python and Django experience required.\n"
+    request = ChannelIntakeRequest(
+        channel="email",
+        source_message_id="mandatory-skills-1",
+        content_type="text",
+        sender=ChannelSender(email="someone@unrelateddomain.com"),
+        text=text,
+    )
+
+    kind = detect_document_kind(request)
+    require(kind == "job_description", f"'Mandatory Skills' phrasing must be recognized as a job posting: got {kind}")
+
+
 def test_detect_document_kind_uses_domain_bias_when_content_is_ambiguous() -> None:
     domain = "ambiguoussender.com"
     for i in range(2):
@@ -282,4 +346,6 @@ if __name__ == "__main__":
     test_reclassify_reparses_email_content_into_the_corrected_kind()
     test_reclassify_reparse_skipped_for_non_email_channel()
     test_detect_document_kind_uses_domain_bias_when_content_is_ambiguous()
+    test_detect_document_kind_ignores_a_job_board_relays_resume_tagline()
+    test_detect_document_kind_recognizes_mandatory_skills_phrasing()
     print("hermes-850-self-learning-classification-check: all checks passed")

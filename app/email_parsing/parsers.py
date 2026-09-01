@@ -409,6 +409,23 @@ _SECURITY_BANNER_LINE_PATTERN = re.compile(
     r"^\s*report\s+this\s+email\b.*$"
 )
 
+# Some recruiter-broadcast platforms (prohirespowerhouse.com and
+# similar bulk-mail tools) put their unsubscribe/manage-subscription
+# masthead at the very TOP of the email, immediately after the From/
+# Subject header block -- "Remove/unsubscribe | Update your contact and
+# subscribed mailing list(s) | Subscribe to mailing list(s) to receive
+# requirements & resumes". _JOB_DESCRIPTION_FOOTER_MARKERS' "unsubscribe"
+# marker below assumes an unsubscribe mention sits near the END of the
+# text (a real footer) and cuts everything from its first occurrence
+# onward -- with this vendor's masthead at the top instead, that cut
+# landed a few characters in, truncating the entire real job
+# description down to "Remove/" on every single email from this sender
+# (confirmed in production). Stripped here, top-of-email only, same as
+# the other preamble patterns below, so it never reaches the footer cut.
+_BROADCAST_MASTHEAD_LINE_PATTERN = re.compile(
+    r"(?im)^\s*remove\s*/\s*unsubscribe\b.*$"
+)
+
 # Generic markers for the SEO-keyword-dump / call-to-action tail that
 # broadcast job boards commonly append after the real posting. Kept
 # short and generic on purpose -- this is not an attempt to strip every
@@ -439,6 +456,7 @@ def _strip_forwarded_header_block(text: str) -> str:
             or _FORWARDED_HEADER_LINE_PATTERN.match(line)
             or _VENDOR_PREAMBLE_LINE_PATTERN.match(line)
             or _SECURITY_BANNER_LINE_PATTERN.match(line)
+            or _BROADCAST_MASTHEAD_LINE_PATTERN.match(line)
         ):
             cursor += 1
             continue
@@ -496,6 +514,31 @@ def _clean_job_description(text: str, extra_boilerplate_lines: frozenset[str] | 
     # Never hand back an empty description over a merely-unpolished one --
     # an over-eager strip losing everything is worse than leaving noise in.
     return cleaned.strip() or text.strip()
+
+
+def strip_job_board_boilerplate(text: str) -> str:
+    """Public wrapper around the header/footer stripping above, for
+    callers outside this module that need vendor boilerplate out of the
+    way but aren't building a job_description field specifically (see
+    app/channels/service.py:detect_document_kind).
+
+    Real incident: jobs.nvoids.com appends "Free resume and job search
+    portal" to the footer of every single posting it relays, including
+    pure job REQUIREMENTS with no resume content at all. detect_document_
+    kind's keyword-marker fallback classifier used to scan the raw,
+    unstripped text, so that one footer phrase's "resume" was enough to
+    misclassify an actual job posting as a resume/consultant-profile --
+    document_kind="resume" -- which skips the structured job-requirement
+    parser entirely (email_parsing.records stays empty, warning
+    "unsupported_email_document_kind") and produces exactly the "only
+    partial information parsed" symptom reported for this class of
+    email. Falls back to header-stripped-only text if the footer strip
+    would remove everything, same defensive behavior as
+    _clean_job_description.
+    """
+    cleaned = _strip_forwarded_header_block(text)
+    footer_stripped = _strip_job_description_footer(cleaned)
+    return footer_stripped.strip() or cleaned.strip()
 
 
 #: A vendor listing several positions in one email as a numbered list --

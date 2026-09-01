@@ -11,6 +11,7 @@ from app.email_parsing.llm_fallback import apply_hotlist_fallback, apply_job_req
 from app.email_parsing.parsers import (
     classify_email_by_confidence,
     parse_email_business_records,
+    strip_job_board_boilerplate,
 )
 from app.email_parsing.provenance import (
     build_email_parsing_provenance,
@@ -80,10 +81,21 @@ def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
             )
             return domain_bias["favored_document_kind"]
 
-    text = (request.text or "").lower()
-
-    if not text and request.attachments:
+    if not (request.text or "").strip() and request.attachments:
         return "unknown"
+
+    # Real incident: jobs.nvoids.com and similar relays append the same
+    # "Free resume and job search portal" tagline to the footer of every
+    # posting they relay -- including pure job REQUIREMENTS with zero
+    # resume content. Left in, that single boilerplate phrase was enough
+    # for a genuine job posting to hit the "resume" marker below and get
+    # classified document_kind="resume", which skips the structured job-
+    # requirement parser entirely (email_parsing.records stays empty) --
+    # exactly the "only partial information parsed" symptom reported for
+    # this class of email. Stripped before any of the marker checks below
+    # ever see it, same footer-stripping already used for job_description
+    # cleaning (app/email_parsing/parsers.py:_clean_job_description).
+    text = strip_job_board_boilerplate(request.text or "").lower()
 
     resume_markers = [
         "resume",
@@ -95,9 +107,12 @@ def detect_document_kind(request: ChannelIntakeRequest) -> DocumentKind:
     jd_markers = [
         "job description",
         "required skills",
+        "mandatory skills",
         "responsibilities",
         "requirements",
         "rate",
+        "duration:",
+        "interview process",
         "location",
     ]
     hotlist_markers = [

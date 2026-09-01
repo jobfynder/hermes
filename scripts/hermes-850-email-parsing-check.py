@@ -399,6 +399,50 @@ def test_nvoids_java_posting_regression() -> None:
     )
 
 
+def test_prohirespowerhouse_masthead_does_not_truncate_the_description() -> None:
+    # Real production bug, reported by the user: every single email from
+    # phph001@prohirespowerhouse.com came back with job_description ==
+    # "Remove/" -- this vendor's broadcast platform puts its "Remove/
+    # unsubscribe | Update your contact..." masthead line at the TOP of
+    # the email (right after the From:/Subject: header block) rather
+    # than the bottom. _JOB_DESCRIPTION_FOOTER_MARKERS' "unsubscribe"
+    # marker assumed a footer position and cut everything from its FIRST
+    # occurrence onward -- landing seven characters in.
+    text = (
+        "Subject: Now Hiring: Python Developer (Generative AI - Agentic AI)Phoenix, AZ "
+        "(Onsite - Local Candidates Only)\n\n"
+        "Remove/unsubscribe   |   Update your contact and subscribed mailing list(s)   |   "
+        "Subscribe to mailing list(s) to receive requirements & resumes \n\n"
+        "From :\nNarendra Calavari,\nNAM-IT\nnarendra.calavari@nam-it.com\n"
+        "Reply to:   narendra.calavari@nam-it.com\n\n"
+        "Now Hiring: Python Developer (Generative AI / Agentic AI)\n"
+        "Location: Phoenix, AZ (Onsite - Local Candidates Only)\n"
+        "Duration: 6 Months\nRate: $56/hr\n\n"
+        "We are looking for a skilled Python Developer with strong expertise in Generative AI, "
+        "RAG, LangChain, LangGraph, and Cloud-Native development.\n"
+        "Required Skills:\n5+ years of Python development experience\n\n"
+        "Sign-Up for your account with PROHIRES POWERHOUSE Recruiting Portal to broadcast "
+        "requirements & hotlists. \nHire our IT Recruiter at just $499/month ."
+    )
+
+    result = parse_requirement_email(text)
+    record = result["records"][0]
+
+    require(
+        len(record["job_description"]) > 100,
+        f"The masthead line must not truncate the real job description down to a few characters: "
+        f"{record['job_description']!r}",
+    )
+    require(
+        "python developer" in record["job_description"].lower(),
+        f"The actual posting content must survive: {record['job_description']!r}",
+    )
+    require(
+        "remove/unsubscribe" not in record["job_description"].lower(),
+        "The masthead line itself must still be stripped out, not just left un-truncated",
+    )
+
+
 def test_location_does_not_swallow_next_blank_label() -> None:
     # A recruiter template asking the reader to fill in several blank
     # fields ("Location:\nLinkedIn:\n...") used to have its empty
@@ -646,6 +690,7 @@ def main() -> None:
     test_confidence_based_classification()
     test_forwarded_requirement_with_end_client()
     test_nvoids_java_posting_regression()
+    test_prohirespowerhouse_masthead_does_not_truncate_the_description()
     test_location_does_not_swallow_next_blank_label()
     test_security_gateway_banner_is_stripped()
     test_pipe_delimited_subject_still_yields_a_title()
