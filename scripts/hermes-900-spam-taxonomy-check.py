@@ -755,40 +755,56 @@ def test_runtime_copy_is_not_re_seeded_in_a_fresh_process() -> None:
 
 
 def test_boilerplate_line_hidden_until_seen_from_enough_distinct_domains() -> None:
-    line = "Zzz Boilerplate Footer Line For Distinct Domain Test"
+    # Real production incident: at a 3-domain threshold this flooded the
+    # queue with 13,000+ candidates in under a day, almost all of them
+    # generic industry-standard headers/signoffs ("Job Description:",
+    # "Key Responsibilities", "Thanks & Regards,") that recur across
+    # unrelated companies independent of any shared relay template.
+    line = "Zzz Boilerplate Footer Line For Distinct Domain Threshold Test Here"
+    domains = [f"bpvendor{i}.com" for i in range(7)]
 
-    record_boilerplate_line_candidates(f"Real content one.\n{line}", "bp-draft-1", "bpvendora.com")
-    record_boilerplate_line_candidates(f"Different real content.\n{line}", "bp-draft-2", "bpvendorb.com")
+    for i, domain in enumerate(domains):
+        record_boilerplate_line_candidates(f"Real content {i}.\n{line}", f"bp-draft-{i}", domain)
 
     pending = [c for c in list_taxonomy_candidates("pending") if c["term"] == line]
-    require(pending == [], f"A line seen from only 2 distinct domains must not surface yet: {pending}")
+    require(pending == [], f"A line seen from only 7 distinct domains must not surface yet: {pending}")
 
-    record_boilerplate_line_candidates(f"A third posting's content.\n{line}", "bp-draft-3", "bpvendorc.com")
+    record_boilerplate_line_candidates(f"An eighth posting's content.\n{line}", "bp-draft-8th", "bpvendor8th.com")
 
     pending = [c for c in list_taxonomy_candidates("pending") if c["term"] == line]
-    require(len(pending) == 1, f"A line seen from 3 distinct domains must now be visible: {pending}")
+    require(len(pending) == 1, f"A line seen from 8 distinct domains must now be visible: {pending}")
     require(
-        set(pending[0]["distinct_senders"]) == {"bpvendora.com", "bpvendorb.com", "bpvendorc.com"},
+        set(pending[0]["distinct_senders"]) == set(domains) | {"bpvendor8th.com"},
         f"Wrong distinct_senders: {pending[0]}",
     )
 
 
-def test_boilerplate_line_ignores_too_short_and_too_long_lines() -> None:
-    record_boilerplate_line_candidates("short", "bp-draft-short", "bpshort.com")
+def test_boilerplate_line_ignores_short_generic_headers_and_signoffs() -> None:
+    # The exact real production regression -- these are standard
+    # professional phrasing every company writes independently, not
+    # relay-injected boilerplate, and must never be queued regardless of
+    # how many distinct domains they're seen from.
+    for line in ["Job Description:", "Key Responsibilities", "Thanks & Regards,", "short"]:
+        for i, domain in enumerate([f"bpgeneric{i}.com" for i in range(10)]):
+            record_boilerplate_line_candidates(f"Content {i}.\n{line}", f"bp-generic-draft-{i}", domain)
+
+        with cursor() as cur:
+            cur.execute(
+                "SELECT count(*) AS n FROM taxonomy_candidates WHERE signal_type = 'boilerplate_line' AND term = %s",
+                (line,),
+            )
+            require(cur.fetchone()["n"] == 0, f"A short generic line must never be queued at all: {line!r}")
+
     record_boilerplate_line_candidates("x" * 250, "bp-draft-long", "bplong.com")
-
     with cursor() as cur:
-        cur.execute("SELECT count(*) AS n FROM taxonomy_candidates WHERE signal_type = 'boilerplate_line' AND term = 'short'")
-        require(cur.fetchone()["n"] == 0, "A too-short line must never be queued")
-
         cur.execute("SELECT count(*) AS n FROM taxonomy_candidates WHERE signal_type = 'boilerplate_line' AND term = %s", ("x" * 250,))
         require(cur.fetchone()["n"] == 0, "A too-long line must never be queued")
 
 
 def test_approving_a_boilerplate_line_strips_it_live_with_no_redeploy() -> None:
-    line = "Zzz Approved Boilerplate Line For Live Strip Test"
+    line = "Zzz Approved Boilerplate Line For Live Strip Redeploy Test Right Here"
 
-    for i, domain in enumerate(["bplivea.com", "bpliveb.com", "bplivec.com"]):
+    for i, domain in enumerate([f"bplive{i}.com" for i in range(8)]):
         record_boilerplate_line_candidates(f"Content {i}.\n{line}", f"bp-live-draft-{i}", domain)
 
     pending = [c for c in list_taxonomy_candidates("pending") if c["term"] == line]
@@ -822,8 +838,8 @@ def test_approving_a_boilerplate_line_strips_it_live_with_no_redeploy() -> None:
 
 
 def test_boilerplate_signal_type_never_mixed_into_skill_or_job_title_queue() -> None:
-    line = "Zzz Boilerplate Never Mixed Into Skills Test Line Here"
-    for i, domain in enumerate(["bpmixa.com", "bpmixb.com", "bpmixc.com"]):
+    line = "Zzz Boilerplate Never Mixed Into Skills Or Job Titles Test Line Here"
+    for i, domain in enumerate([f"bpmix{i}.com" for i in range(8)]):
         record_boilerplate_line_candidates(f"Body {i}.\n{line}", f"bp-mix-draft-{i}", domain)
 
     pending = list_taxonomy_candidates("pending")
@@ -959,10 +975,10 @@ def main() -> None:
     print("PASS: a fresh process's first taxonomy write does not re-seed and lose earlier writes")
 
     test_boilerplate_line_hidden_until_seen_from_enough_distinct_domains()
-    print("PASS: a boilerplate line stays hidden until seen from 3+ distinct sender domains")
+    print("PASS: a boilerplate line stays hidden until seen from 8+ distinct sender domains")
 
-    test_boilerplate_line_ignores_too_short_and_too_long_lines()
-    print("PASS: too-short and too-long lines are never queued as boilerplate candidates")
+    test_boilerplate_line_ignores_short_generic_headers_and_signoffs()
+    print("PASS: short generic headers/signoffs and too-long lines are never queued as boilerplate")
 
     test_approving_a_boilerplate_line_strips_it_live_with_no_redeploy()
     print("PASS: approving a boilerplate line strips it from postings immediately, no redeploy")

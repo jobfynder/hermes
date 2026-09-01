@@ -238,16 +238,22 @@ def record_taxonomy_candidates(
     return unknown_terms
 
 
-# A line seen from only one or two sender domains is far more likely to
-# just be that posting's own real content coincidentally being short and
-# generic-sounding than actual boilerplate -- real job requirements from
-# unrelated companies are extremely unlikely to be byte-identical to each
-# other, but a relay/template's injected footer text is. Requiring 3+
-# distinct domains before a line surfaces to a reviewer is what keeps
-# this queue small instead of becoming a second flood on top of the one
-# it's meant to reduce.
-_MIN_BOILERPLATE_DISTINCT_SENDERS = 3
-_MIN_BOILERPLATE_LINE_LENGTH = 15
+# Real production incident: with a 15-char floor and a 3-domain bar,
+# this flooded the queue with 13,000+ candidates in under a day --
+# "Job Description:", "Key Responsibilities", "Thanks & Regards," are
+# NOT relay-specific boilerplate, they're standard section headers and
+# signoffs every staffing company independently writes the same way.
+# The "byte-identical across unrelated companies is a strong signal"
+# assumption only holds for longer, more idiosyncratic text (a full
+# sentence, a URL) -- short headers/labels/signoffs recur everywhere
+# regardless of any shared template, precisely because they're generic
+# English convention, not because of it. Raising the length floor to 40
+# eliminates that entire class outright; raising the domain bar to 8
+# adds a second margin without meaningfully slowing detection of a real
+# relay pattern -- a genuine template line still crosses 8 domains
+# within hours at this mailbox's real daily volume.
+_MIN_BOILERPLATE_DISTINCT_SENDERS = 8
+_MIN_BOILERPLATE_LINE_LENGTH = 40
 _MAX_BOILERPLATE_LINE_LENGTH = 200
 
 
