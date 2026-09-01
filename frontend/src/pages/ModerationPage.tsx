@@ -1,12 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import type { BlocklistEntry, TaxonomyCandidateEntry } from '../types'
+
+type SortKey = 'occurrence_count' | 'distinct_senders' | 'last_seen_at' | 'term'
+type TypeFilter = 'all' | 'skill' | 'job_title'
+
+const MIN_OCCURRENCE_OPTIONS = [1, 2, 5, 10, 25]
 
 function CandidateSection({
   title,
   description,
   emptyMessage,
   termLabel,
+  searchPlaceholder,
   showTypeColumn,
   candidates,
   busy,
@@ -28,6 +34,7 @@ function CandidateSection({
   description: string
   emptyMessage: string
   termLabel: string
+  searchPlaceholder: string
   showTypeColumn?: boolean
   candidates: TaxonomyCandidateEntry[]
   busy: boolean
@@ -45,8 +52,39 @@ function CandidateSection({
   onBulkApprove: (ids: number[]) => void
   onBulkReject: (ids: number[]) => void
 }) {
-  const ids = candidates.map((c) => c.id)
+  const [search, setSearch] = useState('')
+  const [sortKey, setSortKey] = useState<SortKey>('occurrence_count')
+  const [minOccurrences, setMinOccurrences] = useState(1)
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [groupAlpha, setGroupAlpha] = useState(false)
+
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+
+    let rows = candidates.filter((c) => {
+      if (c.occurrence_count < minOccurrences) return false
+      if (showTypeColumn && typeFilter !== 'all' && c.signal_type !== typeFilter) return false
+      if (q) {
+        const haystack = `${c.term} ${c.distinct_senders.join(' ')}`.toLowerCase()
+        if (!haystack.includes(q)) return false
+      }
+      return true
+    })
+
+    rows = [...rows].sort((a, b) => {
+      if (sortKey === 'term') return a.term.localeCompare(b.term)
+      if (sortKey === 'distinct_senders') return b.distinct_senders.length - a.distinct_senders.length
+      if (sortKey === 'last_seen_at') return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime()
+      return b.occurrence_count - a.occurrence_count
+    })
+
+    return rows
+  }, [candidates, search, sortKey, minOccurrences, typeFilter, showTypeColumn])
+
+  const ids = visible.map((c) => c.id)
   const selectedInSection = ids.filter((id) => selectedIds.has(id))
+
+  let previousGroupLetter = ''
 
   return (
     <section className="mb-8 rounded-xl border border-line bg-surface p-5">
@@ -54,9 +92,64 @@ function CandidateSection({
       <p className="mb-4 text-xs text-ink-soft">{description}</p>
 
       {candidates.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="min-w-48 flex-1 rounded-lg border border-line bg-paper px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          />
+          {showTypeColumn && (
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+              className="rounded-lg border border-line bg-paper px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+            >
+              <option value="all">All types</option>
+              <option value="skill">Skills only</option>
+              <option value="job_title">Job titles only</option>
+            </select>
+          )}
+          <select
+            value={minOccurrences}
+            onChange={(e) => setMinOccurrences(Number(e.target.value))}
+            className="rounded-lg border border-line bg-paper px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          >
+            {MIN_OCCURRENCE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n === 1 ? 'Seen any number of times' : `Seen ${n}+ times`}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="rounded-lg border border-line bg-paper px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+          >
+            <option value="occurrence_count">Sort: most seen</option>
+            <option value="distinct_senders">Sort: most senders</option>
+            <option value="last_seen_at">Sort: most recent</option>
+            <option value="term">Sort: {termLabel.toLowerCase()} A–Z</option>
+          </select>
+          <label className="flex items-center gap-1.5 text-xs text-ink-soft">
+            <input
+              type="checkbox"
+              checked={groupAlpha}
+              onChange={(e) => setGroupAlpha(e.target.checked)}
+              disabled={sortKey !== 'term'}
+              className="accent-accent disabled:opacity-40"
+            />
+            Group A–Z
+          </label>
+        </div>
+      )}
+
+      {candidates.length > 0 && (
         <div className="mb-3 flex items-center justify-between rounded-lg border border-line bg-paper px-3 py-2">
           <span className="text-xs text-ink-soft">
-            {selectedInSection.length > 0 ? `${selectedInSection.length} selected` : 'Select rows to act on them in bulk'}
+            {selectedInSection.length > 0
+              ? `${selectedInSection.length} selected`
+              : `Showing ${visible.length} of ${candidates.length} — select rows to act on them in bulk`}
           </span>
           <div className="flex gap-3">
             <button
@@ -82,7 +175,7 @@ function CandidateSection({
           <thead>
             <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
               <th className="w-8 px-3 py-2">
-                {candidates.length > 0 && (
+                {visible.length > 0 && (
                   <input
                     type="checkbox"
                     checked={selectedInSection.length === ids.length}
@@ -101,8 +194,21 @@ function CandidateSection({
             </tr>
           </thead>
           <tbody>
-            {candidates.map((c) => (
-              <tr key={c.id} className="border-b border-line last:border-0">
+            {visible.map((c) => {
+              const groupLetter = (c.term.trim()[0] || '#').toUpperCase()
+              const showGroupHeader = groupAlpha && sortKey === 'term' && groupLetter !== previousGroupLetter
+              previousGroupLetter = groupLetter
+
+              return (
+                <Fragment key={c.id}>
+                  {showGroupHeader && (
+                    <tr className="bg-paper">
+                      <td colSpan={showTypeColumn ? 7 : 6} className="px-3 py-1 text-xs font-semibold text-ink-soft">
+                        {groupLetter}
+                      </td>
+                    </tr>
+                  )}
+                  <tr className="border-b border-line last:border-0">
                 <td className="px-3 py-2">
                   <input
                     type="checkbox"
@@ -185,8 +291,17 @@ function CandidateSection({
                     </div>
                   )}
                 </td>
+                  </tr>
+                </Fragment>
+              )
+            })}
+            {candidates.length > 0 && visible.length === 0 && (
+              <tr>
+                <td colSpan={showTypeColumn ? 7 : 6} className="px-3 py-6 text-center text-ink-soft">
+                  No candidates match these filters.
+                </td>
               </tr>
-            ))}
+            )}
             {candidates.length === 0 && (
               <tr>
                 <td colSpan={showTypeColumn ? 7 : 6} className="px-3 py-6 text-center text-ink-soft">
@@ -491,6 +606,7 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
         description={`Skill and job-title terms Hermes doesn't recognize yet, seen in real postings (${taxonomyCandidates.filter((c) => c.signal_type === 'skill').length} skill, ${taxonomyCandidates.filter((c) => c.signal_type === 'job_title').length} job title). Approving adds it to the matching taxonomy immediately — skills and job titles are always kept in separate files, never mixed.`}
         emptyMessage="No new terms waiting for review."
         termLabel="Term"
+        searchPlaceholder="Search term or sender domain…"
         showTypeColumn
         candidates={taxonomyCandidates}
         {...sharedSectionProps}
@@ -501,6 +617,7 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
         description="Recurring footer/signature lines seen across 3+ different senders that the automatic cleaner doesn't already strip out of job descriptions. Approving removes this exact line from every future posting immediately."
         emptyMessage="No recurring boilerplate lines waiting for review yet."
         termLabel="Line"
+        searchPlaceholder="Search line text or sender domain…"
         candidates={boilerplateCandidates}
         {...sharedSectionProps}
       />
