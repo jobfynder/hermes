@@ -488,6 +488,39 @@ def test_repeated_job_title_label_does_not_split_a_single_posting() -> None:
     )
 
 
+def test_repeated_job_title_label_on_its_own_line_does_not_split() -> None:
+    # Same bug family as the test above, but the label's value sits on
+    # its own line below it -- "Job Title :\n\nData Architect" -- rather
+    # than on the same line. The original dedup fix only ever looked at
+    # the label's own line, so it read an empty string for this match,
+    # never registered a "previous title" to compare the second,
+    # identically-worded match against, and still split the posting.
+    text = (
+        "Subject: Need Data Architect\n\n"
+        "From:\n\nRecruiter Name,\n\nSome Vendor\n\nrecruiter@example.com\n\n"
+        "Job Title :\n\nData Architect\n\n"
+        "Location:\n\nRemote\n\nDuration: 6 months\n\n"
+        "Job Description:\n\n"
+        "Job Title: Data Architect\n\n"
+        "We are looking for a Data Architect with strong Snowflake and dbt experience "
+        "to design and govern our enterprise data platform.\n"
+        "Required Skills: Snowflake, dbt, Data Modeling, SQL, AWS Redshift.\n\n"
+        "Thanks & Regards"
+    )
+
+    result = parse_requirement_email(text)
+    require(
+        len(result["records"]) == 1,
+        f"A restated title on its own line must not split one posting into two records: "
+        f"got {len(result['records'])}",
+    )
+    record = result["records"][0]
+    require(
+        "snowflake" in record["job_description"].lower(),
+        f"The real job description content must survive intact: {record['job_description']!r}",
+    )
+
+
 def test_different_job_title_labels_still_split_into_separate_records() -> None:
     # Companion to the dedup test above -- confirms the fix only merges
     # a REPEATED identical title, not a genuine second position stated
@@ -763,6 +796,7 @@ def main() -> None:
     test_nvoids_java_posting_regression()
     test_prohirespowerhouse_masthead_does_not_truncate_the_description()
     test_repeated_job_title_label_does_not_split_a_single_posting()
+    test_repeated_job_title_label_on_its_own_line_does_not_split()
     test_different_job_title_labels_still_split_into_separate_records()
     test_location_does_not_swallow_next_blank_label()
     test_security_gateway_banner_is_stripped()

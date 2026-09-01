@@ -595,17 +595,34 @@ def _sections_from_matches(
     return sections or [text]
 
 
+#: How many lines past the label itself to look for its value when the
+#: line the label is on ends empty -- "Job Title :\n\nData Architect" is
+#: a common template shape (the same one _extract_labeled_value and the
+#: "Location:\n\nNew York, NY" case elsewhere in this module both
+#: already have to deal with). Small and bounded so a genuinely blank/
+#: templated field ("Job Title :\n\nLocation:\n...") doesn't wander into
+#: an unrelated later line and get treated as this label's value.
+_TITLE_LABEL_VALUE_LOOKAHEAD_LINES = 3
+
+
 def _title_label_value_at(text: str, match: re.Match[str]) -> str:
-    """The value on the same line as a "Job Title:"/"Position:"/"Role:"
-    label match -- "Job Title: QE Automation Engineer" -> "qe automation
-    engineer", normalized (case/whitespace-insensitive) so two matches
+    """The value belonging to a "Job Title:"/"Position:"/"Role:" label
+    match -- "Job Title: QE Automation Engineer" -> "qe automation
+    engineer" -- normalized (case/whitespace-insensitive) so two matches
     can be compared for whether they're restating the same title.
+    Checks the label's own line first, then a few following lines if
+    that line is empty ("Job Title :\n\nData Architect" -- the value on
+    its own line below the label, seen in real production templates
+    alongside the same-line shape).
     """
-    line_end = text.find("\n", match.end())
-    if line_end == -1:
-        line_end = len(text)
-    value = text[match.end() : line_end].strip(" \t:-")
-    return re.sub(r"\s+", " ", value).lower()
+    remainder = text[match.end() :]
+
+    for line in remainder.splitlines()[: 1 + _TITLE_LABEL_VALUE_LOOKAHEAD_LINES]:
+        value = line.strip(" \t:-")
+        if value:
+            return re.sub(r"\s+", " ", value).lower()
+
+    return ""
 
 
 def _split_requirement_sections(text: str) -> list[str]:
