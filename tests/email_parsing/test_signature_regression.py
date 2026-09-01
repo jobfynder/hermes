@@ -4,7 +4,10 @@ classification) and that the new structured_data["signature"] key is
 additive to app/channels/service.py::process_channel_intake.
 """
 
+from types import SimpleNamespace
 from uuid import uuid4
+
+import pytest
 
 from app.channels.models import ChannelIntakeRequest, ChannelSender
 from app.channels.service import process_channel_intake
@@ -23,6 +26,37 @@ JOB_DESCRIPTION_EMAIL = (
     "We need a senior Java developer with strong microservices experience "
     "for a long-term client engagement.\n"
 )
+
+
+@pytest.fixture(autouse=True)
+def isolate_channel_persistence(monkeypatch):
+    """Keep these parsing regressions independent of Postgres and runtime logs."""
+    monkeypatch.setattr("app.channels.service.is_sender_blocked", lambda email: None)
+    monkeypatch.setattr("app.channels.service.record_idempotency_key_if_new", lambda key: True)
+    monkeypatch.setattr("app.channels.service.record_intake", lambda record: None)
+    monkeypatch.setattr("app.channels.service.emit_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "app.channels.service.register_and_check",
+        lambda text, duplicate_key: {
+            "body_hash": "test-body-hash",
+            "duplicate_group_id": "test-body-hash",
+            "is_exact_content_duplicate": False,
+            "canonical_duplicate_key": duplicate_key,
+        },
+    )
+    monkeypatch.setattr("app.channels.service.get_approved_boilerplate_lines", lambda: [])
+    monkeypatch.setattr(
+        "app.channels.service.apply_learned_signature_patterns",
+        lambda contact, sender_domain: contact,
+    )
+    monkeypatch.setattr(
+        "app.channels.service.create_draft_object",
+        lambda **kwargs: SimpleNamespace(draft_id="test-draft-id"),
+    )
+    monkeypatch.setattr("app.channels.service.record_field_provenance", lambda **kwargs: None)
+    monkeypatch.setattr("app.channels.service.record_taxonomy_candidates", lambda **kwargs: None)
+    monkeypatch.setattr("app.channels.service.record_boilerplate_line_candidates", lambda **kwargs: None)
+    monkeypatch.setattr("app.channels.service.record_skill_usage", lambda skills: None)
 
 
 def test_hotlist_parsing_unchanged():

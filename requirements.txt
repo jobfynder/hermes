@@ -8,6 +8,9 @@ langdetect
 rapidfuzz
 tiktoken
 python-multipart
+# 4.7+ sends the v4 ingestion header required for real-time observations in
+# Langfuse's v4 data model. Earlier v4 releases use the compatibility path.
+langfuse>=4.7,<5
 spacy
 # Pinned wheel, not a runtime `spacy download` -- keeps the model baked
 # into the image at build time instead of needing network access (and a

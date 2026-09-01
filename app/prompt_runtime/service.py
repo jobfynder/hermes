@@ -1,10 +1,8 @@
-import base64
 import json
 import os
 import re
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.prompt_runtime.models import (
@@ -22,7 +20,6 @@ RUNTIME_VERSION = "hermes_prompt_runtime_v1"
 PROVIDER_NAME = "litellm"
 DEFAULT_LITELLM_BASE_URL = "https://gateway.jobfynder.com/v1/chat/completions"
 DEFAULT_LANGFUSE_BASE_URL = "https://langfuse.jobfynder.com"
-LANGFUSE_INGESTION_PATH = "/api/public/ingestion"
 TEMPLATE_VAR_PATTERN = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 
 
@@ -169,11 +166,32 @@ def _call_litellm(prompt, messages: list[PromptRenderedMessage]) -> tuple[str, d
         return output, usage
 
 
-def _langfuse_auth_header() -> str:
-    public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "")
-    secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
-    token = base64.b64encode(f"{public_key}:{secret_key}".encode("utf-8")).decode("utf-8")
-    return f"Basic {token}"
+def _langfuse_usage_details(usage: dict) -> dict[str, int]:
+    """Return numeric usage fields using Langfuse's OpenTelemetry conventions."""
+    aliases = {
+        "prompt_tokens": "input",
+        "completion_tokens": "output",
+        "total_tokens": "total",
+    }
+    return {
+        aliases.get(key, key): value
+        for key, value in usage.items()
+        if isinstance(value, int) and not isinstance(value, bool)
+    }
+
+
+def _langfuse_metadata(result: PromptRunResult, request: PromptRunRequest) -> dict:
+    return {
+        "run_id": result.run_id,
+        "provider": result.provider,
+        "mode_requested": result.mode_requested,
+        "mode_effective": result.mode_effective,
+        "decision": result.decision,
+        "correlation_id": request.correlation_id,
+        "actor_id": request.actor_id,
+        "source": request.source,
+        **request.metadata,
+    }
 
 
 def send_langfuse_trace(
@@ -181,71 +199,47 @@ def send_langfuse_trace(
     messages: list[PromptRenderedMessage],
     request: PromptRunRequest,
 ) -> None:
-    """Best-effort trace to Langfuse. Never raises - tracing must not break prompt execution."""
+    """Emit a Langfuse v4 OpenTelemetry trace without affecting prompt execution."""
     if not langfuse_configured():
         return
 
     try:
-        base_url = os.getenv("LANGFUSE_BASE_URL", DEFAULT_LANGFUSE_BASE_URL).rstrip("/")
-        now = datetime.now(timezone.utc).isoformat()
+        # Lazy imports avoid initializing an exporter when tracing is disabled.
+        from langfuse import get_client, propagate_attributes
 
-        trace_event = {
-            "id": f"{result.run_id}-trace",
-            "type": "trace-create",
-            "timestamp": now,
-            "body": {
-                "id": result.run_id,
-                "name": result.prompt_id,
-                "input": {"variables": request.variables},
-                "output": {"output_text": result.output_text} if result.output_text else None,
-                "metadata": {
-                    "provider": result.provider,
-                    "mode_requested": result.mode_requested,
-                    "mode_effective": result.mode_effective,
-                    "decision": result.decision,
-                    "correlation_id": request.correlation_id,
-                    "actor_id": request.actor_id,
-                    "source": request.source,
-                },
-                "tags": ["hermes", "prompt_runtime", result.prompt_id],
-            },
-        }
+        langfuse = get_client()
+        trace_context = {"trace_id": langfuse.create_trace_id(seed=result.run_id)}
+        trace_output = {"output_text": result.output_text} if result.output_text else None
+        metadata = _langfuse_metadata(result, request)
 
-        generation_event = {
-            "id": f"{result.run_id}-generation",
-            "type": "generation-create",
-            "timestamp": now,
-            "body": {
-                "id": f"{result.run_id}-generation",
-                "traceId": result.run_id,
-                "name": f"{result.prompt_id}.{result.mode_effective}",
-                "model": result.usage.get("model_used") if result.usage else None,
-                "input": [message.model_dump() for message in messages],
-                "output": result.output_text,
-                "usage": result.usage or None,
-                "metadata": {
-                    "decision": result.decision,
-                    "reasons": result.reasons,
-                    "risks": result.risks,
-                },
-            },
-        }
-
-        body = json.dumps({"batch": [trace_event, generation_event]}).encode("utf-8")
-
-        http_request = urllib.request.Request(
-            f"{base_url}{LANGFUSE_INGESTION_PATH}",
-            data=body,
-            headers={
-                "Authorization": _langfuse_auth_header(),
-                "User-Agent": "Hermes-PromptRuntime/1.0",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-
-        with urllib.request.urlopen(http_request, timeout=10):
-            pass
+        with langfuse.start_as_current_observation(
+            as_type="span",
+            name=result.prompt_id,
+            input={"variables": request.variables},
+            output=trace_output,
+            metadata=metadata,
+            trace_context=trace_context,
+        ):
+            with propagate_attributes(
+                trace_name=result.prompt_id,
+                user_id=request.actor_id,
+                session_id=request.correlation_id,
+                tags=["hermes", "prompt_runtime", result.prompt_id],
+            ):
+                with langfuse.start_as_current_observation(
+                    as_type="generation",
+                    name=f"{result.prompt_id}.{result.mode_effective}",
+                    model=result.usage.get("model_used") if result.usage else None,
+                    input=[message.model_dump() for message in messages],
+                    output=result.output_text,
+                    usage_details=_langfuse_usage_details(result.usage),
+                    metadata={
+                        "decision": result.decision,
+                        "reasons": result.reasons,
+                        "risks": result.risks,
+                    },
+                ):
+                    pass
     except Exception:
         pass
 

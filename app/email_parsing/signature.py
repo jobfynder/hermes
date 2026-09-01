@@ -781,7 +781,16 @@ def parse_email_signature(
         if boundary is not None
         else 0
     )
-    is_pure_forward = boundary is not None and lines_before_boundary <= 1
+    # A short reply followed by "On ... wrote:" is still a reply, not a
+    # pure forward. Only the explicit forwarded/original-message formats
+    # qualify for the exception that scans beyond the boundary.
+    has_forward_marker = forwarded_marker_span(body) is not None
+    has_forward_header_block = RAW_HEADER_BLOCK_RE.search(body) is not None
+    is_pure_forward = (
+        boundary is not None
+        and lines_before_boundary <= 1
+        and (has_forward_marker or has_forward_header_block)
+    )
 
     if boundary is not None and not include_quoted_history and not is_pure_forward:
         quoted_text = "\n".join(lines[boundary:])
