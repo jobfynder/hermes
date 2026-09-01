@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from app.runtime.db import cursor
+from app.understanding.taxonomy.title_family_classifier import compute_related_job_titles
 
 
 def _utc_now_iso() -> str:
@@ -79,6 +80,22 @@ def normalize_taxonomy_key(value: str | None) -> str:
     return " ".join(normalized.split())
 
 
+def _loose_key(value: str | None) -> str:
+    """A stricter, punctuation-blind key used only for duplicate
+    DETECTION (never for storage or display) -- normalize_taxonomy_key
+    deliberately keeps '.', '+', '#' because they're load-bearing for
+    real distinct names (".NET" vs "NET", "C++" vs "C"), which also
+    means it treats "Node.js" and "NodeJS" as two different keys even
+    though they're the same skill. This collapses ALL punctuation and
+    spacing, so those collide here without changing normalize_taxonomy_key's
+    behavior (and every alias/candidate-matching path built on it)
+    anywhere else.
+    """
+    if not value:
+        return ""
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -140,8 +157,16 @@ def add_canonical_skill(
 ) -> None:
     """Appends a human-approved taxonomy candidate to canonical_skills.json
     and immediately busts the cache so extract_skills() picks it up
-    without a redeploy. Refuses a name that's already present (by
-    normalized key) rather than writing a duplicate entry.
+    without a redeploy. Refuses a name already covered by an existing
+    entry -- by its own normalized name, by any of its aliases, by
+    skill_aliases.json, or by a loose punctuation-blind match ("NodeJS"
+    against an existing "Node.js") -- rather than writing a semantic
+    duplicate. The original check only compared against other entries'
+    own `name` field, which let an approval slip through for a term that
+    was already recognized as an ALIAS of something else -- two entries
+    for the same real skill, invisible to exact-key dedup because the
+    new one's key never collided with anyone's canonical name, only
+    with an alias.
 
     description is a one-sentence, recruiter-facing definition (see
     app/understanding/taxonomy/descriptions.py) -- optional here because
@@ -160,9 +185,14 @@ def add_canonical_skill(
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
 
         data = json.loads(_writable_taxonomy_path("canonical_skills.json").read_text(encoding="utf-8"))
-        existing_keys = {normalize_taxonomy_key(entry.get("name")) for entry in data["skills"]}
+        new_key = normalize_taxonomy_key(name)
+        new_loose_key = _loose_key(name)
+        already_known = (
+            new_key in build_skill_alias_index()
+            or (new_loose_key and new_loose_key in build_loose_skill_key_index())
+        )
 
-        if normalize_taxonomy_key(name) in existing_keys:
+        if already_known:
             clear_taxonomy_cache()
             return
 
@@ -248,8 +278,14 @@ def update_canonical_skill(
     """Same pattern as update_canonical_job_title, for canonical_skills.
     json -- rename a skill (typo, casing) or reclassify its category, in
     place, live immediately. A rename that would collide (by normalized
-    key) with a DIFFERENT existing skill is refused; the old name is
-    kept as an alias so a posting still using it keeps matching.
+    key, or by loose punctuation-blind key) with a DIFFERENT existing
+    skill is refused; the old name is kept as an alias so a posting
+    still using it keeps matching.
+
+    Same case/punctuation-only-rename fix as update_canonical_job_title:
+    a rename with the same normalized key ("react js" -> "React JS",
+    just casing) now still writes the corrected text -- previously it
+    silently no-opped while still reporting updated=True.
     """
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
@@ -264,11 +300,17 @@ def update_canonical_skill(
         if entry is None:
             return {"updated": False, "reason": "skill_not_found"}
 
-        if new_name:
+        if new_name and new_name != entry["name"]:
             new_key = normalize_taxonomy_key(new_name)
+            new_loose_key = _loose_key(new_name)
+
             if new_key != current_key:
                 collision = any(
-                    other is not entry and normalize_taxonomy_key(other.get("name")) == new_key
+                    other is not entry
+                    and (
+                        normalize_taxonomy_key(other.get("name")) == new_key
+                        or (new_loose_key and _loose_key(other.get("name")) == new_loose_key)
+                    )
                     for other in data["skills"]
                 )
                 if collision:
@@ -277,7 +319,8 @@ def update_canonical_skill(
                 aliases = entry.setdefault("aliases", [])
                 if entry["name"] not in aliases:
                     aliases.append(entry["name"])
-                entry["name"] = new_name
+
+            entry["name"] = new_name
 
         if category is not None:
             entry["category"] = category
@@ -396,17 +439,32 @@ def add_canonical_job_title(
     """Same pattern as add_canonical_skill above, for job_titles.json --
     same advisory lock (a distinct key so a skill approval and a title
     approval never block each other), same live-immediately-no-redeploy
-    cache bust, same refuse-a-duplicate-by-normalized-key behavior.
+    cache bust. Duplicate check now covers aliases and a loose
+    punctuation-blind key too, same reasoning as add_canonical_skill's
+    docstring above -- the old normalized-name-only check missed a term
+    that was already recognized as an ALIAS of a different title.
+
+    related_titles is always computed deterministically on add (see
+    compute_related_job_titles) -- token overlap against every other
+    title already in the taxonomy, no LLM, so it's free to run on every
+    single approval.
     """
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
 
         data = json.loads(_writable_taxonomy_path("job_titles.json").read_text(encoding="utf-8"))
-        existing_keys = {normalize_taxonomy_key(entry.get("title")) for entry in data["titles"]}
+        new_key = normalize_taxonomy_key(title)
+        new_loose_key = _loose_key(title)
+        already_known = (
+            new_key in build_title_alias_index()
+            or (new_loose_key and new_loose_key in build_loose_title_key_index())
+        )
 
-        if normalize_taxonomy_key(title) in existing_keys:
+        if already_known:
             clear_taxonomy_cache()
             return
+
+        related_titles = compute_related_job_titles(title, family, data["titles"])
 
         data["titles"].append(
             {
@@ -414,7 +472,7 @@ def add_canonical_job_title(
                 "family": family,
                 "seniority": seniority,
                 "aliases": aliases or [],
-                "related_titles": [],
+                "related_titles": related_titles,
                 "confidence": "medium",
                 "source": "taxonomy_candidate_approved",
             }
@@ -435,14 +493,31 @@ def update_canonical_job_title(
     classification later) -- same live-immediately-no-redeploy pattern
     as add_canonical_job_title.
 
-    A rename is refused if it would collide (by normalized key) with a
-    DIFFERENT existing title -- the same duplicate guard
-    add_canonical_job_title already applies to a brand-new entry; an
-    edit must never quietly merge two distinct titles into one by
-    accident. The title being renamed FROM is kept as an alias, so an
-    email that still uses the old wording (real postings lag behind a
-    taxonomy fix) is still recognized rather than starting to look like
-    a new unknown term again.
+    A rename is refused if it would collide (by normalized key, or by
+    the same loose punctuation-blind key add_canonical_job_title now
+    also checks) with a DIFFERENT existing title -- an edit must never
+    quietly merge two distinct titles into one by accident. When the
+    new text is a genuinely different entity (its normalized key
+    differs), the title being renamed FROM is kept as an alias, so an
+    email that still uses the old wording is still recognized rather
+    than starting to look like a new unknown term again.
+
+    BUG FIXED HERE: a rename that only changes casing/punctuation/
+    whitespace -- "java developer" -> "Java Developer" -- has the SAME
+    normalized key as before, so the old code's `if new_key !=
+    current_key` guard skipped the whole rename branch and never wrote
+    the corrected text, while still returning updated=True. The caller
+    (and the reviewer) saw a "successful" save that silently did
+    nothing and the row reverted to its old text on reload. Fixed by
+    always writing entry["title"] = new_title whenever the literal text
+    actually differs, and only running the collision-check/alias-
+    preservation dance when it's actually a different entity (different
+    normalized key) that needs it.
+
+    related_titles is recomputed deterministically (see
+    compute_related_job_titles) whenever the title text or family
+    changes, since either can change which other titles are actually
+    related.
     """
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
@@ -457,11 +532,19 @@ def update_canonical_job_title(
         if entry is None:
             return {"updated": False, "reason": "job_title_not_found"}
 
-        if new_title:
+        title_or_family_changed = False
+
+        if new_title and new_title != entry["title"]:
             new_key = normalize_taxonomy_key(new_title)
+            new_loose_key = _loose_key(new_title)
+
             if new_key != current_key:
                 collision = any(
-                    other is not entry and normalize_taxonomy_key(other.get("title")) == new_key
+                    other is not entry
+                    and (
+                        normalize_taxonomy_key(other.get("title")) == new_key
+                        or (new_loose_key and _loose_key(other.get("title")) == new_loose_key)
+                    )
                     for other in data["titles"]
                 )
                 if collision:
@@ -470,12 +553,21 @@ def update_canonical_job_title(
                 aliases = entry.setdefault("aliases", [])
                 if entry["title"] not in aliases:
                     aliases.append(entry["title"])
-                entry["title"] = new_title
 
-        if family is not None:
+            entry["title"] = new_title
+            title_or_family_changed = True
+
+        if family is not None and family != entry.get("family"):
             entry["family"] = family
+            title_or_family_changed = True
+
         if seniority is not None:
             entry["seniority"] = seniority
+
+        if title_or_family_changed:
+            entry["related_titles"] = compute_related_job_titles(
+                entry["title"], entry.get("family"), [e for e in data["titles"] if e is not entry]
+            )
 
         _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         clear_taxonomy_cache()
@@ -533,6 +625,45 @@ def bulk_apply_job_title_families(family_by_title: dict[str, str]) -> dict[str, 
             clear_taxonomy_cache()
 
     return {"updated_count": len(updated_titles), "updated_titles": updated_titles}
+
+
+def bulk_backfill_related_titles() -> dict[str, Any]:
+    """One-shot pass over every canonical job title with an EMPTY
+    related_titles list, filling it in deterministically (see
+    compute_related_job_titles) against the full current taxonomy. For
+    clearing the backlog of older entries added before related_titles
+    was computed on approval, the same shape as
+    auto_classify_unclassified_job_titles's backlog-clearing role for
+    family. Never touches a title that already has at least one related
+    title -- a reviewer may have hand-picked those, and re-deriving them
+    from scratch on every backfill run would silently discard that.
+    """
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("job_titles.json").read_text(encoding="utf-8"))
+        titles = data["titles"]
+
+        updated_titles: list[str] = []
+        for entry in titles:
+            if entry.get("related_titles"):
+                continue
+            related = compute_related_job_titles(
+                entry.get("title", ""), entry.get("family"), [e for e in titles if e is not entry]
+            )
+            if related:
+                entry["related_titles"] = related
+                updated_titles.append(entry["title"])
+
+        if updated_titles:
+            _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            clear_taxonomy_cache()
+
+    return {
+        "checked_count": len(titles),
+        "backfilled_count": len(updated_titles),
+        "backfilled_titles": updated_titles,
+    }
 
 
 def load_skills_taxonomy() -> dict[str, Any]:
@@ -667,3 +798,22 @@ def build_title_alias_index() -> dict[str, str]:
             index[alias_key] = canonical
 
     return index
+
+
+def build_loose_skill_key_index() -> dict[str, str]:
+    """Same coverage as build_skill_alias_index (every canonical name,
+    every skill's own aliases, every skill_aliases.json entry) but keyed
+    by _loose_key instead of normalize_taxonomy_key -- so "Node.js" and
+    "NodeJS" collide here even though they're distinct entries in the
+    exact-key index. Used only to decide "is this basically already a
+    known skill" (duplicate prevention on approval, candidate detection),
+    never to resolve a term to its canonical spelling.
+    """
+    return {_loose_key(key): canonical for key, canonical in build_skill_alias_index().items() if _loose_key(key)}
+
+
+def build_loose_title_key_index() -> dict[str, str]:
+    """Loose-key counterpart to build_title_alias_index, same reasoning
+    as build_loose_skill_key_index above.
+    """
+    return {_loose_key(key): canonical for key, canonical in build_title_alias_index().items() if _loose_key(key)}

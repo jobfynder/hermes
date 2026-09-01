@@ -16,6 +16,7 @@ from app.understanding.taxonomy.candidates import (
     update_skill_description,
 )
 from app.understanding.taxonomy.loader import (
+    bulk_backfill_related_titles,
     bulk_delete_job_titles,
     bulk_delete_skills,
     bulk_set_job_title_family,
@@ -416,6 +417,26 @@ def auto_classify_job_titles_endpoint(
     """
     result = auto_classify_unclassified_job_titles()
     return AutoClassifyJobTitlesResult(**result)
+
+
+class BackfillRelatedTitlesResult(BaseModel):
+    checked_count: int
+    backfilled_count: int
+    backfilled_titles: list[str]
+
+
+@router.post("/taxonomy/job-titles/backfill-related-titles", response_model=BackfillRelatedTitlesResult)
+def backfill_related_titles_endpoint(
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> BackfillRelatedTitlesResult:
+    """The Job titles page's "Fill in related titles" bulk action --
+    deterministic token-overlap match (no LLM, see
+    compute_related_job_titles), for the backlog of titles added before
+    related_titles was computed automatically on approval. Skips any
+    title that already has related titles set.
+    """
+    result = bulk_backfill_related_titles()
+    return BackfillRelatedTitlesResult(**result)
 
 
 class DeleteJobTitleRequest(BaseModel):

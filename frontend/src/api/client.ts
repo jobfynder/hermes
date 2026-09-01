@@ -216,4 +216,10 @@ export const api = {
       still_unclassified_count: number
       results: { title: string; family: string; method: string }[]
     }>('/taxonomy/job-titles/auto-classify', { method: 'POST' }),
+  backfillRelatedJobTitles: () =>
+    request<{
+      checked_count: number
+      backfilled_count: number
+      backfilled_titles: string[]
+    }>('/taxonomy/job-titles/backfill-related-titles', { method: 'POST' }),
 }

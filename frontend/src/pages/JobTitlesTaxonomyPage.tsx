@@ -306,7 +306,23 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
     }
   }
 
+  async function handleBackfillRelated() {
+    setBusy(true)
+    try {
+      const result = await api.backfillRelatedJobTitles()
+      setActionMessage(
+        `Filled in related titles for ${result.backfilled_count} of ${result.checked_count} titles that had none.`,
+      )
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Filling in related titles failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const unclassifiedCount = titles?.filter((t) => (t.family || 'Unclassified') === 'Unclassified').length ?? 0
+  const noRelatedCount = titles?.filter((t) => !t.related_titles || t.related_titles.length === 0).length ?? 0
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -334,6 +350,16 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
               className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
             >
               {busy ? 'Classifying…' : `Auto-classify ${unclassifiedCount} unclassified`}
+            </button>
+          )}
+          {noRelatedCount > 0 && (
+            <button
+              disabled={busy}
+              onClick={handleBackfillRelated}
+              title="Finds related titles by shared keywords, no LLM -- only fills titles that have none"
+              className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink disabled:opacity-40"
+            >
+              {busy ? 'Filling in…' : `Fill in related titles (${noRelatedCount})`}
             </button>
           )}
           <button
@@ -432,7 +458,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
               </th>
               <th className="px-4 py-3 font-medium">Title</th>
               <th className="px-4 py-3 font-medium">Family</th>
-              <th className="px-4 py-3 font-medium">Seniority</th>
+              <th className="px-4 py-3 font-medium">Seniority (optional)</th>
               <th className="px-4 py-3 font-medium">Related titles</th>
               <th className="px-4 py-3 font-medium"></th>
             </tr>

@@ -27,9 +27,12 @@ from app.understanding.parsers.job_description_fields import (
 )
 from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import (
+    _loose_key,
     add_canonical_job_title,
     add_canonical_skill,
     bulk_apply_job_title_families,
+    build_loose_skill_key_index,
+    build_loose_title_key_index,
     build_skill_alias_index,
     build_title_alias_index,
     get_job_title_entries,
@@ -86,6 +89,12 @@ def _candidate_terms(section_text: str | None) -> list[str]:
 
 def find_unknown_skill_terms(text: str) -> list[str]:
     alias_index = build_skill_alias_index()
+    # Loose, punctuation-blind index alongside the exact one -- catches
+    # "NodeJS" against an already-known "Node.js" (different exact keys,
+    # normalize_taxonomy_key deliberately keeps '.'/'+'/'#' since those
+    # matter for names like ".NET"/"C++"), so a spelling variant of a
+    # skill Hermes already knows doesn't re-queue as if it were new.
+    loose_index = build_loose_skill_key_index()
     seen_normalized: set[str] = set()
     unknown: list[str] = []
 
@@ -102,6 +111,10 @@ def find_unknown_skill_terms(text: str) -> list[str]:
             seen_normalized.add(key)
 
             if key in alias_index:
+                continue
+
+            loose = _loose_key(term)
+            if loose and loose in loose_index:
                 continue
 
             unknown.append(term)
@@ -157,7 +170,38 @@ def find_unknown_job_title(job_title: str | None) -> str | None:
     if not key or key in build_title_alias_index():
         return None
 
+    loose = _loose_key(cleaned)
+    if loose and loose in build_loose_title_key_index():
+        return None
+
     return cleaned
+
+
+def _find_loosely_matching_pending_candidate(cur, signal_type: str, term: str) -> dict | None:
+    """A second-chance lookup for _upsert_candidate: no PENDING candidate
+    has this exact normalized_term, but does one match on the loose,
+    punctuation-blind key ("NodeJS" arriving while "Node.js" is already
+    sitting in the queue as a separate pending row)? Only considers
+    pending rows -- an already-approved or -rejected term is handled by
+    find_unknown_skill_terms/find_unknown_job_title's own loose-index
+    check before this function is ever called, so this is purely about
+    not splitting one real term into two pending review rows. A table
+    scan over one signal_type's pending rows, not indexed -- fine at
+    review-queue scale (low hundreds), not worth a schema change for.
+    """
+    loose = _loose_key(term)
+    if not loose:
+        return None
+
+    cur.execute(
+        "SELECT id, term, normalized_term, distinct_senders, sample_draft_ids FROM taxonomy_candidates "
+        "WHERE signal_type = %s AND status = 'pending'",
+        (signal_type,),
+    )
+    for row in cur.fetchall():
+        if _loose_key(row["normalized_term"]) == loose:
+            return row
+    return None
 
 
 def _upsert_candidate(
@@ -168,7 +212,12 @@ def _upsert_candidate(
 ) -> None:
     """Shared upsert for both signal types -- bumps occurrence_count /
     distinct_senders / sample_draft_ids on a repeat sighting rather than
-    creating a duplicate row.
+    creating a duplicate row. Matches on the exact normalized term first;
+    failing that, on a loose punctuation-blind match against a pending
+    candidate (see _find_loosely_matching_pending_candidate) so "Node.js"
+    and "NodeJS" mentioned by different postings become occurrences of
+    ONE review-queue row, not two near-identical ones a reviewer has to
+    notice are the same thing and handle separately.
     """
     normalized_term = normalize_taxonomy_key(term)
 
@@ -178,7 +227,7 @@ def _upsert_candidate(
             "WHERE signal_type = %s AND normalized_term = %s",
             (signal_type, normalized_term),
         )
-        existing = cur.fetchone()
+        existing = cur.fetchone() or _find_loosely_matching_pending_candidate(cur, signal_type, term)
 
         if existing:
             senders = set(existing["distinct_senders"] or [])

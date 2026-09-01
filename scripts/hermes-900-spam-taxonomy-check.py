@@ -34,19 +34,24 @@ from app.understanding.taxonomy.candidates import (
 from app.understanding.taxonomy.title_family_classifier import (
     classify_family_deterministically,
     classify_job_title_family,
+    compute_related_job_titles,
 )
 from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import (
     TAXONOMY_DIR,
     SkillDescriptionLocked,
     _TAXONOMY_RUNTIME_DIR,
+    _loose_key,
     _writable_taxonomy_path,
     add_canonical_job_title,
     add_canonical_skill,
+    bulk_backfill_related_titles,
     bulk_delete_job_titles,
     bulk_delete_skills,
     bulk_set_job_title_family,
     bulk_set_skill_category,
+    build_loose_skill_key_index,
+    build_loose_title_key_index,
     build_skill_alias_index,
     build_title_alias_index,
     delete_canonical_job_title,
@@ -555,6 +560,144 @@ def test_bulk_delete_job_titles() -> None:
     require("zbulkdeletetitletwo" not in index, "Second title must be gone")
 
 
+def test_update_canonical_job_title_applies_a_case_only_rename() -> None:
+    # Regression test: a rename that only fixes casing/whitespace has the
+    # SAME normalized key as before ("zcasingonlyrename developer"
+    # either way), so the old code's `if new_key != current_key` guard
+    # skipped writing the corrected text entirely while still reporting
+    # updated=True -- a reviewer's "fix the casing" edit silently did
+    # nothing and the row reverted to the old text on reload.
+    add_canonical_job_title(title="zcasingonlyrename developer")
+
+    result = update_canonical_job_title("zcasingonlyrename developer", new_title="ZCasingOnlyRename Developer")
+    require(result["updated"] is True, f"Rename must succeed: {result}")
+    require(
+        result["title"] == "ZCasingOnlyRename Developer",
+        f"The corrected casing must actually be written, not silently dropped: {result}",
+    )
+
+    entry = next(e for e in get_job_title_entries() if e["title"] == "ZCasingOnlyRename Developer")
+    require(entry is not None, "The entry must be findable under its corrected casing")
+
+
+def test_update_canonical_job_title_computes_related_titles_on_rename() -> None:
+    # A made-up tech token ("zqxvframework") that can't collide with any
+    # real seed title -- the production taxonomy has hundreds of real
+    # "Java Developer"-shaped titles that would otherwise legitimately
+    # outrank this test's own fixture for the capped top-N slots.
+    # related_titles is only recomputed when title or family actually
+    # CHANGE -- add both fixtures under "Unclassified" (add_canonical_
+    # job_title's own related_titles pass ran before the second fixture
+    # existed), then reclassify the base one to a real family so the
+    # update path's recompute actually triggers.
+    add_canonical_job_title(title="ZRelatedTitleBase Zqxvframework Developer")
+    add_canonical_job_title(title="ZRelatedTitleOther Zqxvframework Engineer")
+
+    result = update_canonical_job_title("ZRelatedTitleBase Zqxvframework Developer", family="Software Engineering")
+    require(result["updated"] is True, f"Update must succeed: {result}")
+
+    entry = next(e for e in get_job_title_entries() if e["title"] == "ZRelatedTitleBase Zqxvframework Developer")
+    require(
+        "ZRelatedTitleOther Zqxvframework Engineer" in entry["related_titles"],
+        f"A title sharing a real keyword ('zqxvframework') must be found as related: {entry['related_titles']}",
+    )
+
+
+def test_add_canonical_job_title_rejects_a_duplicate_that_is_only_an_alias() -> None:
+    # The old duplicate check only compared a new title's key against
+    # other entries' own `title` field, so a term already recognized
+    # only as an ALIAS of a different canonical title slipped through as
+    # if it were brand new -- two entries for the same real role.
+    add_canonical_job_title(title="ZAliasDupBase Developer", aliases=["ZAliasDupAlias Developer"])
+    before_count = len(get_job_title_entries())
+
+    add_canonical_job_title(title="ZAliasDupAlias Developer")
+
+    require(
+        len(get_job_title_entries()) == before_count,
+        "A title that's already recognized as an ALIAS of an existing title must not be added as a new entry",
+    )
+
+
+def test_add_canonical_job_title_rejects_a_loose_punctuation_variant() -> None:
+    add_canonical_job_title(title="ZLooseDup Node.js Developer")
+    before_count = len(get_job_title_entries())
+
+    add_canonical_job_title(title="ZLooseDup NodeJS Developer")
+
+    require(
+        len(get_job_title_entries()) == before_count,
+        "A punctuation-only spelling variant of an existing title must not be added as a second entry",
+    )
+
+
+def test_compute_related_job_titles_finds_token_overlap_matches() -> None:
+    other_entries = [
+        {"title": "Senior Java Engineer", "family": "Software Engineering"},
+        {"title": "Python Developer", "family": "Software Engineering"},
+        {"title": "Business Analyst", "family": "Business Analysis"},
+    ]
+    related = compute_related_job_titles("Java Developer", "Software Engineering", other_entries)
+    require("Senior Java Engineer" in related, f"Shared core word 'java' must be found as related: {related}")
+    require(
+        "Python Developer" not in related,
+        f"Sharing only the generic word 'developer' with a DIFFERENT tech must not count as related: {related}",
+    )
+
+
+def test_bulk_backfill_related_titles_skips_entries_that_already_have_some() -> None:
+    # Two fixtures sharing a made-up core token so they're guaranteed to
+    # match each other regardless of what real seed titles happen to be
+    # present, and nothing else the seed data could coincidentally match.
+    add_canonical_job_title(title="ZBackfillNoRelated Zqxvbackfill Developer")
+    add_canonical_job_title(title="ZBackfillHasRelated Zqxvbackfill Developer")
+
+    # Directly hand-pick a related title for the second one and write it
+    # straight to the taxonomy file -- simulates a reviewer's own edit,
+    # which bulk_backfill_related_titles must never overwrite.
+    path = _writable_taxonomy_path("job_titles.json")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    entry = next(e for e in data["titles"] if e["title"] == "ZBackfillHasRelated Zqxvbackfill Developer")
+    entry["related_titles"] = ["ZHandPicked Title"]
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    result = bulk_backfill_related_titles()
+    require(
+        "ZBackfillNoRelated Zqxvbackfill Developer" in result["backfilled_titles"],
+        f"The entry with no related titles must be backfilled: {result}",
+    )
+
+    entries_after = {e["title"]: e for e in get_job_title_entries()}
+    require(
+        entries_after["ZBackfillHasRelated Zqxvbackfill Developer"]["related_titles"] == ["ZHandPicked Title"],
+        "An entry that already had related titles must be left exactly as-is by the backfill",
+    )
+    require(
+        "ZBackfillHasRelated Zqxvbackfill Developer" in entries_after["ZBackfillNoRelated Zqxvbackfill Developer"]["related_titles"],
+        "The backfilled entry must actually find its token-overlap partner",
+    )
+
+
+def test_find_unknown_skill_terms_ignores_a_loose_punctuation_duplicate() -> None:
+    add_canonical_skill(name="ZLooseSkillDup Node.js")
+
+    unknown = find_unknown_skill_terms("Required Skills: ZLooseSkillDup NodeJS, Java\n")
+    require(
+        not any(_loose_key(term) == _loose_key("ZLooseSkillDup Node.js") for term in unknown),
+        f"A punctuation-only spelling variant of a known skill must not be queued as unknown: {unknown}",
+    )
+
+
+def test_find_unknown_job_title_ignores_a_loose_punctuation_duplicate() -> None:
+    add_canonical_job_title(title="ZLooseTitleDup Node.js Developer")
+
+    result = find_unknown_job_title("ZLooseTitleDup NodeJS Developer")
+    require(
+        result is None,
+        f"A punctuation-only spelling variant of a known title must not be queued as unknown: {result}",
+    )
+
+
 def test_update_canonical_skill_renames_and_keeps_old_wording_as_alias() -> None:
     add_canonical_skill(name="ZSkillEditRenameSource")
 
@@ -625,6 +768,45 @@ def test_bulk_set_skill_category() -> None:
     entries = {e["name"]: e for e in get_canonical_skill_entries()}
     require(entries["ZBulkCategoryTestOne"]["category"] == "Soft Skill", f"Wrong category: {entries['ZBulkCategoryTestOne']}")
     require(entries["ZBulkCategoryTestTwo"]["category"] == "Soft Skill", f"Wrong category: {entries['ZBulkCategoryTestTwo']}")
+
+
+def test_update_canonical_skill_applies_a_case_only_rename() -> None:
+    # Same regression as the job title version above.
+    add_canonical_skill(name="zcasingonlyrename skill")
+
+    result = update_canonical_skill("zcasingonlyrename skill", new_name="ZCasingOnlyRename Skill")
+    require(result["updated"] is True, f"Rename must succeed: {result}")
+    require(
+        result["name"] == "ZCasingOnlyRename Skill",
+        f"The corrected casing must actually be written, not silently dropped: {result}",
+    )
+
+    entry = next(e for e in get_canonical_skill_entries() if e["name"] == "ZCasingOnlyRename Skill")
+    require(entry is not None, "The entry must be findable under its corrected casing")
+
+
+def test_add_canonical_skill_rejects_a_duplicate_that_is_only_an_alias() -> None:
+    add_canonical_skill(name="ZAliasDupBaseSkill", aliases=["ZAliasDupAliasSkill"])
+    before_count = len(get_canonical_skill_entries())
+
+    add_canonical_skill(name="ZAliasDupAliasSkill")
+
+    require(
+        len(get_canonical_skill_entries()) == before_count,
+        "A name that's already recognized as an ALIAS of an existing skill must not be added as a new entry",
+    )
+
+
+def test_add_canonical_skill_rejects_a_loose_punctuation_variant() -> None:
+    add_canonical_skill(name="ZLooseSkillVariant.js")
+    before_count = len(get_canonical_skill_entries())
+
+    add_canonical_skill(name="ZLooseSkillVariantJS")
+
+    require(
+        len(get_canonical_skill_entries()) == before_count,
+        "A punctuation-only spelling variant of an existing skill must not be added as a second entry",
+    )
 
 
 def test_classify_family_deterministically_common_patterns() -> None:
@@ -1263,6 +1445,30 @@ def main() -> None:
     test_bulk_delete_job_titles()
     print("PASS: bulk-deleting removes several job titles in one call")
 
+    test_update_canonical_job_title_applies_a_case_only_rename()
+    print("PASS: a case/whitespace-only job title rename actually writes the corrected text")
+
+    test_update_canonical_job_title_computes_related_titles_on_rename()
+    print("PASS: related titles are recomputed deterministically when a title is updated")
+
+    test_add_canonical_job_title_rejects_a_duplicate_that_is_only_an_alias()
+    print("PASS: adding a title already known only as an alias is rejected as a duplicate")
+
+    test_add_canonical_job_title_rejects_a_loose_punctuation_variant()
+    print("PASS: a punctuation-only spelling variant of an existing title is rejected as a duplicate")
+
+    test_compute_related_job_titles_finds_token_overlap_matches()
+    print("PASS: related titles are found by shared core keywords, not generic role words alone")
+
+    test_bulk_backfill_related_titles_skips_entries_that_already_have_some()
+    print("PASS: backfilling related titles never overwrites an entry that already has some")
+
+    test_find_unknown_skill_terms_ignores_a_loose_punctuation_duplicate()
+    print("PASS: a punctuation-only spelling variant of a known skill is not queued as unknown")
+
+    test_find_unknown_job_title_ignores_a_loose_punctuation_duplicate()
+    print("PASS: a punctuation-only spelling variant of a known job title is not queued as unknown")
+
     test_update_canonical_skill_renames_and_keeps_old_wording_as_alias()
     print("PASS: renaming a skill keeps the old name recognized as an alias")
 
@@ -1280,6 +1486,15 @@ def main() -> None:
 
     test_bulk_set_skill_category()
     print("PASS: bulk-setting category reclassifies several skills in one call")
+
+    test_update_canonical_skill_applies_a_case_only_rename()
+    print("PASS: a case/whitespace-only skill rename actually writes the corrected text")
+
+    test_add_canonical_skill_rejects_a_duplicate_that_is_only_an_alias()
+    print("PASS: adding a skill already known only as an alias is rejected as a duplicate")
+
+    test_add_canonical_skill_rejects_a_loose_punctuation_variant()
+    print("PASS: a punctuation-only spelling variant of an existing skill is rejected as a duplicate")
 
     test_classify_family_deterministically_common_patterns()
     print("PASS: common job title patterns classify deterministically")

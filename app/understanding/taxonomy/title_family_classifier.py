@@ -118,3 +118,83 @@ def classify_job_title_family(title: str, known_families: list[str]) -> tuple[st
 
     family = (output or "").strip().strip('"').strip(".")
     return (family, "llm") if family else ("Unclassified", "none")
+
+
+# Words that describe seniority/level rather than the role itself --
+# stripped before comparing titles so "Senior Java Developer" and "Java
+# Developer" are recognized as the same underlying role at different
+# levels, not two titles that happen to share three words.
+_SENIORITY_WORDS = {
+    "sr", "jr", "senior", "junior", "mid", "entry", "level", "staff",
+    "lead", "principal", "director", "associate", "i", "ii", "iii", "iv",
+}
+# Generic role suffixes so common ("Developer", "Engineer") that sharing
+# only one of these tells you almost nothing -- "Java Developer" and
+# "Python Developer" both being "Developer" doesn't make them related.
+# A match on these alone only counts when the two titles are ALSO in the
+# same family (see compute_related_job_titles); a shared word outside
+# this set (a real technology/domain term) counts on its own.
+_GENERIC_ROLE_WORDS = {
+    "developer", "engineer", "consultant", "analyst", "manager",
+    "architect", "specialist", "administrator", "coordinator", "officer",
+}
+_STOP_WORDS = {"and", "or", "of", "the", "a", "an", "for", "with", "&"}
+_TITLE_TOKEN_RE = re.compile(r"[a-z0-9+#.]+")
+
+
+def _title_tokens(title: str) -> set[str]:
+    words = _TITLE_TOKEN_RE.findall(title.lower())
+    return {w for w in words if w not in _SENIORITY_WORDS and w not in _STOP_WORDS}
+
+
+def compute_related_job_titles(
+    title: str,
+    family: str | None,
+    other_entries: list[dict],
+    max_related: int = 8,
+) -> list[str]:
+    """Deterministic "titles that mean roughly the same role" finder --
+    no LLM, just token overlap, so it's free to run on every add/update
+    and on a full-taxonomy backfill without worrying about rate limits
+    or cost. Two titles are related when they share at least one "core"
+    word -- a real technology/domain term, never a bare seniority or
+    generic role word -- e.g. "Java Developer" <-> "Senior Java Engineer"
+    via "java". Deliberately requires a core-word match and nothing
+    looser: an earlier version also related same-family titles that only
+    shared a generic role word ("Java Developer" <-> "Python Developer",
+    both Software Engineering, sharing only "developer") -- too broad to
+    be useful, since most titles in the same family share SOME generic
+    role word by construction. family is accepted for a future finer-
+    grained tiebreak but currently only used to prefer a same-family
+    match when scores are otherwise tied (see the sort key below).
+
+    Scored, not just filtered, so the ordering favors the closest
+    matches first when there are more candidates than max_related --
+    more shared core words ranks above one.
+    """
+    tokens = _title_tokens(title)
+    core_tokens = tokens - _GENERIC_ROLE_WORDS
+    if not core_tokens:
+        return []
+
+    scored: list[tuple[int, str]] = []
+    for other in other_entries:
+        other_title = other.get("title")
+        if not other_title or other_title.strip().lower() == title.strip().lower():
+            continue
+
+        other_tokens = _title_tokens(other_title)
+        other_core = other_tokens - _GENERIC_ROLE_WORDS
+        shared_core = core_tokens & other_core
+
+        if not shared_core:
+            continue
+
+        score = len(shared_core) * 10 + len(tokens & other_tokens)
+        if family and family != "Unclassified" and other.get("family") == family:
+            score += 1
+
+        scored.append((score, other_title))
+
+    scored.sort(key=lambda pair: (-pair[0], pair[1]))
+    return [t for _score, t in scored[:max_related]]
