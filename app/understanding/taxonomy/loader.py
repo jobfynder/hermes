@@ -240,6 +240,153 @@ def set_skill_description(
         return False
 
 
+def update_canonical_skill(
+    current_name: str,
+    new_name: str | None = None,
+    category: str | None = None,
+) -> dict[str, Any]:
+    """Same pattern as update_canonical_job_title, for canonical_skills.
+    json -- rename a skill (typo, casing) or reclassify its category, in
+    place, live immediately. A rename that would collide (by normalized
+    key) with a DIFFERENT existing skill is refused; the old name is
+    kept as an alias so a posting still using it keeps matching.
+    """
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("canonical_skills.json").read_text(encoding="utf-8"))
+        current_key = normalize_taxonomy_key(current_name)
+
+        entry = next(
+            (e for e in data["skills"] if normalize_taxonomy_key(e.get("name")) == current_key),
+            None,
+        )
+        if entry is None:
+            return {"updated": False, "reason": "skill_not_found"}
+
+        if new_name:
+            new_key = normalize_taxonomy_key(new_name)
+            if new_key != current_key:
+                collision = any(
+                    other is not entry and normalize_taxonomy_key(other.get("name")) == new_key
+                    for other in data["skills"]
+                )
+                if collision:
+                    return {"updated": False, "reason": "duplicate_skill"}
+
+                aliases = entry.setdefault("aliases", [])
+                if entry["name"] not in aliases:
+                    aliases.append(entry["name"])
+                entry["name"] = new_name
+
+        if category is not None:
+            entry["category"] = category
+
+        _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        clear_taxonomy_cache()
+
+    return {"updated": True, "name": entry["name"]}
+
+
+def delete_canonical_skill(name: str) -> dict[str, Any]:
+    """Permanently removes a canonical skill -- for a genuinely bad entry
+    (a parser artifact that got approved by mistake, an exact duplicate
+    of a differently-spelled skill that should have been an alias
+    instead). Unlike a rename, this does NOT preserve the old name as an
+    alias -- the whole point is that this skill should no longer match
+    anything. Missing skill is reported, not raised, same as the other
+    taxonomy mutators here.
+    """
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("canonical_skills.json").read_text(encoding="utf-8"))
+        key = normalize_taxonomy_key(name)
+        remaining = [e for e in data["skills"] if normalize_taxonomy_key(e.get("name")) != key]
+
+        if len(remaining) == len(data["skills"]):
+            return {"deleted": False, "reason": "skill_not_found"}
+
+        data["skills"] = remaining
+        _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        clear_taxonomy_cache()
+
+    return {"deleted": True, "name": name}
+
+
+def bulk_delete_skills(names: list[str]) -> dict[str, Any]:
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("canonical_skills.json").read_text(encoding="utf-8"))
+        wanted_keys = {normalize_taxonomy_key(n) for n in names}
+
+        deleted_names = [e["name"] for e in data["skills"] if normalize_taxonomy_key(e.get("name")) in wanted_keys]
+        data["skills"] = [e for e in data["skills"] if normalize_taxonomy_key(e.get("name")) not in wanted_keys]
+
+        if deleted_names:
+            _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            clear_taxonomy_cache()
+
+    return {"deleted_count": len(deleted_names), "deleted_names": deleted_names}
+
+
+def bulk_set_skill_category(names: list[str], category: str) -> dict[str, Any]:
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("canonical_skills.json").read_text(encoding="utf-8"))
+        wanted_keys = {normalize_taxonomy_key(n) for n in names}
+
+        updated_names: list[str] = []
+        for entry in data["skills"]:
+            if normalize_taxonomy_key(entry.get("name")) in wanted_keys:
+                entry["category"] = category
+                updated_names.append(entry["name"])
+
+        if updated_names:
+            _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            clear_taxonomy_cache()
+
+    return {"updated_count": len(updated_names), "updated_names": updated_names}
+
+
+def delete_canonical_job_title(title: str) -> dict[str, Any]:
+    """Same reasoning as delete_canonical_skill, for job_titles.json."""
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("job_titles.json").read_text(encoding="utf-8"))
+        key = normalize_taxonomy_key(title)
+        remaining = [e for e in data["titles"] if normalize_taxonomy_key(e.get("title")) != key]
+
+        if len(remaining) == len(data["titles"]):
+            return {"deleted": False, "reason": "job_title_not_found"}
+
+        data["titles"] = remaining
+        _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        clear_taxonomy_cache()
+
+    return {"deleted": True, "title": title}
+
+
+def bulk_delete_job_titles(titles: list[str]) -> dict[str, Any]:
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("job_titles.json").read_text(encoding="utf-8"))
+        wanted_keys = {normalize_taxonomy_key(t) for t in titles}
+
+        deleted_titles = [e["title"] for e in data["titles"] if normalize_taxonomy_key(e.get("title")) in wanted_keys]
+        data["titles"] = [e for e in data["titles"] if normalize_taxonomy_key(e.get("title")) not in wanted_keys]
+
+        if deleted_titles:
+            _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            clear_taxonomy_cache()
+
+    return {"deleted_count": len(deleted_titles), "deleted_titles": deleted_titles}
+
+
 def add_canonical_job_title(
     title: str,
     family: str = "Unclassified",

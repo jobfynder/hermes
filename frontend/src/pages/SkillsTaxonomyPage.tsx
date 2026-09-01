@@ -110,15 +110,125 @@ function DescriptionCell({
   )
 }
 
+function EditRow({
+  entry,
+  categories,
+  onSave,
+  onCancel,
+  onDelete,
+}: {
+  entry: CanonicalSkillEntry
+  categories: string[]
+  onSave: (changes: { newName?: string; category?: string }) => Promise<void>
+  onCancel: () => void
+  onDelete: () => void
+}) {
+  // Must render the same number of <td>s, in the same order, as the
+  // header row and the non-editing row -- see the equivalent note on
+  // JobTitlesTaxonomyPage's EditRow, where a missing cell here once
+  // shifted every field one column left.
+  const [name, setName] = useState(entry.name)
+  const [categoryValue, setCategoryValue] = useState(entry.category || 'Uncategorized')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const categoryOptions = Array.from(new Set([...categories, categoryValue, 'Uncategorized'])).sort()
+
+  async function handleSave() {
+    if (!name.trim()) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      await onSave({
+        newName: name.trim() !== entry.name ? name.trim() : undefined,
+        category: categoryValue !== (entry.category || 'Uncategorized') ? categoryValue : undefined,
+      })
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <tr className="border-b border-line bg-paper last:border-0 align-top">
+      <td className="px-4 py-2.5"></td>
+      <td className="max-w-xl px-4 py-2.5">
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full rounded border border-accent bg-surface px-2 py-1 text-sm text-ink outline-none"
+        />
+        {saveError && <div className="mt-1 text-xs text-fail">{saveError}</div>}
+      </td>
+      <td className="px-4 py-2.5">
+        <select
+          value={categoryValue}
+          onChange={(e) => setCategoryValue(e.target.value)}
+          className="w-full rounded border border-line bg-surface px-2 py-1 text-sm text-ink outline-none focus:border-accent"
+        >
+          {categoryOptions.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-4 py-2.5 text-ink-soft">{entry.times_seen}</td>
+      <td className="px-4 py-2.5 text-ink-soft">{timeAgo(entry.last_seen_at)}</td>
+      <td className="px-4 py-2.5 text-right">
+        <div className="flex justify-end gap-3">
+          <button
+            disabled={saving || !name.trim()}
+            onClick={handleSave}
+            className="text-xs font-medium text-accent hover:underline disabled:opacity-40"
+          >
+            Save
+          </button>
+          <button
+            disabled={saving}
+            onClick={onCancel}
+            className="text-xs font-medium text-ink-soft hover:underline disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={saving}
+            onClick={onDelete}
+            className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
+          >
+            Delete
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
   const [skills, setSkills] = useState<CanonicalSkillEntry[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [sortKey, setSortKey] = useState<SortKey>('times_seen')
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkCategory, setBulkCategory] = useState('')
+  const [busy, setBusy] = useState(false)
 
   function load() {
-    api.browseSkillsTaxonomy().then(setSkills).catch((err) => setError(err.message))
+    api
+      .browseSkillsTaxonomy()
+      .then((list) => {
+        setSkills(list)
+        setSelected((prev) => {
+          const stillPresent = new Set(list.map((s) => s.name))
+          return new Set([...prev].filter((n) => stillPresent.has(n)))
+        })
+      })
+      .catch((err) => setError(err.message))
   }
 
   useEffect(load, [])
@@ -139,6 +249,87 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
           )
         : prev,
     )
+  }
+
+  async function handleEditSave(entry: CanonicalSkillEntry, changes: { newName?: string; category?: string }) {
+    if (!changes.newName && !changes.category) {
+      setEditingName(null)
+      return
+    }
+    const result = await api.updateSkill(entry.name, changes)
+    if (!result.updated) {
+      throw new Error(
+        result.reason === 'duplicate_skill'
+          ? 'That skill already exists — pick a different name.'
+          : result.reason || 'Update failed',
+      )
+    }
+    setEditingName(null)
+    load()
+  }
+
+  async function handleDelete(name: string) {
+    if (!window.confirm(`Delete "${name}" from the skills taxonomy? This can't be undone.`)) return
+    setBusy(true)
+    try {
+      const result = await api.deleteSkill(name)
+      if (!result.deleted) {
+        setError(result.reason || 'Failed to delete skill')
+        return
+      }
+      setEditingName(null)
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete skill')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function toggleSelected(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    const ids = filtered.map((s) => s.name)
+    setSelected((prev) => (ids.every((id) => prev.has(id)) ? new Set() : new Set(ids)))
+  }
+
+  async function handleBulkSetCategory() {
+    if (selected.size === 0 || !bulkCategory.trim()) return
+    setBusy(true)
+    try {
+      const result = await api.bulkSetSkillCategory([...selected], bulkCategory.trim())
+      setActionMessage(`Set category to "${bulkCategory.trim()}" for ${result.updated_count} skills.`)
+      setSelected(new Set())
+      setBulkCategory('')
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk update failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return
+    if (!window.confirm(`Delete ${selected.size} selected skills? This can't be undone.`)) return
+    setBusy(true)
+    try {
+      const result = await api.bulkDeleteSkills([...selected])
+      setActionMessage(`Deleted ${result.deleted_count} skills.`)
+      setSelected(new Set())
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk delete failed')
+    } finally {
+      setBusy(false)
+    }
   }
 
   const categories = useMemo(() => {
@@ -195,6 +386,11 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
       </header>
 
       {error && <div className="mb-4 rounded-lg bg-fail-soft px-4 py-3 text-sm text-fail">{error}</div>}
+      {actionMessage && (
+        <div className="mb-4 rounded-lg border border-line bg-paper px-4 py-3 text-sm text-ink-soft">
+          {actionMessage}
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
@@ -226,40 +422,120 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
         </select>
       </div>
 
+      {skills && skills.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-paper px-3 py-2">
+          <span className="text-xs text-ink-soft">
+            {selected.size > 0 ? `${selected.size} selected` : `Showing ${filtered.length} of ${skills.length}`}
+          </span>
+          {selected.size > 0 && (
+            <div className="flex items-center gap-2">
+              <input
+                value={bulkCategory}
+                onChange={(e) => setBulkCategory(e.target.value)}
+                placeholder="Set category to…"
+                className="min-w-40 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
+              />
+              <button
+                disabled={busy || !bulkCategory.trim()}
+                onClick={handleBulkSetCategory}
+                className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+              >
+                Apply to selected
+              </button>
+              <button
+                disabled={busy}
+                onClick={handleBulkDelete}
+                className="rounded-lg border border-fail px-3 py-1.5 text-xs font-semibold text-fail transition hover:bg-fail-soft disabled:opacity-40"
+              >
+                Delete selected
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="overflow-hidden rounded-xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
+              <th className="w-8 px-4 py-3">
+                {filtered.length > 0 && (
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((s) => selected.has(s.name))}
+                    onChange={toggleSelectAll}
+                    className="accent-accent"
+                    aria-label="Select all"
+                  />
+                )}
+              </th>
               <th className="px-4 py-3 font-medium">Skill</th>
               <th className="px-4 py-3 font-medium">Category</th>
               <th className="px-4 py-3 font-medium">Times seen</th>
               <th className="px-4 py-3 font-medium">Last seen</th>
+              <th className="px-4 py-3 font-medium"></th>
             </tr>
           </thead>
           <tbody>
-            {pageItems.map((s) => (
+            {pageItems.map((s) =>
+              editingName === s.name ? (
+                <EditRow
+                  key={s.name}
+                  entry={s}
+                  categories={categories}
+                  onSave={(changes) => handleEditSave(s, changes)}
+                  onCancel={() => setEditingName(null)}
+                  onDelete={() => handleDelete(s.name)}
+                />
+              ) : (
               <tr key={s.name} className="border-b border-line last:border-0 align-top">
+                <td className="px-4 py-2.5">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(s.name)}
+                    onChange={() => toggleSelected(s.name)}
+                    className="accent-accent"
+                    aria-label={`Select ${s.name}`}
+                  />
+                </td>
                 <td className="max-w-xl px-4 py-2.5">
-                  <div className="font-medium text-ink" title={s.aliases.length ? `Aliases: ${s.aliases.join(', ')}` : undefined}>
-                    {s.name}
+                  <div className="group flex items-center gap-2">
+                    <span className="font-medium text-ink" title={s.aliases.length ? `Aliases: ${s.aliases.join(', ')}` : undefined}>
+                      {s.name}
+                    </span>
+                    <button
+                      onClick={() => setEditingName(s.name)}
+                      className="text-xs font-normal text-ink-soft opacity-0 transition group-hover:opacity-100 hover:text-accent hover:underline"
+                    >
+                      Edit
+                    </button>
                   </div>
                   <DescriptionCell skill={s} onSave={handleSaveDescription} />
                 </td>
                 <td className="px-4 py-2.5 text-ink-soft">{s.category || '—'}</td>
                 <td className="px-4 py-2.5 text-ink-soft">{s.times_seen}</td>
                 <td className="px-4 py-2.5 text-ink-soft">{timeAgo(s.last_seen_at)}</td>
+                <td className="px-4 py-2.5 text-right">
+                  <button
+                    onClick={() => handleDelete(s.name)}
+                    className="text-xs font-medium text-fail hover:underline"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
-            ))}
+              ),
+            )}
             {skills && filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-ink-soft">
+                <td colSpan={6} className="px-4 py-10 text-center text-ink-soft">
                   No skills match these filters.
                 </td>
               </tr>
             )}
             {!skills && !error && (
               <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-ink-soft">
+                <td colSpan={6} className="px-4 py-10 text-center text-ink-soft">
                   Loading…
                 </td>
               </tr>

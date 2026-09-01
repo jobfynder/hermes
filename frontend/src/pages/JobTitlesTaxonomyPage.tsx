@@ -12,12 +12,19 @@ function EditRow({
   families,
   onSave,
   onCancel,
+  onDelete,
 }: {
   entry: JobTitleEntry
   families: string[]
   onSave: (changes: { newTitle?: string; family?: string; seniority?: string }) => Promise<void>
   onCancel: () => void
+  onDelete: () => void
 }) {
+  // NOTE: this row must render the exact same number of <td>s, in the
+  // same order, as both the header row and the non-editing row below --
+  // a missing leading checkbox cell here previously shifted every field
+  // one column left while editing, so the Seniority dropdown rendered
+  // under the "Family" header (and the "Family" dropdown under "Title").
   const [title, setTitle] = useState(entry.title)
   const [family, setFamily] = useState(entry.family || 'Unclassified')
   const [seniority, setSeniority] = useState(entry.seniority || 'unspecified')
@@ -62,6 +69,7 @@ function EditRow({
 
   return (
     <tr className="border-b border-line bg-paper last:border-0 align-top">
+      <td className="px-4 py-2.5"></td>
       <td className="max-w-xs px-4 py-2.5">
         <input
           autoFocus
@@ -125,6 +133,13 @@ function EditRow({
             className="text-xs font-medium text-ink-soft hover:underline disabled:opacity-40"
           >
             Cancel
+          </button>
+          <button
+            disabled={saving}
+            onClick={onDelete}
+            className="text-xs font-medium text-fail hover:underline disabled:opacity-40"
+          >
+            Delete
           </button>
         </div>
       </td>
@@ -223,6 +238,40 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
     }
     setEditingTitle(null)
     load()
+  }
+
+  async function handleDelete(title: string) {
+    if (!window.confirm(`Delete "${title}" from the job titles taxonomy? This can't be undone.`)) return
+    setBusy(true)
+    try {
+      const result = await api.deleteJobTitle(title)
+      if (!result.deleted) {
+        setError(result.reason || 'Failed to delete title')
+        return
+      }
+      setEditingTitle(null)
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete title')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selected.size === 0) return
+    if (!window.confirm(`Delete ${selected.size} selected job titles? This can't be undone.`)) return
+    setBusy(true)
+    try {
+      const result = await api.bulkDeleteJobTitles([...selected])
+      setActionMessage(`Deleted ${result.deleted_count} job titles.`)
+      setSelected(new Set())
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk delete failed')
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function handleBulkSetFamily() {
@@ -354,6 +403,13 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
               >
                 Apply to selected
               </button>
+              <button
+                disabled={busy}
+                onClick={handleBulkDelete}
+                className="rounded-lg border border-fail px-3 py-1.5 text-xs font-semibold text-fail transition hover:bg-fail-soft disabled:opacity-40"
+              >
+                Delete selected
+              </button>
             </div>
           )}
         </div>
@@ -390,6 +446,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
                   families={families}
                   onSave={(changes) => handleEditSave(t, changes)}
                   onCancel={() => setEditingTitle(null)}
+                  onDelete={() => handleDelete(t.title)}
                 />
               ) : (
                 <tr key={t.title} className="border-b border-line last:border-0 align-top">
@@ -420,7 +477,14 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
                   <td className="max-w-xs truncate px-4 py-2.5 text-ink-soft">
                     {t.related_titles.length ? t.related_titles.join(', ') : '—'}
                   </td>
-                  <td></td>
+                  <td className="px-4 py-2.5 text-right">
+                    <button
+                      onClick={() => handleDelete(t.title)}
+                      className="text-xs font-medium text-fail hover:underline"
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ),
             )}

@@ -152,6 +152,40 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ name, description }),
     }),
+  updateSkill: (currentName: string, changes: { newName?: string; category?: string }) =>
+    request<{ updated: boolean; name?: string; reason?: string }>('/taxonomy/skills', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        current_name: currentName,
+        new_name: changes.newName,
+        category: changes.category,
+      }),
+    }),
+  deleteSkill: (name: string) =>
+    request<{ deleted: boolean; name?: string; reason?: string }>('/taxonomy/skills/delete', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  bulkDeleteSkills: (names: string[]) =>
+    request<{ deleted_count: number; deleted_names: string[] }>('/taxonomy/skills/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ names }),
+    }),
+  bulkSetSkillCategory: (names: string[], category: string) =>
+    request<{ updated_count: number; updated_names: string[] }>('/taxonomy/skills/bulk-set-category', {
+      method: 'POST',
+      body: JSON.stringify({ names, category }),
+    }),
+  deleteJobTitle: (title: string) =>
+    request<{ deleted: boolean; title?: string; reason?: string }>('/taxonomy/job-titles/delete', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    }),
+  bulkDeleteJobTitles: (titles: string[]) =>
+    request<{ deleted_count: number; deleted_titles: string[] }>('/taxonomy/job-titles/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ titles }),
+    }),
   updateJobTitle: (
     currentTitle: string,
     changes: { newTitle?: string; family?: string; seniority?: string },

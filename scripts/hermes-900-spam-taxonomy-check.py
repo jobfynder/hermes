@@ -43,13 +43,19 @@ from app.understanding.taxonomy.loader import (
     _writable_taxonomy_path,
     add_canonical_job_title,
     add_canonical_skill,
+    bulk_delete_job_titles,
+    bulk_delete_skills,
     bulk_set_job_title_family,
+    bulk_set_skill_category,
     build_skill_alias_index,
     build_title_alias_index,
+    delete_canonical_job_title,
+    delete_canonical_skill,
     get_canonical_skill_entries,
     get_job_title_entries,
     set_skill_description,
     update_canonical_job_title,
+    update_canonical_skill,
 )
 from app.main import app
 
@@ -513,6 +519,112 @@ def test_bulk_set_job_title_family() -> None:
     entries = {e["title"]: e for e in get_job_title_entries()}
     require(entries["ZBulkFamilyTestOne"]["family"] == "Sales", f"Wrong family: {entries['ZBulkFamilyTestOne']}")
     require(entries["ZBulkFamilyTestTwo"]["family"] == "Sales", f"Wrong family: {entries['ZBulkFamilyTestTwo']}")
+
+
+def test_delete_canonical_job_title_removes_it_without_leaving_an_alias() -> None:
+    add_canonical_job_title(title="ZTitleDeleteTarget")
+    require(
+        "ztitledeletetarget" in build_title_alias_index(), "Sanity check: the title must exist before deleting it"
+    )
+
+    result = delete_canonical_job_title("ZTitleDeleteTarget")
+    require(result["deleted"] is True, f"Delete must succeed: {result}")
+
+    index = build_title_alias_index()
+    require(
+        "ztitledeletetarget" not in index,
+        "A deleted title must not resolve to anything -- unlike a rename, delete keeps no alias",
+    )
+
+
+def test_delete_canonical_job_title_not_found() -> None:
+    result = delete_canonical_job_title("ZThisJobTitleWasNeverAdded")
+    require(result["deleted"] is False, f"Deleting a title that doesn't exist must fail cleanly: {result}")
+    require(result["reason"] == "job_title_not_found", f"Wrong reason: {result}")
+
+
+def test_bulk_delete_job_titles() -> None:
+    add_canonical_job_title(title="ZBulkDeleteTitleOne")
+    add_canonical_job_title(title="ZBulkDeleteTitleTwo")
+
+    result = bulk_delete_job_titles(["ZBulkDeleteTitleOne", "ZBulkDeleteTitleTwo"])
+    require(result["deleted_count"] == 2, f"Both titles must be deleted in one call: {result}")
+
+    index = build_title_alias_index()
+    require("zbulkdeletetitleone" not in index, "First title must be gone")
+    require("zbulkdeletetitletwo" not in index, "Second title must be gone")
+
+
+def test_update_canonical_skill_renames_and_keeps_old_wording_as_alias() -> None:
+    add_canonical_skill(name="ZSkillEditRenameSource")
+
+    result = update_canonical_skill("ZSkillEditRenameSource", new_name="ZSkillEditRenameTarget", category="Data")
+    require(result["updated"] is True, f"Rename must succeed: {result}")
+    require(result["name"] == "ZSkillEditRenameTarget", f"Wrong name in result: {result}")
+
+    index = build_skill_alias_index()
+    require(
+        "zskilleditrenamesource" in index,
+        "The OLD skill name must still be recognized, as an alias, same reasoning as job title renames",
+    )
+    require("zskilleditrenametarget" in index, "The NEW skill name must be recognized")
+    require(
+        index["zskilleditrenamesource"] == "ZSkillEditRenameTarget",
+        f"The old name must resolve to the new canonical skill: {index['zskilleditrenamesource']}",
+    )
+
+
+def test_update_canonical_skill_refuses_a_collision() -> None:
+    add_canonical_skill(name="ZSkillEditCollisionA")
+    add_canonical_skill(name="ZSkillEditCollisionB")
+
+    result = update_canonical_skill("ZSkillEditCollisionA", new_name="ZSkillEditCollisionB")
+    require(result["updated"] is False, f"A rename that collides with a DIFFERENT existing skill must be refused: {result}")
+    require(result["reason"] == "duplicate_skill", f"Wrong reason: {result}")
+
+
+def test_update_canonical_skill_not_found() -> None:
+    result = update_canonical_skill("ZThisSkillWasNeverAdded", category="Data")
+    require(result["updated"] is False, f"Editing a skill that doesn't exist must fail cleanly: {result}")
+    require(result["reason"] == "skill_not_found", f"Wrong reason: {result}")
+
+
+def test_delete_canonical_skill_removes_it_without_leaving_an_alias() -> None:
+    add_canonical_skill(name="ZSkillDeleteTarget")
+    require("zskilldeletetarget" in build_skill_alias_index(), "Sanity check: the skill must exist before deleting it")
+
+    result = delete_canonical_skill("ZSkillDeleteTarget")
+    require(result["deleted"] is True, f"Delete must succeed: {result}")
+
+    index = build_skill_alias_index()
+    require(
+        "zskilldeletetarget" not in index,
+        "A deleted skill must not resolve to anything -- unlike a rename, delete keeps no alias",
+    )
+
+
+def test_bulk_delete_skills() -> None:
+    add_canonical_skill(name="ZBulkDeleteSkillOne")
+    add_canonical_skill(name="ZBulkDeleteSkillTwo")
+
+    result = bulk_delete_skills(["ZBulkDeleteSkillOne", "ZBulkDeleteSkillTwo"])
+    require(result["deleted_count"] == 2, f"Both skills must be deleted in one call: {result}")
+
+    index = build_skill_alias_index()
+    require("zbulkdeleteskillone" not in index, "First skill must be gone")
+    require("zbulkdeleteskilltwo" not in index, "Second skill must be gone")
+
+
+def test_bulk_set_skill_category() -> None:
+    add_canonical_skill(name="ZBulkCategoryTestOne")
+    add_canonical_skill(name="ZBulkCategoryTestTwo")
+
+    result = bulk_set_skill_category(["ZBulkCategoryTestOne", "ZBulkCategoryTestTwo"], "Soft Skill")
+    require(result["updated_count"] == 2, f"Both skills must be updated in one call: {result}")
+
+    entries = {e["name"]: e for e in get_canonical_skill_entries()}
+    require(entries["ZBulkCategoryTestOne"]["category"] == "Soft Skill", f"Wrong category: {entries['ZBulkCategoryTestOne']}")
+    require(entries["ZBulkCategoryTestTwo"]["category"] == "Soft Skill", f"Wrong category: {entries['ZBulkCategoryTestTwo']}")
 
 
 def test_classify_family_deterministically_common_patterns() -> None:
@@ -1141,6 +1253,33 @@ def main() -> None:
 
     test_bulk_set_job_title_family()
     print("PASS: bulk-setting family reclassifies several job titles in one call")
+
+    test_delete_canonical_job_title_removes_it_without_leaving_an_alias()
+    print("PASS: deleting a job title removes it with no alias left behind")
+
+    test_delete_canonical_job_title_not_found()
+    print("PASS: deleting a job title that doesn't exist fails cleanly")
+
+    test_bulk_delete_job_titles()
+    print("PASS: bulk-deleting removes several job titles in one call")
+
+    test_update_canonical_skill_renames_and_keeps_old_wording_as_alias()
+    print("PASS: renaming a skill keeps the old name recognized as an alias")
+
+    test_update_canonical_skill_refuses_a_collision()
+    print("PASS: renaming a skill onto an existing different skill is refused")
+
+    test_update_canonical_skill_not_found()
+    print("PASS: editing a skill that doesn't exist fails cleanly")
+
+    test_delete_canonical_skill_removes_it_without_leaving_an_alias()
+    print("PASS: deleting a skill removes it with no alias left behind")
+
+    test_bulk_delete_skills()
+    print("PASS: bulk-deleting removes several skills in one call")
+
+    test_bulk_set_skill_category()
+    print("PASS: bulk-setting category reclassifies several skills in one call")
 
     test_classify_family_deterministically_common_patterns()
     print("PASS: common job title patterns classify deterministically")

@@ -15,7 +15,16 @@ from app.understanding.taxonomy.candidates import (
     suggest_job_title_family,
     update_skill_description,
 )
-from app.understanding.taxonomy.loader import bulk_set_job_title_family, update_canonical_job_title
+from app.understanding.taxonomy.loader import (
+    bulk_delete_job_titles,
+    bulk_delete_skills,
+    bulk_set_job_title_family,
+    bulk_set_skill_category,
+    delete_canonical_job_title,
+    delete_canonical_skill,
+    update_canonical_job_title,
+    update_canonical_skill,
+)
 
 
 class BlocklistEntry(BaseModel):
@@ -204,6 +213,101 @@ def edit_skill_description(
     return UpdateSkillDescriptionResult(updated=result.get("updated", False), reason=result.get("reason"))
 
 
+class UpdateSkillRequest(BaseModel):
+    current_name: str
+    new_name: str | None = None
+    category: str | None = None
+
+
+class UpdateSkillResult(BaseModel):
+    updated: bool
+    name: str | None = None
+    reason: str | None = None
+
+
+@router.patch("/taxonomy/skills", response_model=UpdateSkillResult)
+def edit_skill(
+    body: UpdateSkillRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> UpdateSkillResult:
+    """The Skills taxonomy page's rename/recategorize edit -- same
+    duplicate-collision guard and old-name-kept-as-alias behavior as
+    edit_job_title below. Separate from edit_skill_description, which
+    only ever touches the description field.
+    """
+    result = update_canonical_skill(
+        current_name=body.current_name,
+        new_name=body.new_name,
+        category=body.category,
+    )
+    return UpdateSkillResult(updated=result.get("updated", False), name=result.get("name"), reason=result.get("reason"))
+
+
+class DeleteSkillRequest(BaseModel):
+    name: str
+
+
+class DeleteSkillResult(BaseModel):
+    deleted: bool
+    name: str | None = None
+    reason: str | None = None
+
+
+@router.post("/taxonomy/skills/delete", response_model=DeleteSkillResult)
+def delete_skill_endpoint(
+    body: DeleteSkillRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> DeleteSkillResult:
+    """POST rather than DELETE -- skill names ("C++", ".NET") are fragile
+    to URL-encode reliably, same reasoning as the other name-bearing
+    taxonomy endpoints in this file. Permanently removes the skill,
+    unlike a rename it does not keep the old name as an alias.
+    """
+    result = delete_canonical_skill(body.name)
+    return DeleteSkillResult(deleted=result.get("deleted", False), name=result.get("name"), reason=result.get("reason"))
+
+
+class BulkDeleteSkillsRequest(BaseModel):
+    names: list[str]
+
+
+class BulkDeleteSkillsResult(BaseModel):
+    deleted_count: int
+    deleted_names: list[str]
+
+
+@router.post("/taxonomy/skills/bulk-delete", response_model=BulkDeleteSkillsResult)
+def bulk_delete_skills_endpoint(
+    body: BulkDeleteSkillsRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> BulkDeleteSkillsResult:
+    result = bulk_delete_skills(body.names)
+    return BulkDeleteSkillsResult(deleted_count=result["deleted_count"], deleted_names=result["deleted_names"])
+
+
+class BulkSetSkillCategoryRequest(BaseModel):
+    names: list[str]
+    category: str
+
+
+class BulkSetSkillCategoryResult(BaseModel):
+    updated_count: int
+    updated_names: list[str]
+
+
+@router.post("/taxonomy/skills/bulk-set-category", response_model=BulkSetSkillCategoryResult)
+def bulk_set_skill_category_endpoint(
+    body: BulkSetSkillCategoryRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> BulkSetSkillCategoryResult:
+    """The Skills page's bulk-edit action -- reclassify several selected
+    skills' category in one write, same pattern as the job titles page's
+    bulk-set-family.
+    """
+    result = bulk_set_skill_category(body.names, body.category)
+    return BulkSetSkillCategoryResult(updated_count=result["updated_count"], updated_names=result["updated_names"])
+
+
 class UpdateJobTitleRequest(BaseModel):
     current_title: str
     new_title: str | None = None
@@ -312,3 +416,45 @@ def auto_classify_job_titles_endpoint(
     """
     result = auto_classify_unclassified_job_titles()
     return AutoClassifyJobTitlesResult(**result)
+
+
+class DeleteJobTitleRequest(BaseModel):
+    title: str
+
+
+class DeleteJobTitleResult(BaseModel):
+    deleted: bool
+    title: str | None = None
+    reason: str | None = None
+
+
+@router.post("/taxonomy/job-titles/delete", response_model=DeleteJobTitleResult)
+def delete_job_title_endpoint(
+    body: DeleteJobTitleRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> DeleteJobTitleResult:
+    """Permanently removes a canonical job title -- unlike a rename, does
+    not keep the old title as an alias.
+    """
+    result = delete_canonical_job_title(body.title)
+    return DeleteJobTitleResult(
+        deleted=result.get("deleted", False), title=result.get("title"), reason=result.get("reason")
+    )
+
+
+class BulkDeleteJobTitlesRequest(BaseModel):
+    titles: list[str]
+
+
+class BulkDeleteJobTitlesResult(BaseModel):
+    deleted_count: int
+    deleted_titles: list[str]
+
+
+@router.post("/taxonomy/job-titles/bulk-delete", response_model=BulkDeleteJobTitlesResult)
+def bulk_delete_job_titles_endpoint(
+    body: BulkDeleteJobTitlesRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> BulkDeleteJobTitlesResult:
+    result = bulk_delete_job_titles(body.titles)
+    return BulkDeleteJobTitlesResult(deleted_count=result["deleted_count"], deleted_titles=result["deleted_titles"])
