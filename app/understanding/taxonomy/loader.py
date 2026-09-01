@@ -276,6 +276,91 @@ def add_canonical_job_title(
         clear_taxonomy_cache()
 
 
+def update_canonical_job_title(
+    current_title: str,
+    new_title: str | None = None,
+    family: str | None = None,
+    seniority: str | None = None,
+) -> dict[str, Any]:
+    """Lets a reviewer fix a canonical job title in place -- rename a
+    typo, reclassify its family/seniority (the common case: an approved
+    title landing as family="Unclassified" and needing a real
+    classification later) -- same live-immediately-no-redeploy pattern
+    as add_canonical_job_title.
+
+    A rename is refused if it would collide (by normalized key) with a
+    DIFFERENT existing title -- the same duplicate guard
+    add_canonical_job_title already applies to a brand-new entry; an
+    edit must never quietly merge two distinct titles into one by
+    accident. The title being renamed FROM is kept as an alias, so an
+    email that still uses the old wording (real postings lag behind a
+    taxonomy fix) is still recognized rather than starting to look like
+    a new unknown term again.
+    """
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("job_titles.json").read_text(encoding="utf-8"))
+        current_key = normalize_taxonomy_key(current_title)
+
+        entry = next(
+            (e for e in data["titles"] if normalize_taxonomy_key(e.get("title")) == current_key),
+            None,
+        )
+        if entry is None:
+            return {"updated": False, "reason": "job_title_not_found"}
+
+        if new_title:
+            new_key = normalize_taxonomy_key(new_title)
+            if new_key != current_key:
+                collision = any(
+                    other is not entry and normalize_taxonomy_key(other.get("title")) == new_key
+                    for other in data["titles"]
+                )
+                if collision:
+                    return {"updated": False, "reason": "duplicate_title"}
+
+                aliases = entry.setdefault("aliases", [])
+                if entry["title"] not in aliases:
+                    aliases.append(entry["title"])
+                entry["title"] = new_title
+
+        if family is not None:
+            entry["family"] = family
+        if seniority is not None:
+            entry["seniority"] = seniority
+
+        _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        clear_taxonomy_cache()
+
+    return {"updated": True, "title": entry["title"]}
+
+
+def bulk_set_job_title_family(titles: list[str], family: str) -> dict[str, Any]:
+    """Reclassifies several titles' family in one write -- the common
+    maintenance task after a batch of approvals all landed as
+    family="Unclassified" (add_canonical_job_title's default) and need
+    sorting into real families, without a human editing each one alone.
+    """
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("job_titles.json").read_text(encoding="utf-8"))
+        wanted_keys = {normalize_taxonomy_key(t) for t in titles}
+
+        updated_titles: list[str] = []
+        for entry in data["titles"]:
+            if normalize_taxonomy_key(entry.get("title")) in wanted_keys:
+                entry["family"] = family
+                updated_titles.append(entry["title"])
+
+        if updated_titles:
+            _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            clear_taxonomy_cache()
+
+    return {"updated_count": len(updated_titles), "updated_titles": updated_titles}
+
+
 def load_skills_taxonomy() -> dict[str, Any]:
     return _load_json_cached_by_mtime(_writable_taxonomy_path("canonical_skills.json"))
 

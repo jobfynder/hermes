@@ -152,4 +152,22 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ name, description }),
     }),
+  updateJobTitle: (
+    currentTitle: string,
+    changes: { newTitle?: string; family?: string; seniority?: string },
+  ) =>
+    request<{ updated: boolean; title?: string; reason?: string }>('/taxonomy/job-titles', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        current_title: currentTitle,
+        new_title: changes.newTitle,
+        family: changes.family,
+        seniority: changes.seniority,
+      }),
+    }),
+  bulkSetJobTitleFamily: (titles: string[], family: string) =>
+    request<{ updated_count: number; updated_titles: string[] }>('/taxonomy/job-titles/bulk-set-family', {
+      method: 'POST',
+      body: JSON.stringify({ titles, family }),
+    }),
 }

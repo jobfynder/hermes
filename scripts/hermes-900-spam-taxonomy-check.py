@@ -35,11 +35,15 @@ from app.understanding.taxonomy.loader import (
     SkillDescriptionLocked,
     _TAXONOMY_RUNTIME_DIR,
     _writable_taxonomy_path,
+    add_canonical_job_title,
     add_canonical_skill,
+    bulk_set_job_title_family,
     build_skill_alias_index,
     build_title_alias_index,
     get_canonical_skill_entries,
+    get_job_title_entries,
     set_skill_description,
+    update_canonical_job_title,
 )
 from app.main import app
 
@@ -437,6 +441,72 @@ def test_add_canonical_skill_is_idempotent_under_the_lock() -> None:
 
     alias_index = build_skill_alias_index()
     require("zdoubleapprovetestskill" in alias_index, "The skill must be added")
+
+
+def test_update_canonical_job_title_renames_and_keeps_old_wording_as_alias() -> None:
+    add_canonical_job_title(title="ZTitleEditRenameSource")
+
+    result = update_canonical_job_title(
+        "ZTitleEditRenameSource", new_title="ZTitleEditRenameTarget", family="Data", seniority="senior"
+    )
+    require(result["updated"] is True, f"Rename must succeed: {result}")
+    require(result["title"] == "ZTitleEditRenameTarget", f"Wrong title in result: {result}")
+
+    index = build_title_alias_index()
+    require(
+        "ztitleeditrenamesource" in index,
+        "The OLD title text must still be recognized, as an alias -- a posting using the old wording must not "
+        "suddenly look like a new unknown term again",
+    )
+    require("ztitleeditrenametarget" in index, "The NEW title must be recognized")
+    require(
+        index["ztitleeditrenamesource"] == "ZTitleEditRenameTarget",
+        f"The old wording must resolve to the new canonical title: {index['ztitleeditrenamesource']}",
+    )
+
+
+def test_update_canonical_job_title_refuses_a_collision() -> None:
+    add_canonical_job_title(title="ZTitleEditCollisionA")
+    add_canonical_job_title(title="ZTitleEditCollisionB")
+
+    result = update_canonical_job_title("ZTitleEditCollisionA", new_title="ZTitleEditCollisionB")
+    require(result["updated"] is False, f"A rename that collides with a DIFFERENT existing title must be refused: {result}")
+    require(result["reason"] == "duplicate_title", f"Wrong reason: {result}")
+
+    index = build_title_alias_index()
+    require(
+        "ztitleeditcollisiona" in index,
+        "A refused rename must leave the original title untouched, not half-applied",
+    )
+
+
+def test_update_canonical_job_title_family_and_seniority_only() -> None:
+    add_canonical_job_title(title="ZTitleEditReclassifyOnly")
+
+    result = update_canonical_job_title("ZTitleEditReclassifyOnly", family="Project Management", seniority="lead")
+    require(result["updated"] is True, f"Reclassifying without a rename must succeed: {result}")
+
+    entry = next(e for e in get_job_title_entries() if e["title"] == "ZTitleEditReclassifyOnly")
+    require(entry["family"] == "Project Management", f"Wrong family: {entry}")
+    require(entry["seniority"] == "lead", f"Wrong seniority: {entry}")
+
+
+def test_update_canonical_job_title_not_found() -> None:
+    result = update_canonical_job_title("ZThisJobTitleWasNeverAdded", family="Data")
+    require(result["updated"] is False, f"Editing a title that doesn't exist must fail cleanly: {result}")
+    require(result["reason"] == "job_title_not_found", f"Wrong reason: {result}")
+
+
+def test_bulk_set_job_title_family() -> None:
+    add_canonical_job_title(title="ZBulkFamilyTestOne")
+    add_canonical_job_title(title="ZBulkFamilyTestTwo")
+
+    result = bulk_set_job_title_family(["ZBulkFamilyTestOne", "ZBulkFamilyTestTwo"], "Sales")
+    require(result["updated_count"] == 2, f"Both titles must be updated in one call: {result}")
+
+    entries = {e["title"]: e for e in get_job_title_entries()}
+    require(entries["ZBulkFamilyTestOne"]["family"] == "Sales", f"Wrong family: {entries['ZBulkFamilyTestOne']}")
+    require(entries["ZBulkFamilyTestTwo"]["family"] == "Sales", f"Wrong family: {entries['ZBulkFamilyTestTwo']}")
 
 
 def test_unknown_job_title_detected() -> None:
@@ -957,6 +1027,21 @@ def main() -> None:
 
     test_add_canonical_skill_is_idempotent_under_the_lock()
     print("PASS: adding the same canonical skill twice does not duplicate or deadlock")
+
+    test_update_canonical_job_title_renames_and_keeps_old_wording_as_alias()
+    print("PASS: renaming a job title keeps the old wording recognized as an alias")
+
+    test_update_canonical_job_title_refuses_a_collision()
+    print("PASS: renaming a job title to an already-existing different title is refused")
+
+    test_update_canonical_job_title_family_and_seniority_only()
+    print("PASS: reclassifying a job title's family/seniority works without a rename")
+
+    test_update_canonical_job_title_not_found()
+    print("PASS: editing a job title that doesn't exist fails cleanly")
+
+    test_bulk_set_job_title_family()
+    print("PASS: bulk-setting family reclassifies several job titles in one call")
 
     test_unknown_job_title_detected()
     print("PASS: an unrecognized job title is detected, a known one is not")

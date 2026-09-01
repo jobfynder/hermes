@@ -13,6 +13,7 @@ from app.understanding.taxonomy.candidates import (
     reject_taxonomy_candidate,
     update_skill_description,
 )
+from app.understanding.taxonomy.loader import bulk_set_job_title_family, update_canonical_job_title
 
 
 class BlocklistEntry(BaseModel):
@@ -196,3 +197,65 @@ def edit_skill_description(
     """
     result = update_skill_description(body.name, body.description, edited_by=user.get("id"))
     return UpdateSkillDescriptionResult(updated=result.get("updated", False), reason=result.get("reason"))
+
+
+class UpdateJobTitleRequest(BaseModel):
+    current_title: str
+    new_title: str | None = None
+    family: str | None = None
+    seniority: str | None = None
+
+
+class UpdateJobTitleResult(BaseModel):
+    updated: bool
+    title: str | None = None
+    reason: str | None = None
+
+
+@router.patch("/taxonomy/job-titles", response_model=UpdateJobTitleResult)
+def edit_job_title(
+    body: UpdateJobTitleRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> UpdateJobTitleResult:
+    """The Job titles taxonomy page's inline edit -- rename a title, or
+    reclassify its family/seniority (the common case: fixing the backlog
+    of titles that landed as family="Unclassified" on approval). Body
+    rather than a path param, same reasoning as the skill description
+    endpoint above -- title text can contain characters fragile to
+    URL-encode. A rename that would collide with a different existing
+    title is refused, not silently merged.
+    """
+    result = update_canonical_job_title(
+        current_title=body.current_title,
+        new_title=body.new_title,
+        family=body.family,
+        seniority=body.seniority,
+    )
+    return UpdateJobTitleResult(
+        updated=result.get("updated", False), title=result.get("title"), reason=result.get("reason")
+    )
+
+
+class BulkSetJobTitleFamilyRequest(BaseModel):
+    titles: list[str]
+    family: str
+
+
+class BulkSetJobTitleFamilyResult(BaseModel):
+    updated_count: int
+    updated_titles: list[str]
+
+
+@router.post("/taxonomy/job-titles/bulk-set-family", response_model=BulkSetJobTitleFamilyResult)
+def bulk_set_job_title_family_endpoint(
+    body: BulkSetJobTitleFamilyRequest,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> BulkSetJobTitleFamilyResult:
+    """Reclassifies several selected titles' family in one call -- the
+    Job titles page's bulk action for clearing the "Unclassified"
+    backlog without editing each title alone.
+    """
+    result = bulk_set_job_title_family(body.titles, body.family)
+    return BulkSetJobTitleFamilyResult(
+        updated_count=result["updated_count"], updated_titles=result["updated_titles"]
+    )
