@@ -170,4 +170,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ titles, family }),
     }),
+  suggestJobTitleFamily: (title: string) =>
+    request<{ family: string; method: string }>('/taxonomy/job-titles/suggest-family', {
+      method: 'POST',
+      body: JSON.stringify({ title }),
+    }),
+  autoClassifyJobTitles: () =>
+    request<{
+      checked_count: number
+      classified_count: number
+      still_unclassified_count: number
+      results: { title: string; family: string; method: string }[]
+    }>('/taxonomy/job-titles/auto-classify', { method: 'POST' }),
 }

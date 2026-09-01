@@ -15,6 +15,7 @@ from app.email_parsing.spam import classify_spam
 from app.runtime.db import cursor
 from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
+    auto_classify_unclassified_job_titles,
     bulk_approve_taxonomy_candidates,
     bulk_reject_taxonomy_candidates,
     edit_taxonomy_candidate,
@@ -27,7 +28,12 @@ from app.understanding.taxonomy.candidates import (
     record_skill_usage,
     record_taxonomy_candidates,
     reject_taxonomy_candidate,
+    suggest_job_title_family,
     update_skill_description,
+)
+from app.understanding.taxonomy.title_family_classifier import (
+    classify_family_deterministically,
+    classify_job_title_family,
 )
 from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import (
@@ -507,6 +513,99 @@ def test_bulk_set_job_title_family() -> None:
     entries = {e["title"]: e for e in get_job_title_entries()}
     require(entries["ZBulkFamilyTestOne"]["family"] == "Sales", f"Wrong family: {entries['ZBulkFamilyTestOne']}")
     require(entries["ZBulkFamilyTestTwo"]["family"] == "Sales", f"Wrong family: {entries['ZBulkFamilyTestTwo']}")
+
+
+def test_classify_family_deterministically_common_patterns() -> None:
+    require(
+        classify_family_deterministically("Senior Java Developer") == "Software Engineering",
+        "A generic developer title must classify deterministically",
+    )
+    require(
+        classify_family_deterministically("SAP FICO Consultant") == "ERP",
+        "A SAP title must classify as ERP deterministically",
+    )
+    require(
+        classify_family_deterministically("Data Engineer") == "Data",
+        "AI Engineering/Data-specific keywords must win over the generic 'engineer' catch-all",
+    )
+    require(
+        classify_family_deterministically("Technical Recruiter") == "Recruiting",
+        "A recruiter title must classify as Recruiting",
+    )
+
+
+def test_classify_job_title_family_no_llm_configured_stays_unclassified() -> None:
+    # A title with no deterministic match and no LiteLLM key configured
+    # (this test environment) must never raise or fabricate a guess --
+    # it stays exactly as unclassified as it already was.
+    family, method = classify_job_title_family("Zzz Totally Novel Title With No Keywords Xyz", ["Data", "Sales"])
+    require(family == "Unclassified" and method == "none", f"Expected a clean no-op, got ({family!r}, {method!r})")
+
+
+def test_approve_job_title_candidate_auto_classifies_when_family_not_given() -> None:
+    text = "Job Title: X\n"
+    record_taxonomy_candidates(text=text, draft_id=None, sender_domain="autoclassify.com", job_titles=["ZAutoClassifySeniorJavaDeveloperXyz"])
+
+    pending = list_taxonomy_candidates("pending")
+    match = next(c for c in pending if c["term"] == "ZAutoClassifySeniorJavaDeveloperXyz")
+
+    result = approve_taxonomy_candidate(match["id"])
+    require(result["approved"] is True, f"Approval must still succeed: {result}")
+
+    entries = {e["title"]: e for e in get_job_title_entries()}
+    require(
+        entries["ZAutoClassifySeniorJavaDeveloperXyz"]["family"] == "Software Engineering",
+        f"Approving without an explicit family must auto-classify deterministically, got "
+        f"{entries['ZAutoClassifySeniorJavaDeveloperXyz']}",
+    )
+
+
+def test_approve_job_title_candidate_explicit_family_overrides_auto_classify() -> None:
+    text = "Job Title: X\n"
+    record_taxonomy_candidates(
+        text=text, draft_id=None, sender_domain="explicitfamily.com", job_titles=["ZExplicitFamilyDeveloperXyz"]
+    )
+
+    pending = list_taxonomy_candidates("pending")
+    match = next(c for c in pending if c["term"] == "ZExplicitFamilyDeveloperXyz")
+
+    approve_taxonomy_candidate(match["id"], family="Design")
+
+    entries = {e["title"]: e for e in get_job_title_entries()}
+    require(
+        entries["ZExplicitFamilyDeveloperXyz"]["family"] == "Design",
+        f"An explicitly-given family must win over auto-classification: {entries['ZExplicitFamilyDeveloperXyz']}",
+    )
+
+
+def test_suggest_job_title_family_previews_without_writing() -> None:
+    result = suggest_job_title_family("Zzz Suggest Preview SAP Consultant Xyz")
+    require(result["family"] == "ERP", f"Wrong suggestion: {result}")
+
+    entries = {e["title"]: e for e in get_job_title_entries()}
+    require(
+        "Zzz Suggest Preview SAP Consultant Xyz" not in entries,
+        "A suggestion must be a preview only -- it must never add a new canonical title",
+    )
+
+
+def test_auto_classify_unclassified_job_titles() -> None:
+    add_canonical_job_title(title="ZAutoClassifyBatchDeveloperXyz")  # deterministic hit
+    add_canonical_job_title(title="ZAutoClassifyBatchNovelTermWithNoKeywordsXyz")  # no match, no LLM configured
+
+    result = auto_classify_unclassified_job_titles()
+    require(result["checked_count"] >= 2, f"Must check every currently-Unclassified title: {result['checked_count']}")
+
+    entries = {e["title"]: e for e in get_job_title_entries()}
+    require(
+        entries["ZAutoClassifyBatchDeveloperXyz"]["family"] == "Software Engineering",
+        f"The deterministic hit must be classified: {entries['ZAutoClassifyBatchDeveloperXyz']}",
+    )
+    require(
+        entries["ZAutoClassifyBatchNovelTermWithNoKeywordsXyz"]["family"] == "Unclassified",
+        f"A title neither path could place must stay Unclassified, not get a fabricated guess: "
+        f"{entries['ZAutoClassifyBatchNovelTermWithNoKeywordsXyz']}",
+    )
 
 
 def test_unknown_job_title_detected() -> None:
@@ -1042,6 +1141,24 @@ def main() -> None:
 
     test_bulk_set_job_title_family()
     print("PASS: bulk-setting family reclassifies several job titles in one call")
+
+    test_classify_family_deterministically_common_patterns()
+    print("PASS: common job title patterns classify deterministically")
+
+    test_classify_job_title_family_no_llm_configured_stays_unclassified()
+    print("PASS: a title neither path can place stays cleanly Unclassified, no fabricated guess")
+
+    test_approve_job_title_candidate_auto_classifies_when_family_not_given()
+    print("PASS: approving a job title candidate without an explicit family auto-classifies it")
+
+    test_approve_job_title_candidate_explicit_family_overrides_auto_classify()
+    print("PASS: an explicitly-given family on approval overrides auto-classification")
+
+    test_suggest_job_title_family_previews_without_writing()
+    print("PASS: suggest_job_title_family previews a classification without adding a title")
+
+    test_auto_classify_unclassified_job_titles()
+    print("PASS: bulk auto-classify places deterministic hits and leaves genuine misses Unclassified")
 
     test_unknown_job_title_detected()
     print("PASS: an unrecognized job title is detected, a known one is not")

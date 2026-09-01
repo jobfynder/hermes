@@ -8,10 +8,12 @@ const SENIORITY_OPTIONS = ['unspecified', 'junior', 'mid', 'senior', 'lead', 'pr
 
 function EditRow({
   entry,
+  families,
   onSave,
   onCancel,
 }: {
   entry: JobTitleEntry
+  families: string[]
   onSave: (changes: { newTitle?: string; family?: string; seniority?: string }) => Promise<void>
   onCancel: () => void
 }) {
@@ -19,7 +21,26 @@ function EditRow({
   const [family, setFamily] = useState(entry.family || 'Unclassified')
   const [seniority, setSeniority] = useState(entry.seniority || 'unspecified')
   const [saving, setSaving] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  // The full family list always includes whatever this row already has,
+  // so "keep the current value" is never a missing <option> even if it's
+  // a one-off family no other title uses.
+  const familyOptions = Array.from(new Set([...families, family, 'Unclassified'])).sort()
+
+  async function handleSuggest() {
+    setSuggesting(true)
+    setSaveError(null)
+    try {
+      const result = await api.suggestJobTitleFamily(title)
+      setFamily(result.family)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Could not get a suggestion')
+    } finally {
+      setSuggesting(false)
+    }
+  }
 
   async function handleSave() {
     if (!title.trim()) return
@@ -50,12 +71,27 @@ function EditRow({
         {saveError && <div className="mt-1 text-xs text-fail">{saveError}</div>}
       </td>
       <td className="px-4 py-2.5">
-        <input
-          list="job-title-families"
-          value={family}
-          onChange={(e) => setFamily(e.target.value)}
-          className="w-full rounded border border-line bg-surface px-2 py-1 text-sm text-ink outline-none focus:border-accent"
-        />
+        <div className="flex items-center gap-1.5">
+          <select
+            value={family}
+            onChange={(e) => setFamily(e.target.value)}
+            className="w-full rounded border border-line bg-surface px-2 py-1 text-sm text-ink outline-none focus:border-accent"
+          >
+            {familyOptions.map((f) => (
+              <option key={f} value={f}>
+                {f}
+              </option>
+            ))}
+          </select>
+          <button
+            disabled={suggesting}
+            onClick={handleSuggest}
+            title="Suggest a family based on the title"
+            className="shrink-0 text-xs font-medium text-accent hover:underline disabled:opacity-40"
+          >
+            {suggesting ? '…' : 'Suggest'}
+          </button>
+        </div>
       </td>
       <td className="px-4 py-2.5">
         <select
@@ -199,6 +235,24 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
     }
   }
 
+  async function handleAutoClassify() {
+    setBusy(true)
+    try {
+      const result = await api.autoClassifyJobTitles()
+      setActionMessage(
+        `Classified ${result.classified_count} of ${result.checked_count} unclassified titles` +
+          (result.still_unclassified_count > 0 ? ` — ${result.still_unclassified_count} still need a human.` : '.'),
+      )
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Auto-classify failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const unclassifiedCount = titles?.filter((t) => (t.family || 'Unclassified') === 'Unclassified').length ?? 0
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <datalist id="job-title-families">
@@ -216,12 +270,24 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
             keeps the old wording as an alias, so postings that still use it are still recognized.
           </p>
         </div>
-        <button
-          onClick={onBack}
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
-        >
-          Back to drafts
-        </button>
+        <div className="flex items-center gap-3">
+          {unclassifiedCount > 0 && (
+            <button
+              disabled={busy}
+              onClick={handleAutoClassify}
+              title="Classifies each unclassified title by keyword rules first, LLM only if no rule matches"
+              className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+            >
+              {busy ? 'Classifying…' : `Auto-classify ${unclassifiedCount} unclassified`}
+            </button>
+          )}
+          <button
+            onClick={onBack}
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
+          >
+            Back to drafts
+          </button>
+        </div>
       </header>
 
       {error && <div className="mb-4 rounded-lg bg-fail-soft px-4 py-3 text-sm text-fail">{error}</div>}
@@ -315,6 +381,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
                 <EditRow
                   key={t.title}
                   entry={t}
+                  families={families}
                   onSave={(changes) => handleEditSave(t, changes)}
                   onCancel={() => setEditingTitle(null)}
                 />

@@ -6,11 +6,13 @@ from app.email_parsing.blocklist import add_block, list_blocks, remove_block
 from app.security.rbac import require_permission
 from app.understanding.taxonomy.candidates import (
     approve_taxonomy_candidate,
+    auto_classify_unclassified_job_titles,
     bulk_approve_taxonomy_candidates,
     bulk_reject_taxonomy_candidates,
     edit_taxonomy_candidate,
     list_taxonomy_candidates,
     reject_taxonomy_candidate,
+    suggest_job_title_family,
     update_skill_description,
 )
 from app.understanding.taxonomy.loader import bulk_set_job_title_family, update_canonical_job_title
@@ -52,8 +54,11 @@ class ApproveCandidateRequest(BaseModel):
     # Used when approving a signal_type='skill' candidate.
     category: str = "Tool/Technology"
     skill_type: str = "tool"
-    # Used when approving a signal_type='job_title' candidate.
-    family: str = "Unclassified"
+    # Used when approving a signal_type='job_title' candidate. family=None
+    # (not "Unclassified") is the default so approve_taxonomy_candidate's
+    # own auto-classification runs unless a caller explicitly overrides
+    # it -- see that function's docstring.
+    family: str | None = None
     seniority: str = "unspecified"
 
 
@@ -259,3 +264,51 @@ def bulk_set_job_title_family_endpoint(
     return BulkSetJobTitleFamilyResult(
         updated_count=result["updated_count"], updated_titles=result["updated_titles"]
     )
+
+
+class SuggestJobTitleFamilyRequest(BaseModel):
+    title: str
+
+
+class SuggestJobTitleFamilyResult(BaseModel):
+    family: str
+    method: str
+
+
+@router.post("/taxonomy/job-titles/suggest-family", response_model=SuggestJobTitleFamilyResult)
+def suggest_job_title_family_endpoint(
+    body: SuggestJobTitleFamilyRequest,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> SuggestJobTitleFamilyResult:
+    """The Job titles page's per-row "Suggest" button -- classifies
+    without writing anything, so a reviewer can see the suggestion and
+    still change it before saving.
+    """
+    result = suggest_job_title_family(body.title)
+    return SuggestJobTitleFamilyResult(family=result["family"], method=result["method"])
+
+
+class AutoClassifyResultItem(BaseModel):
+    title: str
+    family: str
+    method: str
+
+
+class AutoClassifyJobTitlesResult(BaseModel):
+    checked_count: int
+    classified_count: int
+    still_unclassified_count: int
+    results: list[AutoClassifyResultItem]
+
+
+@router.post("/taxonomy/job-titles/auto-classify", response_model=AutoClassifyJobTitlesResult)
+def auto_classify_job_titles_endpoint(
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> AutoClassifyJobTitlesResult:
+    """The Job titles page's "Auto-classify unclassified" bulk action --
+    runs every family="Unclassified" title through classify_job_title_family
+    (deterministic keyword rules first, LLM only as a fallback) and
+    applies whatever it could place in one write.
+    """
+    result = auto_classify_unclassified_job_titles()
+    return AutoClassifyJobTitlesResult(**result)

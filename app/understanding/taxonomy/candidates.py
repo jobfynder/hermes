@@ -29,11 +29,14 @@ from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import (
     add_canonical_job_title,
     add_canonical_skill,
+    bulk_apply_job_title_families,
     build_skill_alias_index,
     build_title_alias_index,
+    get_job_title_entries,
     normalize_taxonomy_key,
     set_skill_description,
 )
+from app.understanding.taxonomy.title_family_classifier import classify_job_title_family
 
 # Common non-skill filler that shows up inside skills lists but is not
 # itself a skill -- "Java, Spring, and more", "SQL, etc.", "AWS (required)".
@@ -398,7 +401,7 @@ def approve_taxonomy_candidate(
     candidate_id: int,
     category: str = "Tool/Technology",
     skill_type: str = "tool",
-    family: str = "Unclassified",
+    family: str | None = None,
     seniority: str = "unspecified",
     reviewed_by: str | None = None,
 ) -> dict:
@@ -407,6 +410,15 @@ def approve_taxonomy_candidate(
     add_canonical_job_title) and marks the queue row approved. Only ever
     called from a human clicking "Approve" in the admin UI -- see the
     module docstring for why this never happens automatically.
+
+    family=None (the default -- distinct from "Unclassified", which a
+    caller can still pass explicitly to force it) means "figure it out":
+    a job_title candidate gets classified via classify_job_title_family
+    (deterministic keyword rules first, LLM only as a fallback) instead
+    of defaulting straight to "Unclassified". Approving used to leave
+    every single title unclassified, every time, no matter how obvious
+    ("Java Developer" -> Unclassified) -- a backlog that only a human
+    manually clearing it, one row at a time, could ever shrink.
 
     signal_type='boilerplate_line' is handled separately by
     approve_boilerplate_line_candidate -- approving one adds it to
@@ -447,7 +459,17 @@ def approve_taxonomy_candidate(
             name=row["term"], category=category, skill_type=skill_type, description=description
         )
     elif row["signal_type"] == "job_title":
-        add_canonical_job_title(title=row["term"], family=family, seniority=seniority)
+        resolved_family = family
+        if resolved_family is None:
+            known_families = sorted(
+                {(e.get("family") or "Unclassified") for e in get_job_title_entries()} - {"Unclassified"}
+            )
+            try:
+                resolved_family, _method = classify_job_title_family(row["term"], known_families)
+            except Exception:  # noqa: BLE001
+                resolved_family = "Unclassified"
+
+        add_canonical_job_title(title=row["term"], family=resolved_family, seniority=seniority)
 
     with cursor() as cur:
         cur.execute(
@@ -495,6 +517,52 @@ def bulk_approve_taxonomy_candidates(candidate_ids: list[int], reviewed_by: str 
             failed.append({"candidate_id": candidate_id, "reason": result.get("reason")})
 
     return {"approved_count": len(approved), "approved_terms": approved, "failed": failed}
+
+
+def suggest_job_title_family(title: str) -> dict:
+    """One-title preview for the Job titles page's per-row "Suggest"
+    button -- classifies without writing anything, so a reviewer can see
+    what the system would pick and still change it before saving.
+    """
+    known_families = sorted(
+        {(e.get("family") or "Unclassified") for e in get_job_title_entries()} - {"Unclassified"}
+    )
+    family, method = classify_job_title_family(title, known_families)
+    return {"family": family, "method": method}
+
+
+def auto_classify_unclassified_job_titles() -> dict:
+    """Runs every currently family="Unclassified" canonical title through
+    classify_job_title_family and applies whatever it could place in one
+    write -- the Job titles page's "Auto-classify unclassified" bulk
+    action. Never blocks on a single title's LLM call failing; that
+    title just stays unclassified, same as it already was.
+    """
+    entries = get_job_title_entries()
+    known_families = sorted({(e.get("family") or "Unclassified") for e in entries} - {"Unclassified"})
+    unclassified_titles = [e["title"] for e in entries if (e.get("family") or "Unclassified") == "Unclassified"]
+
+    family_by_title: dict[str, str] = {}
+    results: list[dict] = []
+
+    for title in unclassified_titles:
+        try:
+            family, method = classify_job_title_family(title, known_families)
+        except Exception:  # noqa: BLE001
+            family, method = "Unclassified", "none"
+
+        results.append({"title": title, "family": family, "method": method})
+        if method != "none":
+            family_by_title[title] = family
+
+    write_result = bulk_apply_job_title_families(family_by_title) if family_by_title else {"updated_count": 0}
+
+    return {
+        "checked_count": len(unclassified_titles),
+        "classified_count": write_result["updated_count"],
+        "still_unclassified_count": len(unclassified_titles) - write_result["updated_count"],
+        "results": results,
+    }
 
 
 def bulk_reject_taxonomy_candidates(candidate_ids: list[int], reviewed_by: str | None = None) -> dict:

@@ -361,6 +361,33 @@ def bulk_set_job_title_family(titles: list[str], family: str) -> dict[str, Any]:
     return {"updated_count": len(updated_titles), "updated_titles": updated_titles}
 
 
+def bulk_apply_job_title_families(family_by_title: dict[str, str]) -> dict[str, Any]:
+    """Like bulk_set_job_title_family, but each title gets its OWN family
+    rather than one family applied to all of them -- what a batch
+    auto-classification pass needs (app/understanding/taxonomy/
+    title_family_classifier.py), where different titles land in
+    different families in the same run.
+    """
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_TITLES_WRITE_LOCK_KEY,))
+
+        data = json.loads(_writable_taxonomy_path("job_titles.json").read_text(encoding="utf-8"))
+        wanted = {normalize_taxonomy_key(t): family for t, family in family_by_title.items()}
+
+        updated_titles: list[str] = []
+        for entry in data["titles"]:
+            key = normalize_taxonomy_key(entry.get("title"))
+            if key in wanted:
+                entry["family"] = wanted[key]
+                updated_titles.append(entry["title"])
+
+        if updated_titles:
+            _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            clear_taxonomy_cache()
+
+    return {"updated_count": len(updated_titles), "updated_titles": updated_titles}
+
+
 def load_skills_taxonomy() -> dict[str, Any]:
     return _load_json_cached_by_mtime(_writable_taxonomy_path("canonical_skills.json"))
 
