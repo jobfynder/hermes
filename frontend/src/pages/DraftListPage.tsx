@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { ConfidenceMeter } from '../components/ConfidenceMeter'
 import { draftTypeLabel } from '../components/DraftTypeLabel'
+import { PaginationControls, usePagination } from '../components/Pagination'
 import { StatusBadge } from '../components/StatusBadge'
 import type { DraftObjectType, DraftStatus, DraftSummaryEntry } from '../types'
 
@@ -86,6 +87,11 @@ export function DraftListPage({
       spam: drafts.filter((d) => d.status === 'spam').length,
     }
   }, [drafts])
+
+  const { pageItems, page, pageCount, pageSize, setPage, setPageSize } = usePagination(
+    filtered,
+    `${search}|${typeFilter}|${statusFilter}`,
+  )
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -191,7 +197,7 @@ export function DraftListPage({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((d) => (
+            {pageItems.map((d) => (
               <tr
                 key={d.draft_id}
                 onClick={() => onSelect(d.draft_id)}
@@ -234,6 +240,14 @@ export function DraftListPage({
             )}
           </tbody>
         </table>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          totalCount={filtered.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   )

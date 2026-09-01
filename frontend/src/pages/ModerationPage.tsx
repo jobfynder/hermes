@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
+import { PaginationControls, usePagination } from '../components/Pagination'
 import type { BlocklistEntry, TaxonomyCandidateEntry } from '../types'
 
 type SortKey = 'occurrence_count' | 'distinct_senders' | 'last_seen_at' | 'term'
@@ -83,6 +84,11 @@ function CandidateSection({
 
   const ids = visible.map((c) => c.id)
   const selectedInSection = ids.filter((id) => selectedIds.has(id))
+
+  const { pageItems, page, pageCount, pageSize, setPage, setPageSize } = usePagination(
+    visible,
+    `${search}|${sortKey}|${minOccurrences}|${typeFilter}|${groupAlpha}`,
+  )
 
   let previousGroupLetter = ''
 
@@ -194,7 +200,7 @@ function CandidateSection({
             </tr>
           </thead>
           <tbody>
-            {visible.map((c) => {
+            {pageItems.map((c) => {
               const groupLetter = (c.term.trim()[0] || '#').toUpperCase()
               const showGroupHeader = groupAlpha && sortKey === 'term' && groupLetter !== previousGroupLetter
               previousGroupLetter = groupLetter
@@ -311,6 +317,14 @@ function CandidateSection({
             )}
           </tbody>
         </table>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          totalCount={visible.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </section>
   )

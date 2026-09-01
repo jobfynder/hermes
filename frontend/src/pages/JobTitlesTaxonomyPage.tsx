@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
+import { PaginationControls, usePagination } from '../components/Pagination'
 import type { JobTitleEntry } from '../types'
 
 type SortKey = 'title' | 'family' | 'seniority'
@@ -184,6 +185,11 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
 
     return rows
   }, [titles, search, family, sortKey])
+
+  const { pageItems, page, pageCount, pageSize, setPage, setPageSize } = usePagination(
+    filtered,
+    `${search}|${family}|${sortKey}`,
+  )
 
   function toggleSelected(title: string) {
     setSelected((prev) => {
@@ -376,7 +382,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((t) =>
+            {pageItems.map((t) =>
               editingTitle === t.title ? (
                 <EditRow
                   key={t.title}
@@ -434,6 +440,14 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
             )}
           </tbody>
         </table>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          totalCount={filtered.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   )

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
+import { PaginationControls, usePagination } from '../components/Pagination'
 import type { CanonicalSkillEntry } from '../types'
 
 type SortKey = 'name' | 'times_seen' | 'last_seen_at'
@@ -170,6 +171,11 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
     return rows
   }, [skills, search, category, sortKey])
 
+  const { pageItems, page, pageCount, pageSize, setPage, setPageSize } = usePagination(
+    filtered,
+    `${search}|${category}|${sortKey}`,
+  )
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       <header className="mb-6 flex items-baseline justify-between">
@@ -231,7 +237,7 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s) => (
+            {pageItems.map((s) => (
               <tr key={s.name} className="border-b border-line last:border-0 align-top">
                 <td className="max-w-xl px-4 py-2.5">
                   <div className="font-medium text-ink" title={s.aliases.length ? `Aliases: ${s.aliases.join(', ')}` : undefined}>
@@ -260,6 +266,14 @@ export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
             )}
           </tbody>
         </table>
+        <PaginationControls
+          page={page}
+          pageCount={pageCount}
+          pageSize={pageSize}
+          totalCount={filtered.length}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   )
