@@ -443,6 +443,77 @@ def test_prohirespowerhouse_masthead_does_not_truncate_the_description() -> None
     )
 
 
+def test_repeated_job_title_label_does_not_split_a_single_posting() -> None:
+    # Real production bug, reported by the user as "most messages are
+    # going in the same way": this vendor states the title once as a
+    # labeled field near the top, then restates the exact same title a
+    # second time inside the "Job Description:" paragraph itself
+    # ("Job Title: QE Automation Engineer\n\nRole Descriptions: We are
+    # seeking..."). The old _split_requirement_sections treated EVERY
+    # "Job Title:" occurrence as a new record boundary, so this single
+    # posting split into two "records" -- a near-empty stub ending right
+    # before the repeated label, and the real content starting there.
+    # Since the review UI only ever renders the FIRST record
+    # (DraftDetailPage.tsx), the entire real posting was invisible to
+    # the reviewer behind what looked like an empty draft.
+    text = (
+        "Subject: QE Automation Engineer, New York, NY (Onsite)\n\n"
+        "From:\n\nNitika Choudhary,\n\nTeamware Solution\n\nnitika.c@twsol.com\n\n"
+        "Hi\n\nWe are Seeking QE Automation Engineer\n\n"
+        "Job Title : QE Automation Engineer\n\n"
+        "Location:\nNew York, NY \n\n(Onsite)\n\nExp: 8+ years\n\n"
+        "Job Description:\n\n"
+        "Job Title: QE Automation Engineer\n\n"
+        "Role Descriptions: We are seeking an experienced Automation Quality Engineer (QE) "
+        "with strong expertise in test automation using Selenium and Cucumber.\n"
+        "Essential Skills: Selenium WebDriver, Cucumber, Java, JUnit, TestNG, Maven, Git, Jenkins.\n\n"
+        "Thanks & Regards\nNitika Choudhary"
+    )
+
+    result = parse_requirement_email(text)
+    require(
+        len(result["records"]) == 1,
+        f"A restated-but-identical title must not split one posting into two records: "
+        f"got {len(result['records'])}",
+    )
+    record = result["records"][0]
+    require(
+        "selenium" in record["job_description"].lower() and "cucumber" in record["job_description"].lower(),
+        f"The real job description content must survive intact: {record['job_description']!r}",
+    )
+    require(
+        "Selenium" in record["required_skills"] or "Selenium WebDriver" in record["required_skills"],
+        f"Real skills from the (previously hidden) second half of the posting must be extracted: "
+        f"{record['required_skills']}",
+    )
+
+
+def test_different_job_title_labels_still_split_into_separate_records() -> None:
+    # Companion to the dedup test above -- confirms the fix only merges
+    # a REPEATED identical title, not a genuine second position stated
+    # via its own "Job Title:" label (the non-numbered-list multi-
+    # position shape).
+    text = (
+        "Job Title: Java Developer\n"
+        "Location: Dallas, TX\n"
+        "Required Skills: Java, Spring Boot\n\n"
+        "Job Title: Python Developer\n"
+        "Location: Austin, TX\n"
+        "Required Skills: Python, Django\n"
+    )
+
+    result = parse_requirement_email(text)
+    require(
+        len(result["records"]) == 2,
+        f"Two genuinely different titles must still split into two records: got {len(result['records'])}",
+    )
+    titles = {r["job_title"] for r in result["records"]}
+    require(
+        titles == {"Java Developer", "Python Developer"},
+        f"Expected both distinct titles preserved, got {titles}",
+    )
+
+
 def test_location_does_not_swallow_next_blank_label() -> None:
     # A recruiter template asking the reader to fill in several blank
     # fields ("Location:\nLinkedIn:\n...") used to have its empty
@@ -691,6 +762,8 @@ def main() -> None:
     test_forwarded_requirement_with_end_client()
     test_nvoids_java_posting_regression()
     test_prohirespowerhouse_masthead_does_not_truncate_the_description()
+    test_repeated_job_title_label_does_not_split_a_single_posting()
+    test_different_job_title_labels_still_split_into_separate_records()
     test_location_does_not_swallow_next_blank_label()
     test_security_gateway_banner_is_stripped()
     test_pipe_delimited_subject_still_yields_a_title()

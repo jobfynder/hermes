@@ -595,6 +595,19 @@ def _sections_from_matches(
     return sections or [text]
 
 
+def _title_label_value_at(text: str, match: re.Match[str]) -> str:
+    """The value on the same line as a "Job Title:"/"Position:"/"Role:"
+    label match -- "Job Title: QE Automation Engineer" -> "qe automation
+    engineer", normalized (case/whitespace-insensitive) so two matches
+    can be compared for whether they're restating the same title.
+    """
+    line_end = text.find("\n", match.end())
+    if line_end == -1:
+        line_end = len(text)
+    value = text[match.end() : line_end].strip(" \t:-")
+    return re.sub(r"\s+", " ", value).lower()
+
+
 def _split_requirement_sections(text: str) -> list[str]:
     matches = list(
         re.finditer(
@@ -603,8 +616,33 @@ def _split_requirement_sections(text: str) -> list[str]:
         )
     )
 
-    if len(matches) > 1:
-        return _sections_from_matches(text, matches)
+    # A vendor template commonly restates the exact same title twice --
+    # once as a labeled field near the top of the email, again inside
+    # the "Job Description:" paragraph itself ("Job Title: QE Automation
+    # Engineer\n\nRole Description: We are seeking an experienced..."),
+    # not because there's a second, genuinely different position.
+    # Treating every "Job Title:"/"Position:"/"Role:" occurrence as a
+    # new record boundary (the original behavior) split that single
+    # posting into two "records": a near-empty stub ending right before
+    # the repeated label, and the real content starting there. Since the
+    # review UI only ever shows the FIRST record (DraftDetailPage.tsx),
+    # this silently hid the entire real posting behind what looked like
+    # an empty draft -- confirmed against real production drafts. Fixed
+    # by collapsing a match into the previous one when its own labeled
+    # value is the SAME title (case/whitespace-insensitive) -- a
+    # genuine second position always states a DIFFERENT title.
+    deduped_matches: list[re.Match[str]] = []
+    previous_value: str | None = None
+    for match in matches:
+        value = _title_label_value_at(text, match)
+        if value and value == previous_value:
+            continue
+        deduped_matches.append(match)
+        if value:
+            previous_value = value
+
+    if len(deduped_matches) > 1:
+        return _sections_from_matches(text, deduped_matches)
 
     return _numbered_position_sections(text) or [text]
 
