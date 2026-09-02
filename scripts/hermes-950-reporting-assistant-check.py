@@ -27,7 +27,7 @@ from app.reporting.service import (
 )
 from app.runtime.db import cursor
 from app.security.rbac import get_current_user
-from app.understanding.taxonomy.candidates import _upsert_candidate, _is_noise_skill_term
+from app.understanding.taxonomy.candidates import _upsert_candidate, _is_noise_skill_term, _is_noise_job_title
 
 client = TestClient(app)
 
@@ -218,6 +218,15 @@ def test_recruitment_intelligence_top_skills_excludes_noise_terms() -> None:
         )
 
 
+def test_recruitment_intelligence_top_job_titles_excludes_noise_terms() -> None:
+    result = get_recruitment_intelligence(days=3650, limit=15)
+    for entry in result["top_job_titles"]:
+        require(
+            not _is_noise_job_title(entry["title"]),
+            f"top_job_titles must not include structurally-noisy titles: {entry}",
+        )
+
+
 def test_sender_intelligence_has_expected_shape() -> None:
     result = get_sender_intelligence(days=30, limit=5)
     for key in ("total_senders", "total_domains", "top_senders", "top_domains"):
@@ -361,6 +370,9 @@ def main() -> None:
 
     test_recruitment_intelligence_top_skills_excludes_noise_terms()
     print("PASS: recruitment intelligence top skills excludes noise terms like 'https'")
+
+    test_recruitment_intelligence_top_job_titles_excludes_noise_terms()
+    print("PASS: recruitment intelligence top job titles excludes structurally-noisy titles")
 
     test_sender_intelligence_has_expected_shape()
     print("PASS: sender intelligence returns the expected shape")

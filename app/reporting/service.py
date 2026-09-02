@@ -19,7 +19,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.runtime.db import cursor
-from app.understanding.taxonomy.candidates import _MIN_BOILERPLATE_DISTINCT_SENDERS, _is_noise_skill_term
+from app.understanding.taxonomy.candidates import (
+    _MIN_BOILERPLATE_DISTINCT_SENDERS,
+    _is_noise_job_title,
+    _is_noise_skill_term,
+)
 from app.understanding.taxonomy.loader import get_canonical_skill_entries, get_job_title_entries
 
 # Automated reviewers -- distinguishes "the daily triage job cleared
@@ -446,6 +450,17 @@ def get_recruitment_intelligence(days: int = 30, limit: int = 15) -> dict[str, A
     Everything else (job titles, locations, employment type, work
     authorization, rate presence) is windowed by `days` and pulled from
     job_requirement records, the actual structured postings.
+
+    top_job_titles also filters through _is_noise_job_title(), but that
+    check catches structurally-malformed candidate strings (fragments,
+    verb phrases, encoding artifacts) -- it does NOT catch a single
+    real word that's simply the wrong classification, which real
+    production data shows happening (e.g. "Contract" and "DATA"
+    ranking as top "titles", most likely an employment-type value or a
+    generic noun getting matched into the job-title taxonomy). That's a
+    canonical-taxonomy/classifier accuracy issue, not something this
+    report can safely paper over without risking hiding a real bug --
+    left visible rather than silently filtered.
     """
     skill_rows = []
     with cursor() as cur:
@@ -465,9 +480,14 @@ def get_recruitment_intelligence(days: int = 30, limit: int = 15) -> dict[str, A
             "FROM drafts d, jsonb_array_elements_text(d.normalized_job_titles) title "
             "WHERE d.created_at >= %s AND jsonb_array_length(d.normalized_job_titles) > 0 "
             "GROUP BY title.value ORDER BY n DESC LIMIT %s",
-            (since, limit),
+            (since, limit * 3),  # over-fetch since some will be filtered as noise
         )
-        top_job_titles = [{"title": r["title"], "count": r["n"]} for r in cur.fetchall()]
+        top_job_titles = []
+        for r in cur.fetchall():
+            if not _is_noise_job_title(r["title"]):
+                top_job_titles.append({"title": r["title"], "count": r["n"]})
+            if len(top_job_titles) >= limit:
+                break
 
         cur.execute(
             """
