@@ -452,15 +452,22 @@ def get_recruitment_intelligence(days: int = 30, limit: int = 15) -> dict[str, A
     job_requirement records, the actual structured postings.
 
     top_job_titles also filters through _is_noise_job_title(), but that
-    check catches structurally-malformed candidate strings (fragments,
-    verb phrases, encoding artifacts) -- it does NOT catch a single
-    real word that's simply the wrong classification, which real
-    production data shows happening (e.g. "Contract" and "DATA"
-    ranking as top "titles", most likely an employment-type value or a
-    generic noun getting matched into the job-title taxonomy). That's a
-    canonical-taxonomy/classifier accuracy issue, not something this
-    report can safely paper over without risking hiding a real bug --
-    left visible rather than silently filtered.
+    check only catches structurally-malformed candidate strings
+    (fragments, verb phrases, encoding artifacts) -- it does NOT catch a
+    single real word that's simply the wrong classification. Real
+    production data hit exactly that: "DATA", "Contract", "AI",
+    "ServiceNow", and "Mobile" were ranking as top "titles" -- not a
+    classifier bug (extract_taxonomy_signals only ever matches literal
+    canonical-taxonomy entries), but five bad entries a human reviewer
+    approved into job_titles.json through the ordinary candidate-review
+    flow. Root-caused via bulk_delete_job_titles() (app/understanding/
+    taxonomy/loader.py) rather than filtered here -- deleting the
+    canonical entries stops future emails from matching them too, not
+    just this report's display. Drafts parsed BEFORE the deletion keep
+    their already-stored normalized_job_titles as a historical snapshot
+    (correct: that's genuinely what got extracted from them at the
+    time), so a few historical drafts may still surface here even
+    though the taxonomy is now clean.
     """
     skill_rows = []
     with cursor() as cur:
