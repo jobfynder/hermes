@@ -92,7 +92,16 @@ def _extract_json_array(text: str) -> list[str] | None:
 
 
 def classify_batch(terms: list[str], system_prompt: str) -> list[str]:
-    numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(terms))
+    # A term with an embedded newline or non-breaking space (a stray
+    # parsing artifact from an older, already-queued candidate) turns
+    # into an extra fake "line" in the numbered list below, throwing off
+    # the model's item count and reliably producing a mismatched-length
+    # response every retry -- confirmed against a real stuck batch in
+    # production containing "HANA \xa0 \xa0 \xa0 \n\nRN SAP BOBJ Admin
+    # Consultant". Collapsed to single spaces here, for prompting only;
+    # the candidate's stored term is never modified.
+    sanitized_terms = [re.sub(r"\s+", " ", t).strip() for t in terms]
+    numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(sanitized_terms))
     messages = [
         PromptRenderedMessage(role="system", content=system_prompt),
         PromptRenderedMessage(role="user", content=numbered),
