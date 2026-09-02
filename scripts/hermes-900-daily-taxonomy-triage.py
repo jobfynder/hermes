@@ -1,9 +1,9 @@
 """HERMES-900 daily taxonomy candidate triage.
 
-Runs on a schedule (see ops/hermes-taxonomy-triage.service/.timer) to
-clear the day's new skill/job-title taxonomy candidates automatically,
-so a human never has to work through this queue by hand on a daily
-basis. Two layers, in order:
+Runs on a schedule (see the hermes-taxonomy-triage.service/.timer host
+systemd units) to clear the day's new skill/job-title/boilerplate-line
+taxonomy candidates automatically, so a human never has to work through
+this queue by hand on a daily basis. Two layers, in order:
 
 1. Deterministic pre-filter -- candidates.py's _is_noise_skill_term/
    _is_noise_job_title already keep most junk (sentence fragments,
@@ -73,6 +73,35 @@ TITLE_SYSTEM_PROMPT = (
     "recruiter would use -- possibly with a seniority/technology qualifier, e.g. "
     "'Senior SAP ABAP Developer') or REJECT (a person's name, a sentence, a vague "
     "phrase, or garbled text -- NOT a title). "
+    "Reply with ONLY a JSON array of the strings \"approve\" or \"reject\", in the "
+    "exact same order as the input, one entry per numbered item. No other text."
+)
+
+# Boilerplate lines are a different, higher-stakes call than skills/
+# titles: approving one gets it stripped from EVERY future job
+# description, permanently. It already passed a strict deterministic
+# bar before ever reaching here (record_boilerplate_line_candidates
+# only queues a line once it's recurred, byte-identical, across 8+
+# distinct sender domains -- see app/understanding/taxonomy/
+# candidates.py) so most of what arrives here really is generic
+# template filler. The prompt is written to stay conservative anyway:
+# a genuinely specific requirement sentence that merely happens to
+# recur (several recruiters forwarding the same original posting)
+# should be rejected, not stripped from unrelated future postings.
+BOILERPLATE_SYSTEM_PROMPT = (
+    "You are deciding which recurring lines from IT staffing job-posting emails are "
+    "generic TEMPLATE/BOILERPLATE text that should be stripped from every future job "
+    "description, versus lines that are genuine, specific job-requirement content that "
+    "merely happens to recur (e.g. several recruiters forwarding the same original "
+    "posting). Each line below has already been confirmed to appear, byte-for-byte "
+    "identical, across at least 8 different sending companies -- so lean APPROVE for "
+    "generic section headers, boilerplate disclaimers, and generic soft-skill filler "
+    "sentences ('Strong analytical and problem-solving skills.', 'Required "
+    "Qualifications, Capabilities, and Skills:'). Lean REJECT only when the line "
+    "names a SPECIFIC technology, project, client, or unusual requirement that reads "
+    "as real content from one particular posting, not a template a recruiter reuses "
+    "for every role (e.g. 'Mainframe to Java migration experience (Preferred)' names "
+    "a specific migration project -- reject that even though it recurred). "
     "Reply with ONLY a JSON array of the strings \"approve\" or \"reject\", in the "
     "exact same order as the input, one entry per numbered item. No other text."
 )
@@ -193,6 +222,11 @@ def main() -> int:
     print(f"TITLES: processed={title_summary['processed']} "
           f"approved={title_summary['approved']} rejected={title_summary['rejected']} "
           f"left_for_review={title_summary['left_for_review']}")
+
+    boilerplate_summary = triage("boilerplate_line", BOILERPLATE_SYSTEM_PROMPT)
+    print(f"BOILERPLATE: processed={boilerplate_summary['processed']} "
+          f"approved={boilerplate_summary['approved']} rejected={boilerplate_summary['rejected']} "
+          f"left_for_review={boilerplate_summary['left_for_review']}")
 
     print("=== done ===")
     return 0
