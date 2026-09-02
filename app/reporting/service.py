@@ -225,13 +225,244 @@ def get_parsing_quality(days: int = 7) -> dict[str, Any]:
     }
 
 
+# field_provenance.extractor values that mean "an LLM prompt ran for
+# this field" (app/email_parsing/llm_fallback.py) -- as opposed to
+# hermes_email_deterministic_parser / hermes_email_signature_parser,
+# which never call an LLM. A draft with ANY row using one of these is
+# "AI-assisted"; a draft with none is "parser-only".
+_AI_EXTRACTORS = ("jf.jobs.jd.extract", "jf.broadcast.hotlist.extract")
+
+
+def get_ingestion_health(days: int = 1) -> dict[str, Any]:
+    """What actually arrived and what happened to it, from intake_log --
+    the first thing anything else here depends on being healthy.
+    received/parsed/duplicate are the only statuses intake_log
+    currently records (see app/channels/service.py:process_channel_
+    intake) -- there is deliberately no separate "failed" bucket
+    reported here, since one doesn't exist in the data; an intake
+    exception surfaces as a gap between received and parsed instead,
+    which processing_rate_pct below makes visible.
+    """
+    since = datetime.now(UTC) - timedelta(days=days)
+    with cursor() as cur:
+        cur.execute(
+            "SELECT status, channel, COUNT(*) AS n "
+            "FROM intake_log WHERE recorded_at >= %s GROUP BY status, channel",
+            (since,),
+        )
+        rows = cur.fetchall()
+
+    by_status: dict[str, int] = {}
+    by_channel: dict[str, int] = {}
+    for row in rows:
+        by_status[row["status"]] = by_status.get(row["status"], 0) + row["n"]
+        # Only "received" counts toward inbound volume by channel --
+        # each message also gets a "parsed" (and sometimes "duplicate")
+        # row later for the SAME message, so summing every status here
+        # would silently double- or triple-count actual email volume.
+        if row["status"] == "received":
+            by_channel[row["channel"]] = by_channel.get(row["channel"], 0) + row["n"]
+
+    received = by_status.get("received", 0)
+    parsed = by_status.get("parsed", 0)
+    duplicate = by_status.get("duplicate", 0)
+    hours = max(days * 24, 1)
+
+    return {
+        "days": days,
+        "received": received,
+        "parsed": parsed,
+        "duplicate": duplicate,
+        "unaccounted": max(0, received - parsed - duplicate),
+        "processing_rate_pct": round(100 * parsed / received, 1) if received else None,
+        "received_per_hour": round(received / hours, 1),
+        "by_channel": by_channel,
+    }
+
+
+def get_classification_report(days: int = 7) -> dict[str, Any]:
+    """How incoming mail got classified -- draft_type counts and average
+    confidence per type, plus a daily trend for spotting a sudden shift
+    (a mailbox misconfiguration, a new relay showing up) at a glance.
+    """
+    since = datetime.now(UTC) - timedelta(days=days)
+    with cursor() as cur:
+        cur.execute(
+            "SELECT draft_type, created_at::date AS day, confidence "
+            "FROM drafts WHERE created_at >= %s",
+            (since,),
+        )
+        rows = cur.fetchall()
+
+    by_type: dict[str, dict[str, Any]] = {}
+    by_day: dict[str, dict[str, int]] = {}
+    for row in rows:
+        bucket = by_type.setdefault(row["draft_type"], {"count": 0, "confidence_sum": 0.0})
+        bucket["count"] += 1
+        bucket["confidence_sum"] += row["confidence"] or 0.0
+
+        day_key = row["day"].isoformat()
+        day_bucket = by_day.setdefault(day_key, {})
+        day_bucket[row["draft_type"]] = day_bucket.get(row["draft_type"], 0) + 1
+
+    total = sum(b["count"] for b in by_type.values())
+    types = [
+        {
+            "draft_type": t,
+            "count": b["count"],
+            "pct_of_total": round(100 * b["count"] / total, 1) if total else None,
+            "avg_confidence": round(b["confidence_sum"] / b["count"], 3) if b["count"] else None,
+        }
+        for t, b in sorted(by_type.items(), key=lambda kv: -kv[1]["count"])
+    ]
+
+    return {
+        "days": days,
+        "total": total,
+        "by_type": types,
+        "daily": [{"date": d, **counts} for d, counts in sorted(by_day.items())],
+    }
+
+
+def get_ai_dependency_report(days: int = 7) -> dict[str, Any]:
+    """What share of drafts needed an LLM call at all, and what the LLM
+    cost looked like over the same window -- the two numbers this
+    exists to keep an eye on together: if AI-assisted % creeps up
+    without a corresponding reason (a new hard-to-parse vendor
+    template, say), cost will follow it up.
+    """
+    since = datetime.now(UTC) - timedelta(days=days)
+    with cursor() as cur:
+        cur.execute(
+            """
+            SELECT d.draft_id,
+                   bool_or(fp.extractor = ANY(%s)) AS ai_used
+            FROM drafts d
+            LEFT JOIN field_provenance fp ON fp.parse_run_id = d.draft_id::text
+            WHERE d.created_at >= %s
+            GROUP BY d.draft_id
+            """,
+            (list(_AI_EXTRACTORS), since),
+        )
+        rows = cur.fetchall()
+
+    total = len(rows)
+    ai_assisted = sum(1 for r in rows if r["ai_used"])
+    parser_only = total - ai_assisted
+
+    cost = get_llm_cost_trend(days=days)
+
+    return {
+        "days": days,
+        "total_drafts": total,
+        "parser_only_count": parser_only,
+        "ai_assisted_count": ai_assisted,
+        "parser_only_pct": round(100 * parser_only / total, 1) if total else None,
+        "ai_assisted_pct": round(100 * ai_assisted / total, 1) if total else None,
+        "llm_cost": cost,
+        "cost_per_1000_drafts": (
+            round(1000 * cost["total_cost"] / total, 2) if total and cost.get("available") else None
+        ),
+    }
+
+
+def get_review_queue_report(days: int = 7) -> dict[str, Any]:
+    """Current drafts by status, plus WHY the ones needing review need
+    it -- the record-level warning codes (app/email_parsing/parsers.py:
+    _score_requirement_record) are the actual, specific reason a
+    reviewer has to look at it, not just a blanket "low confidence".
+    """
+    with cursor() as cur:
+        cur.execute("SELECT status, COUNT(*) AS n FROM drafts GROUP BY status")
+        status_counts = {r["status"]: r["n"] for r in cur.fetchall()}
+
+        since = datetime.now(UTC) - timedelta(days=days)
+        cur.execute(
+            """
+            SELECT w.value AS reason, COUNT(*) AS n
+            FROM drafts d,
+                 jsonb_array_elements(d.payload -> 'structured_data' -> 'email_parsing' -> 'records') rec,
+                 jsonb_array_elements_text(rec -> 'warnings') w(value)
+            WHERE d.created_at >= %s
+            GROUP BY w.value
+            ORDER BY n DESC
+            """,
+            (since,),
+        )
+        reasons = [{"reason": r["reason"], "count": r["n"]} for r in cur.fetchall()]
+
+    return {
+        "days": days,
+        "by_status": status_counts,
+        "review_reasons": reasons,
+    }
+
+
+def get_signature_quality_report(days: int = 30) -> dict[str, Any]:
+    """Per-signature-field fill rate, precision (measured from actual
+    reviewer corrections, not just stated confidence), false-positive
+    rate, and confidence calibration -- see app/drafts/accuracy.py.
+
+    Important caveat surfaced here, not hidden: a field with zero
+    recorded corrections shows as 100% precision, but that can mean
+    either "genuinely always correct" or "nobody has been correcting
+    it" -- this function can't tell those apart on its own. A field
+    with high fill volume, low average confidence, AND zero corrections
+    is the pattern worth a manual spot-check rather than trusting the
+    100% at face value.
+    """
+    from app.drafts.accuracy import compute_accuracy_summary
+
+    summary = compute_accuracy_summary(days=days)
+    fields = summary["signature_fields"]
+
+    for f in fields:
+        f["needs_spot_check"] = (
+            f["filled_count"] >= 100
+            and f["corrected_wrong_count"] == 0
+            and (f["avg_stated_confidence"] or 100) < 85
+        )
+
+    return {"days": days, "fields": fields}
+
+
+def get_today_summary() -> dict[str, Any]:
+    """The single top-of-dashboard KPI bar: today's ingestion,
+    classification, parsing, and review-queue snapshot in one call.
+    """
+    ingestion = get_ingestion_health(days=1)
+    classification = get_classification_report(days=1)
+    ai = get_ai_dependency_report(days=1)
+    quality = get_parsing_quality(days=1)
+
+    type_counts = {t["draft_type"]: t["count"] for t in classification["by_type"]}
+
+    return {
+        "emails_received": ingestion["received"],
+        "jobs": type_counts.get("draft_job_requirement", 0),
+        "hotlists": type_counts.get("draft_hotlist", 0),
+        "other": classification["total"] - type_counts.get("draft_job_requirement", 0) - type_counts.get("draft_hotlist", 0),
+        "processing_rate_pct": ingestion["processing_rate_pct"],
+        "needs_review_pct": quality["needs_review_pct"],
+        "parser_only_pct": ai["parser_only_pct"],
+        "ai_assisted_pct": ai["ai_assisted_pct"],
+        "avg_confidence": quality["avg_confidence"],
+    }
+
+
 def get_dashboard_overview() -> dict[str, Any]:
     """Everything the dashboard page needs in one call."""
     return {
+        "today": get_today_summary(),
         "taxonomy": get_taxonomy_overview(),
         "queue_health": get_candidate_queue_health(),
         "triage_activity": get_triage_activity(days=14),
         "llm_cost": get_llm_cost_trend(days=30),
         "parsing_quality": get_parsing_quality(days=7),
+        "ingestion_health": get_ingestion_health(days=7),
+        "classification": get_classification_report(days=7),
+        "ai_dependency": get_ai_dependency_report(days=7),
+        "review_queue": get_review_queue_report(days=7),
+        "signature_quality": get_signature_quality_report(days=30),
         "generated_at": datetime.now(UTC).isoformat(),
     }

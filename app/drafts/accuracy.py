@@ -54,6 +54,29 @@ HOTLIST_CONSULTANT_FIELDS = [
     "expected_rate",
 ]
 
+# Signature parsing (app/email_parsing/signature.py) runs on every
+# email regardless of document kind -- job requirement, hotlist,
+# whatever -- so unlike the two field lists above, this isn't scoped to
+# one draft_type (see draft_type=None handling in _field_accuracy_for_
+# type below).
+SIGNATURE_FIELDS = [
+    "full_name",
+    "first_name",
+    "last_name",
+    "middle_name",
+    "email",
+    "phone",
+    "mobile",
+    "company_name",
+    "website",
+    "job_title",
+    "linkedin_url",
+    "city",
+    "state",
+    "address",
+    "postal_code",
+]
+
 CORRECTION_EXTRACTORS = ("recruiter_correction", "reviewer_correction")
 
 # Below this many extraction attempts, a precision/fill-rate percentage is
@@ -68,33 +91,59 @@ def _is_empty(value) -> bool:
 
 
 def _field_accuracy_for_type(
-    draft_type: str,
+    draft_type: str | None,
     field_path_prefix: str,
     fields: list[str],
     days: int,
     strip_ordinal: bool,
 ) -> dict[str, dict]:
+    """draft_type=None means "across every draft type" -- needed for
+    signature fields, which get extracted regardless of whether the
+    email turned out to be a job requirement, a hotlist, or anything
+    else (app/email_parsing/signature.py runs unconditionally).
+    """
     with cursor() as cur:
-        cur.execute(
-            "SELECT count(*) AS n FROM drafts WHERE draft_type = %s AND created_at > now() - (%s || ' days')::interval",
-            (draft_type, days),
-        )
+        if draft_type is None:
+            cur.execute(
+                "SELECT count(*) AS n FROM drafts WHERE created_at > now() - (%s || ' days')::interval",
+                (days,),
+            )
+        else:
+            cur.execute(
+                "SELECT count(*) AS n FROM drafts WHERE draft_type = %s AND created_at > now() - (%s || ' days')::interval",
+                (draft_type, days),
+            )
         total_drafts = cur.fetchone()["n"]
 
-        cur.execute(
-            """
-            SELECT fp.field_path, fp.extractor, fp.value_kind, fp.raw_value
-            FROM field_provenance fp
-            JOIN drafts d ON d.draft_id::text = fp.parse_run_id
-            WHERE d.draft_type = %s
-              AND fp.field_path LIKE %s
-              AND fp.recorded_at > now() - (%s || ' days')::interval
-            """,
-            (draft_type, f"{field_path_prefix}%", days),
-        )
+        if draft_type is None:
+            cur.execute(
+                """
+                SELECT fp.field_path, fp.extractor, fp.value_kind, fp.raw_value, fp.confidence
+                FROM field_provenance fp
+                JOIN drafts d ON d.draft_id::text = fp.parse_run_id
+                WHERE fp.field_path LIKE %s
+                  AND fp.recorded_at > now() - (%s || ' days')::interval
+                """,
+                (f"{field_path_prefix}%", days),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT fp.field_path, fp.extractor, fp.value_kind, fp.raw_value, fp.confidence
+                FROM field_provenance fp
+                JOIN drafts d ON d.draft_id::text = fp.parse_run_id
+                WHERE d.draft_type = %s
+                  AND fp.field_path LIKE %s
+                  AND fp.recorded_at > now() - (%s || ' days')::interval
+                """,
+                (draft_type, f"{field_path_prefix}%", days),
+            )
         rows = cur.fetchall()
 
-    per_field = {field: {"filled": 0, "corrected_wrong": 0, "corrected_missing": 0} for field in fields}
+    per_field = {
+        field: {"filled": 0, "corrected_wrong": 0, "corrected_missing": 0, "confidence_sum": 0.0}
+        for field in fields
+    }
 
     for row in rows:
         suffix = row["field_path"][len(field_path_prefix):]
@@ -120,6 +169,7 @@ def _field_accuracy_for_type(
                 bucket["corrected_wrong"] += 1
         elif row["value_kind"] != "UNKNOWN":
             bucket["filled"] += 1
+            bucket["confidence_sum"] += row["confidence"] or 0.0
 
     results: dict[str, dict] = {}
 
@@ -133,6 +183,15 @@ def _field_accuracy_for_type(
             else None
         )
         fill_rate = round(100 * filled / total_drafts, 1) if total_drafts > 0 else None
+        avg_confidence = round(100 * bucket["confidence_sum"] / filled, 1) if filled > 0 else None
+        # Positive means Hermes is systematically MORE confident than it
+        # turns out to be correct (overconfident, the dangerous
+        # direction -- a wrong value gets less scrutiny from a reviewer
+        # who trusts the confidence score). Negative means underconfident
+        # -- annoying but safe.
+        calibration_gap = (
+            round(avg_confidence - precision, 1) if avg_confidence is not None and precision is not None else None
+        )
 
         results[field] = {
             "field": field,
@@ -142,6 +201,9 @@ def _field_accuracy_for_type(
             "corrected_wrong_count": corrected_wrong,
             "corrected_missing_count": bucket["corrected_missing"],
             "precision": precision,
+            "false_positive_rate": round(100 - precision, 1) if precision is not None else None,
+            "avg_stated_confidence": avg_confidence,
+            "calibration_gap": calibration_gap,
             "reliable": precision_denominator >= MIN_RELIABLE_SAMPLE,
         }
 
@@ -163,9 +225,20 @@ def compute_accuracy_summary(days: int = 30) -> dict:
         days=days,
         strip_ordinal=True,
     )
+    signature_fields = _field_accuracy_for_type(
+        draft_type=None,
+        field_path_prefix="signature.",
+        fields=SIGNATURE_FIELDS,
+        days=days,
+        strip_ordinal=False,
+    )
+
+    def _sort(fields: dict[str, dict]) -> list[dict]:
+        return sorted(fields.values(), key=lambda f: (f["precision"] is None, f["precision"] or 0))
 
     return {
         "days": days,
-        "job_requirement_fields": sorted(job_fields.values(), key=lambda f: (f["precision"] is None, f["precision"] or 0)),
-        "hotlist_fields": sorted(hotlist_fields.values(), key=lambda f: (f["precision"] is None, f["precision"] or 0)),
+        "job_requirement_fields": _sort(job_fields),
+        "hotlist_fields": _sort(hotlist_fields),
+        "signature_fields": _sort(signature_fields),
     }

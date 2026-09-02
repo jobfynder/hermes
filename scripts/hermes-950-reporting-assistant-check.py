@@ -8,12 +8,18 @@ import json
 from fastapi.testclient import TestClient
 
 from app.assistant.service import answer_query
+from app.drafts.accuracy import compute_accuracy_summary
 from app.main import app
 from app.reporting.service import (
+    get_ai_dependency_report,
     get_candidate_queue_health,
+    get_classification_report,
     get_dashboard_overview,
+    get_ingestion_health,
     get_llm_cost_trend,
     get_parsing_quality,
+    get_review_queue_report,
+    get_signature_quality_report,
     get_taxonomy_overview,
     get_triage_activity,
 )
@@ -97,8 +103,110 @@ def test_parsing_quality_has_expected_shape() -> None:
 
 def test_dashboard_overview_combines_all_sections() -> None:
     result = get_dashboard_overview()
-    for key in ("taxonomy", "queue_health", "triage_activity", "llm_cost", "parsing_quality", "generated_at"):
+    for key in (
+        "today", "taxonomy", "queue_health", "triage_activity", "llm_cost", "parsing_quality",
+        "ingestion_health", "classification", "ai_dependency", "review_queue", "signature_quality",
+        "generated_at",
+    ):
         require(key in result, f"Missing section {key!r}: {list(result.keys())}")
+
+
+def test_ingestion_health_has_expected_shape() -> None:
+    result = get_ingestion_health(days=7)
+    for key in ("received", "parsed", "duplicate", "unaccounted", "processing_rate_pct", "received_per_hour", "by_channel"):
+        require(key in result, f"Missing key {key!r}: {result}")
+
+
+def test_ingestion_health_by_channel_only_counts_received_once() -> None:
+    # Regression test: intake_log gets a "received" row and later a
+    # "parsed" (and sometimes "duplicate") row for the SAME message --
+    # summing every status by channel first reported double the real
+    # inbound volume. by_channel must match the top-level "received"
+    # count exactly (both count the same "received" rows, just grouped
+    # differently).
+    result = get_ingestion_health(days=7)
+    channel_total = sum(result["by_channel"].values())
+    require(
+        channel_total == result["received"],
+        f"by_channel total ({channel_total}) must equal received ({result['received']}), "
+        "not double- or triple-count parsed/duplicate rows for the same message",
+    )
+
+
+def test_classification_report_has_expected_shape() -> None:
+    result = get_classification_report(days=7)
+    require("by_type" in result and "daily" in result, f"Missing keys: {result}")
+    for entry in result["by_type"]:
+        for key in ("draft_type", "count", "pct_of_total", "avg_confidence"):
+            require(key in entry, f"Missing key {key!r} in by_type entry: {entry}")
+
+
+def test_ai_dependency_report_percentages_sum_to_100() -> None:
+    result = get_ai_dependency_report(days=7)
+    if result["total_drafts"] > 0:
+        total_pct = round((result["parser_only_pct"] or 0) + (result["ai_assisted_pct"] or 0))
+        require(
+            total_pct == 100,
+            f"parser_only_pct + ai_assisted_pct must sum to ~100%, got {total_pct}: {result}",
+        )
+
+
+def test_review_queue_report_has_expected_shape() -> None:
+    result = get_review_queue_report(days=7)
+    require("by_status" in result and "review_reasons" in result, f"Missing keys: {result}")
+    for entry in result["review_reasons"]:
+        require("reason" in entry and "count" in entry, f"Malformed review reason entry: {entry}")
+
+
+def test_signature_quality_report_covers_the_reported_false_extraction_fields() -> None:
+    # The user's own screenshot showed the signature parser mis-
+    # extracting a full job title/skills phrase as a person's name and
+    # company -- confirms the report actually covers those exact fields
+    # (full_name/first_name/last_name/company_name), not a stale field
+    # list that would silently miss them.
+    result = get_signature_quality_report(days=30)
+    field_names = {f["field"] for f in result["fields"]}
+    for expected in ("full_name", "first_name", "last_name", "company_name", "email", "job_title"):
+        require(expected in field_names, f"Signature quality report must cover {expected!r}: {field_names}")
+
+
+def test_signature_quality_flags_low_confidence_zero_correction_fields_for_spot_check() -> None:
+    result = get_signature_quality_report(days=30)
+    for entry in result["fields"]:
+        require("needs_spot_check" in entry, f"Missing needs_spot_check flag: {entry}")
+
+
+def test_compute_accuracy_summary_includes_signature_fields() -> None:
+    # Regression test for the confidence-vs-correctness gap flagged by
+    # the user: precision here is measured from ACTUAL reviewer
+    # corrections (field_provenance rows with extractor in
+    # recruiter_correction/reviewer_correction), not just the parser's
+    # own stated confidence -- a field can show high confidence and
+    # still have a real, measured false-positive rate if reviewers have
+    # been correcting it.
+    result = compute_accuracy_summary(days=30)
+    require("signature_fields" in result, f"Missing 'signature_fields': {list(result.keys())}")
+    for entry in result["signature_fields"]:
+        for key in ("false_positive_rate", "avg_stated_confidence", "calibration_gap"):
+            require(key in entry, f"Missing key {key!r} in signature field entry: {entry}")
+
+
+def test_reports_ingestion_health_endpoint() -> None:
+    app.dependency_overrides[get_current_user] = lambda: {"id": "test", "permissions": ["*"]}
+    try:
+        response = client.get("/reports/ingestion-health")
+        require(response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_reports_signature_quality_endpoint() -> None:
+    app.dependency_overrides[get_current_user] = lambda: {"id": "test", "permissions": ["*"]}
+    try:
+        response = client.get("/reports/signature-quality")
+        require(response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 def test_assistant_answers_gracefully_without_llm_configured() -> None:
@@ -154,6 +262,36 @@ def main() -> None:
 
     test_dashboard_overview_combines_all_sections()
     print("PASS: dashboard overview combines every section in one call")
+
+    test_ingestion_health_has_expected_shape()
+    print("PASS: ingestion health returns the expected shape")
+
+    test_ingestion_health_by_channel_only_counts_received_once()
+    print("PASS: ingestion health by-channel counts match received, not double-counted")
+
+    test_classification_report_has_expected_shape()
+    print("PASS: classification report returns the expected shape")
+
+    test_ai_dependency_report_percentages_sum_to_100()
+    print("PASS: AI dependency parser-only/AI-assisted percentages sum to 100%")
+
+    test_review_queue_report_has_expected_shape()
+    print("PASS: review queue report returns the expected shape")
+
+    test_signature_quality_report_covers_the_reported_false_extraction_fields()
+    print("PASS: signature quality report covers the fields from the reported false-extraction incident")
+
+    test_signature_quality_flags_low_confidence_zero_correction_fields_for_spot_check()
+    print("PASS: signature quality report flags low-confidence zero-correction fields for spot-check")
+
+    test_compute_accuracy_summary_includes_signature_fields()
+    print("PASS: accuracy summary measures signature-field precision from real corrections, not just confidence")
+
+    test_reports_ingestion_health_endpoint()
+    print("PASS: GET /reports/ingestion-health returns 200")
+
+    test_reports_signature_quality_endpoint()
+    print("PASS: GET /reports/signature-quality returns 200")
 
     test_assistant_answers_gracefully_without_llm_configured()
     print("PASS: the assistant answers gracefully without an LLM configured")

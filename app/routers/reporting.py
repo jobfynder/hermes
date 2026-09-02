@@ -3,10 +3,15 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from app.reporting.service import (
+    get_ai_dependency_report,
     get_candidate_queue_health,
+    get_classification_report,
     get_dashboard_overview,
+    get_ingestion_health,
     get_llm_cost_trend,
     get_parsing_quality,
+    get_review_queue_report,
+    get_signature_quality_report,
     get_taxonomy_overview,
     get_triage_activity,
 )
@@ -62,3 +67,43 @@ def parsing_quality(
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_parsing_quality(days=days)
+
+
+@router.get("/ingestion-health")
+def ingestion_health(
+    days: int = 7,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> dict[str, Any]:
+    return get_ingestion_health(days=days)
+
+
+@router.get("/classification")
+def classification_report(
+    days: int = 7,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> dict[str, Any]:
+    return get_classification_report(days=days)
+
+
+@router.get("/ai-dependency")
+def ai_dependency_report(
+    days: int = 7,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> dict[str, Any]:
+    return get_ai_dependency_report(days=days)
+
+
+@router.get("/review-queue")
+def review_queue_report(
+    days: int = 7,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> dict[str, Any]:
+    return get_review_queue_report(days=days)
+
+
+@router.get("/signature-quality")
+def signature_quality_report(
+    days: int = 30,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> dict[str, Any]:
+    return get_signature_quality_report(days=days)

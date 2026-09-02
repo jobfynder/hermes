@@ -31,10 +31,15 @@ from typing import Any, Callable
 from app.prompt_runtime.models import PromptRenderedMessage
 from app.prompt_runtime.service import _call_litellm_with_model, litellm_configured
 from app.reporting.service import (
+    get_ai_dependency_report,
     get_candidate_queue_health,
+    get_classification_report,
     get_dashboard_overview,
+    get_ingestion_health,
     get_llm_cost_trend,
     get_parsing_quality,
+    get_review_queue_report,
+    get_signature_quality_report,
     get_taxonomy_overview,
     get_triage_activity,
 )
@@ -91,6 +96,47 @@ _TOOLS: dict[str, tuple[str, Callable[..., Any], list[str]]] = {
         "needing human review, and a breakdown by draft type. Parameter: days (int, "
         "default 7) -- how many days back to look.",
         get_parsing_quality,
+        ["days"],
+    ),
+    "ingestion_health": (
+        "Raw email intake: how many arrived, how many were successfully parsed, how "
+        "many were duplicates, the processing success rate, emails received per hour, "
+        "and a breakdown by channel (email, etc). Parameter: days (int, default 7).",
+        get_ingestion_health,
+        ["days"],
+    ),
+    "classification_report": (
+        "How incoming email got classified -- counts and average confidence per draft "
+        "type (job requirement, hotlist, etc), plus a daily trend. Parameter: days "
+        "(int, default 7).",
+        get_classification_report,
+        ["days"],
+    ),
+    "ai_dependency_report": (
+        "What share of drafts needed an LLM call versus were handled by the "
+        "deterministic parser alone (parser-only vs AI-assisted), plus LLM cost over "
+        "the same window and cost per 1000 drafts. Parameter: days (int, default 7).",
+        get_ai_dependency_report,
+        ["days"],
+    ),
+    "review_queue_report": (
+        "Drafts by status (draft/needs_review/published/spam), plus the specific "
+        "reasons drafts need review (missing company, missing job title, missing "
+        "skills, etc) ranked by frequency. Parameter: days (int, default 7) -- affects "
+        "only the review-reason breakdown, not the status counts (which are always "
+        "current). ",
+        get_review_queue_report,
+        ["days"],
+    ),
+    "signature_quality_report": (
+        "Per-field accuracy for the email SIGNATURE parser (sender name, email, "
+        "company, phone, job title, address, etc) -- fill rate, precision measured "
+        "from actual human corrections (not just stated confidence), false-positive "
+        "rate, and a confidence-calibration gap (positive means Hermes is more "
+        "confident than it turns out to be correct). Use this for any question about "
+        "signature/sender-name/company extraction quality or false positives. "
+        "Parameter: days (int, default 30).",
+        get_signature_quality_report,
         ["days"],
     ),
     "dashboard_overview": (

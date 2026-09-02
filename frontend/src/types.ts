@@ -259,7 +259,84 @@ export interface QueueHealthEntry {
   oldest_pending_days: number
 }
 
+export interface TodaySummary {
+  emails_received: number
+  jobs: number
+  hotlists: number
+  other: number
+  processing_rate_pct: number | null
+  needs_review_pct: number | null
+  parser_only_pct: number | null
+  ai_assisted_pct: number | null
+  avg_confidence: number | null
+}
+
+export interface IngestionHealth {
+  days: number
+  received: number
+  parsed: number
+  duplicate: number
+  unaccounted: number
+  processing_rate_pct: number | null
+  received_per_hour: number
+  by_channel: Record<string, number>
+}
+
+export interface ClassificationReport {
+  days: number
+  total: number
+  by_type: {
+    draft_type: string
+    count: number
+    pct_of_total: number | null
+    avg_confidence: number | null
+  }[]
+  daily: Record<string, string | number>[]
+}
+
+export interface AiDependencyReport {
+  days: number
+  total_drafts: number
+  parser_only_count: number
+  ai_assisted_count: number
+  parser_only_pct: number | null
+  ai_assisted_pct: number | null
+  llm_cost: {
+    available: boolean
+    days: { date: string; cost: number; traces: number }[]
+    total_cost?: number
+  }
+  cost_per_1000_drafts: number | null
+}
+
+export interface ReviewQueueReport {
+  days: number
+  by_status: Record<string, number>
+  review_reasons: { reason: string; count: number }[]
+}
+
+export interface FieldAccuracyEntry {
+  field: string
+  total_drafts: number
+  filled_count: number
+  fill_rate: number | null
+  corrected_wrong_count: number
+  corrected_missing_count: number
+  precision: number | null
+  false_positive_rate: number | null
+  avg_stated_confidence: number | null
+  calibration_gap: number | null
+  reliable: boolean
+  needs_spot_check?: boolean
+}
+
+export interface SignatureQualityReport {
+  days: number
+  fields: FieldAccuracyEntry[]
+}
+
 export interface DashboardOverview {
+  today: TodaySummary
   taxonomy: {
     total_skills: number
     total_job_titles: number
@@ -291,6 +368,11 @@ export interface DashboardOverview {
     needs_review_pct: number | null
     by_type: Record<string, number>
   }
+  ingestion_health: IngestionHealth
+  classification: ClassificationReport
+  ai_dependency: AiDependencyReport
+  review_queue: ReviewQueueReport
+  signature_quality: SignatureQualityReport
   generated_at: string
 }
 
