@@ -617,7 +617,7 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
 
       <CandidateSection
         title="Taxonomy candidates"
-        description={`Skill and job-title terms Hermes doesn't recognize yet, seen in real postings (${taxonomyCandidates.filter((c) => c.signal_type === 'skill').length} skill, ${taxonomyCandidates.filter((c) => c.signal_type === 'job_title').length} job title). Approving adds it to the matching taxonomy immediately — skills and job titles are always kept in separate files, never mixed.`}
+        description={`Skill and job-title terms Hermes doesn't recognize yet, seen in real postings (${taxonomyCandidates.filter((c) => c.signal_type === 'skill').length} skill, ${taxonomyCandidates.filter((c) => c.signal_type === 'job_title').length} job title). Approving adds it to the matching taxonomy immediately — skills and job titles are always kept in separate files, never mixed. A daily automated pass reviews new ones each morning, so this list should normally be short.`}
         emptyMessage="No new terms waiting for review."
         termLabel="Term"
         searchPlaceholder="Search term or sender domain…"
@@ -628,7 +628,7 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
 
       <CandidateSection
         title="Boilerplate patterns"
-        description="Recurring footer/signature lines seen across 3+ different senders that the automatic cleaner doesn't already strip out of job descriptions. Approving removes this exact line from every future posting immediately."
+        description="Recurring footer/signature lines seen across 8+ different senders that the automatic cleaner doesn't already strip out of job descriptions. Approving removes this exact line from every future posting immediately. A daily automated pass reviews new ones each morning, so this list should normally be short."
         emptyMessage="No recurring boilerplate lines waiting for review yet."
         termLabel="Line"
         searchPlaceholder="Search line text or sender domain…"
