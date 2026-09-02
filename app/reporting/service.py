@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.runtime.db import cursor
-from app.understanding.taxonomy.candidates import _MIN_BOILERPLATE_DISTINCT_SENDERS
+from app.understanding.taxonomy.candidates import _MIN_BOILERPLATE_DISTINCT_SENDERS, _is_noise_skill_term
 from app.understanding.taxonomy.loader import get_canonical_skill_entries, get_job_title_entries
 
 # Automated reviewers -- distinguishes "the daily triage job cleared
@@ -426,6 +426,163 @@ def get_signature_quality_report(days: int = 30) -> dict[str, Any]:
     return {"days": days, "fields": fields}
 
 
+def get_recruitment_intelligence(days: int = 30, limit: int = 15) -> dict[str, Any]:
+    """What's actually in the postings coming through Hermes -- turns
+    ingestion into Jobfynder market intelligence rather than just a
+    parsing-health signal.
+
+    top_skills comes from skill_usage_stats, which is a cumulative
+    all-time counter (no per-day breakdown exists in that table), so it
+    deliberately ignores `days` -- documented via all_time=True rather
+    than silently pretending it's windowed. It also filters through the
+    SAME _is_noise_skill_term() check the daily triage job uses: a
+    canonical taxonomy entry approved before that filter existed can
+    still be junk (caught here first-hand -- "https" was the single
+    most-tracked "skill" at ~4,950 occurrences, a URL-scheme fragment
+    that slipped through as a taxonomy candidate before the noise
+    filter was added). Filtering here fixes what the report SHOWS
+    without touching the canonical taxonomy file itself.
+
+    Everything else (job titles, locations, employment type, work
+    authorization, rate presence) is windowed by `days` and pulled from
+    job_requirement records, the actual structured postings.
+    """
+    skill_rows = []
+    with cursor() as cur:
+        cur.execute(
+            "SELECT skill_name, times_seen FROM skill_usage_stats ORDER BY times_seen DESC LIMIT %s",
+            (limit * 3,),  # over-fetch since some will be filtered as noise
+        )
+        for r in cur.fetchall():
+            if not _is_noise_skill_term(r["skill_name"]):
+                skill_rows.append({"skill": r["skill_name"], "times_seen": r["times_seen"]})
+            if len(skill_rows) >= limit:
+                break
+
+        since = datetime.now(UTC) - timedelta(days=days)
+        cur.execute(
+            "SELECT title.value AS title, COUNT(*) AS n "
+            "FROM drafts d, jsonb_array_elements_text(d.normalized_job_titles) title "
+            "WHERE d.created_at >= %s AND jsonb_array_length(d.normalized_job_titles) > 0 "
+            "GROUP BY title.value ORDER BY n DESC LIMIT %s",
+            (since, limit),
+        )
+        top_job_titles = [{"title": r["title"], "count": r["n"]} for r in cur.fetchall()]
+
+        cur.execute(
+            """
+            SELECT rec->>'location' AS location,
+                   rec->>'employment_type' AS employment_type,
+                   rec->>'work_authorization' AS work_authorization,
+                   rec->>'rate_or_salary' AS rate_or_salary
+            FROM drafts d,
+                 jsonb_array_elements(d.payload -> 'structured_data' -> 'email_parsing' -> 'records') rec
+            WHERE d.draft_type = 'draft_job_requirement' AND d.created_at >= %s
+            """,
+            (since,),
+        )
+        record_rows = cur.fetchall()
+
+    def _top_counts(field: str, n: int = limit) -> list[dict[str, Any]]:
+        counts: dict[str, int] = {}
+        for row in record_rows:
+            value = (row[field] or "").strip()
+            if not value:
+                continue
+            counts[value] = counts.get(value, 0) + 1
+        ranked = sorted(counts.items(), key=lambda kv: -kv[1])[:n]
+        return [{"value": v, "count": c} for v, c in ranked]
+
+    total_records = len(record_rows)
+    rate_specified = sum(1 for r in record_rows if (r["rate_or_salary"] or "").strip())
+
+    return {
+        "days": days,
+        "top_skills": skill_rows,
+        "top_skills_all_time": True,
+        "top_job_titles": top_job_titles,
+        "top_locations": _top_counts("location"),
+        "top_employment_types": _top_counts("employment_type"),
+        "top_work_authorizations": _top_counts("work_authorization"),
+        "total_job_records": total_records,
+        "rate_specified_count": rate_specified,
+        "rate_specified_pct": round(100 * rate_specified / total_records, 1) if total_records else None,
+    }
+
+
+def get_sender_intelligence(days: int = 30, limit: int = 15) -> dict[str, Any]:
+    """Begins building recruiter/company relationship intelligence: who
+    is actually sending Hermes postings, how much of it is jobs vs
+    hotlists, how reliable each sender's parses are, and how much of
+    their volume is exact-content resends rather than new postings.
+
+    Duplicate detection reuses metadata.exact_content_duplicate_of (set
+    in app/channels/service.py at intake time, when a draft's content
+    exactly matches an earlier draft's) rather than inventing a new
+    definition of "duplicate" here.
+
+    Grouped by sender email address, with a separate domain-level
+    rollup (the same recruiter often sends from more than one mailbox
+    at the same company).
+    """
+    since = datetime.now(UTC) - timedelta(days=days)
+    with cursor() as cur:
+        cur.execute(
+            "SELECT metadata -> 'sender' ->> 'email' AS sender_email, "
+            "draft_type, confidence, "
+            "(metadata ->> 'exact_content_duplicate_of') IS NOT NULL AS is_duplicate "
+            "FROM drafts WHERE created_at >= %s",
+            (since,),
+        )
+        rows = cur.fetchall()
+
+    by_sender: dict[str, dict[str, Any]] = {}
+    by_domain: dict[str, dict[str, Any]] = {}
+
+    for row in rows:
+        email = (row["sender_email"] or "").strip().lower()
+        if not email or "@" not in email:
+            continue
+        domain = email.split("@")[-1]
+
+        for bucket_map, key in ((by_sender, email), (by_domain, domain)):
+            bucket = bucket_map.setdefault(
+                key, {"total": 0, "jobs": 0, "hotlists": 0, "confidence_sum": 0.0, "duplicates": 0}
+            )
+            bucket["total"] += 1
+            if row["draft_type"] == "draft_job_requirement":
+                bucket["jobs"] += 1
+            elif row["draft_type"] == "draft_hotlist":
+                bucket["hotlists"] += 1
+            bucket["confidence_sum"] += row["confidence"] or 0.0
+            if row["is_duplicate"]:
+                bucket["duplicates"] += 1
+
+    def _rank(bucket_map: dict[str, dict[str, Any]], id_field: str) -> list[dict[str, Any]]:
+        ranked = sorted(bucket_map.items(), key=lambda kv: -kv[1]["total"])[:limit]
+        return [
+            {
+                id_field: key,
+                "total_drafts": b["total"],
+                "jobs": b["jobs"],
+                "hotlists": b["hotlists"],
+                "other": b["total"] - b["jobs"] - b["hotlists"],
+                "avg_confidence": round(b["confidence_sum"] / b["total"], 3) if b["total"] else None,
+                "duplicate_count": b["duplicates"],
+                "duplicate_pct": round(100 * b["duplicates"] / b["total"], 1) if b["total"] else None,
+            }
+            for key, b in ranked
+        ]
+
+    return {
+        "days": days,
+        "total_senders": len(by_sender),
+        "total_domains": len(by_domain),
+        "top_senders": _rank(by_sender, "sender_email"),
+        "top_domains": _rank(by_domain, "domain"),
+    }
+
+
 def get_today_summary() -> dict[str, Any]:
     """The single top-of-dashboard KPI bar: today's ingestion,
     classification, parsing, and review-queue snapshot in one call.
@@ -464,5 +621,7 @@ def get_dashboard_overview() -> dict[str, Any]:
         "ai_dependency": get_ai_dependency_report(days=7),
         "review_queue": get_review_queue_report(days=7),
         "signature_quality": get_signature_quality_report(days=30),
+        "recruitment_intelligence": get_recruitment_intelligence(days=30),
+        "sender_intelligence": get_sender_intelligence(days=30),
         "generated_at": datetime.now(UTC).isoformat(),
     }

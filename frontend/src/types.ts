@@ -335,6 +335,44 @@ export interface SignatureQualityReport {
   fields: FieldAccuracyEntry[]
 }
 
+export interface RankedCount {
+  value: string
+  count: number
+}
+
+export interface RecruitmentIntelligence {
+  days: number
+  top_skills: { skill: string; times_seen: number }[]
+  top_skills_all_time: boolean
+  top_job_titles: { title: string; count: number }[]
+  top_locations: RankedCount[]
+  top_employment_types: RankedCount[]
+  top_work_authorizations: RankedCount[]
+  total_job_records: number
+  rate_specified_count: number
+  rate_specified_pct: number | null
+}
+
+export interface SenderIntelligenceEntry {
+  sender_email?: string
+  domain?: string
+  total_drafts: number
+  jobs: number
+  hotlists: number
+  other: number
+  avg_confidence: number | null
+  duplicate_count: number
+  duplicate_pct: number | null
+}
+
+export interface SenderIntelligence {
+  days: number
+  total_senders: number
+  total_domains: number
+  top_senders: SenderIntelligenceEntry[]
+  top_domains: SenderIntelligenceEntry[]
+}
+
 export interface DashboardOverview {
   today: TodaySummary
   taxonomy: {
@@ -373,6 +411,8 @@ export interface DashboardOverview {
   ai_dependency: AiDependencyReport
   review_queue: ReviewQueueReport
   signature_quality: SignatureQualityReport
+  recruitment_intelligence: RecruitmentIntelligence
+  sender_intelligence: SenderIntelligence
   generated_at: string
 }
 

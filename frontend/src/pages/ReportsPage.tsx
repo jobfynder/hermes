@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { DashboardOverview, FieldAccuracyEntry } from '../types'
+import type { DashboardOverview, FieldAccuracyEntry, RankedCount, SenderIntelligenceEntry } from '../types'
 
 type Tab = 'overview' | 'ingestion' | 'parser_quality' | 'ai_cost' | 'recruitment' | 'sender' | 'exceptions'
 
@@ -141,6 +141,83 @@ function FieldAccuracyTable({ fields, title, note }: { fields: FieldAccuracyEntr
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+function RankedList({
+  title,
+  items,
+  emptyLabel = 'No data in this window.',
+}: {
+  title: string
+  items: { label: string; count: number }[]
+  emptyLabel?: string
+}) {
+  const max = Math.max(...items.map((i) => i.count), 1)
+  return (
+    <div className="rounded-xl border border-line bg-surface p-4">
+      <h3 className="mb-3 text-sm font-semibold text-ink">{title}</h3>
+      {items.length === 0 ? (
+        <div className="py-4 text-center text-xs text-ink-soft">{emptyLabel}</div>
+      ) : (
+        <ul className="space-y-2">
+          {items.map((item, i) => (
+            <li key={item.label + i} className="flex items-center gap-3">
+              <span className="w-5 shrink-0 text-right text-xs tabular-nums text-ink-soft">{i + 1}</span>
+              <span className="w-40 shrink-0 truncate text-sm text-ink" title={item.label}>{item.label}</span>
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-line/60">
+                <div className="h-full rounded-full bg-accent" style={{ width: `${Math.max(4, (item.count / max) * 100)}%` }} />
+              </div>
+              <span className="w-14 shrink-0 text-right text-xs font-medium tabular-nums text-ink">{item.count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function rankedCountsToItems(counts: RankedCount[]): { label: string; count: number }[] {
+  return counts.map((c) => ({ label: c.value, count: c.count }))
+}
+
+function SenderTable({ title, entries, idKey }: { title: string; entries: SenderIntelligenceEntry[]; idKey: 'sender_email' | 'domain' }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface p-4">
+      <h3 className="mb-3 text-sm font-semibold text-ink">{title}</h3>
+      {entries.length === 0 ? (
+        <div className="py-4 text-center text-xs text-ink-soft">No senders in this window.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
+                <th className="px-2 py-2 font-medium">{idKey === 'domain' ? 'Domain' : 'Sender'}</th>
+                <th className="px-2 py-2 font-medium">Total</th>
+                <th className="px-2 py-2 font-medium">Jobs</th>
+                <th className="px-2 py-2 font-medium">Hotlists</th>
+                <th className="px-2 py-2 font-medium">Avg confidence</th>
+                <th className="px-2 py-2 font-medium">Duplicates</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((e, i) => (
+                <tr key={(e[idKey] ?? '') + i} className="border-b border-line last:border-0">
+                  <td className="px-2 py-2 font-medium text-ink">{e[idKey]}</td>
+                  <td className="px-2 py-2 text-ink-soft">{e.total_drafts}</td>
+                  <td className="px-2 py-2 text-ink-soft">{e.jobs}</td>
+                  <td className="px-2 py-2 text-ink-soft">{e.hotlists}</td>
+                  <td className="px-2 py-2 text-ink-soft">{e.avg_confidence === null ? '—' : pct(Math.round(e.avg_confidence * 100))}</td>
+                  <td className="px-2 py-2 text-ink-soft">
+                    {e.duplicate_count === 0 ? '—' : `${e.duplicate_count} (${pct(e.duplicate_pct)})`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -418,8 +495,55 @@ export function ReportsPage({ onBack }: { onBack: () => void }) {
             </>
           )}
 
-          {tab === 'recruitment' && <ComingSoon title="Recruitment Data Intelligence" />}
-          {tab === 'sender' && <ComingSoon title="Sender Intelligence" />}
+          {tab === 'recruitment' && (
+            <>
+              <section>
+                <h2 className="mb-3 text-sm font-semibold text-ink">Recruitment intelligence (last {data.recruitment_intelligence.days} days, top skills all-time)</h2>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <StatCard label="Job records" value={data.recruitment_intelligence.total_job_records} />
+                  <StatCard label="Rate/salary specified" value={pct(data.recruitment_intelligence.rate_specified_pct)} sub={`${data.recruitment_intelligence.rate_specified_count} of ${data.recruitment_intelligence.total_job_records}`} />
+                  <StatCard label="Top skills tracked" value={data.recruitment_intelligence.top_skills.length} sub="excludes taxonomy noise" />
+                  <StatCard label="Top job titles" value={data.recruitment_intelligence.top_job_titles.length} />
+                </div>
+              </section>
+
+              <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <RankedList
+                  title="Top skills requested (all-time)"
+                  items={data.recruitment_intelligence.top_skills.map((s) => ({ label: s.skill, count: s.times_seen }))}
+                />
+                <RankedList
+                  title="Top job titles"
+                  items={data.recruitment_intelligence.top_job_titles.map((t) => ({ label: t.title, count: t.count }))}
+                />
+              </section>
+
+              <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                <RankedList title="Top locations" items={rankedCountsToItems(data.recruitment_intelligence.top_locations)} />
+                <RankedList title="Employment types" items={rankedCountsToItems(data.recruitment_intelligence.top_employment_types)} />
+                <RankedList title="Work authorization" items={rankedCountsToItems(data.recruitment_intelligence.top_work_authorizations)} />
+              </section>
+            </>
+          )}
+
+          {tab === 'sender' && (
+            <>
+              <section>
+                <h2 className="mb-3 text-sm font-semibold text-ink">Sender intelligence (last {data.sender_intelligence.days} days)</h2>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <StatCard label="Distinct senders" value={data.sender_intelligence.total_senders} />
+                  <StatCard label="Distinct domains" value={data.sender_intelligence.total_domains} />
+                </div>
+              </section>
+              <section>
+                <SenderTable title="Top senders" entries={data.sender_intelligence.top_senders} idKey="sender_email" />
+              </section>
+              <section>
+                <SenderTable title="Top domains" entries={data.sender_intelligence.top_domains} idKey="domain" />
+              </section>
+            </>
+          )}
+
           {tab === 'exceptions' && <ComingSoon title="Data Quality Exceptions" />}
         </div>
       )}

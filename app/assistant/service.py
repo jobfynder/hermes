@@ -38,7 +38,9 @@ from app.reporting.service import (
     get_ingestion_health,
     get_llm_cost_trend,
     get_parsing_quality,
+    get_recruitment_intelligence,
     get_review_queue_report,
+    get_sender_intelligence,
     get_signature_quality_report,
     get_taxonomy_overview,
     get_triage_activity,
@@ -138,6 +140,26 @@ _TOOLS: dict[str, tuple[str, Callable[..., Any], list[str]]] = {
         "Parameter: days (int, default 30).",
         get_signature_quality_report,
         ["days"],
+    ),
+    "recruitment_intelligence": (
+        "Market intelligence from actual job postings: top skills requested (all-time), "
+        "top job titles, top locations, employment types, and work authorization "
+        "requirements, plus what share of postings state a rate/salary. Use this for "
+        "any question about what skills/roles/locations are trending in demand. "
+        "Parameters: days (int, default 30, windows everything except top_skills which "
+        "is all-time), limit (int, default 15).",
+        get_recruitment_intelligence,
+        ["days", "limit"],
+    ),
+    "sender_intelligence": (
+        "Recruiter/company relationship intelligence: top senders and sender domains by "
+        "volume, how many are jobs vs hotlists, average parse confidence per sender, and "
+        "what share of a sender's postings are exact-content duplicates (resends of the "
+        "same content). Use this for any question about which senders/companies send "
+        "the most, or about duplicate/repeat postings. Parameters: days (int, default "
+        "30), limit (int, default 15).",
+        get_sender_intelligence,
+        ["days", "limit"],
     ),
     "dashboard_overview": (
         "Everything at once: taxonomy overview + queue health + 14-day triage activity "

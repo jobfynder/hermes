@@ -18,14 +18,16 @@ from app.reporting.service import (
     get_ingestion_health,
     get_llm_cost_trend,
     get_parsing_quality,
+    get_recruitment_intelligence,
     get_review_queue_report,
+    get_sender_intelligence,
     get_signature_quality_report,
     get_taxonomy_overview,
     get_triage_activity,
 )
 from app.runtime.db import cursor
 from app.security.rbac import get_current_user
-from app.understanding.taxonomy.candidates import _upsert_candidate
+from app.understanding.taxonomy.candidates import _upsert_candidate, _is_noise_skill_term
 
 client = TestClient(app)
 
@@ -191,6 +193,73 @@ def test_compute_accuracy_summary_includes_signature_fields() -> None:
             require(key in entry, f"Missing key {key!r} in signature field entry: {entry}")
 
 
+def test_recruitment_intelligence_has_expected_shape() -> None:
+    result = get_recruitment_intelligence(days=30, limit=5)
+    for key in (
+        "top_skills", "top_skills_all_time", "top_job_titles", "top_locations",
+        "top_employment_types", "top_work_authorizations",
+        "total_job_records", "rate_specified_count", "rate_specified_pct",
+    ):
+        require(key in result, f"Missing key {key!r}: {list(result.keys())}")
+    require(len(result["top_skills"]) <= 5, f"limit=5 must be respected: {result['top_skills']}")
+
+
+def test_recruitment_intelligence_top_skills_excludes_noise_terms() -> None:
+    # Regression test: "https" was the single most-tracked "skill" in
+    # skill_usage_stats (~4,950 occurrences) -- a URL-scheme fragment
+    # approved as a taxonomy candidate before the noise filter existed.
+    # top_skills must filter through the SAME _is_noise_skill_term()
+    # check the daily triage job uses, not just report raw counts.
+    result = get_recruitment_intelligence(days=30, limit=15)
+    for entry in result["top_skills"]:
+        require(
+            not _is_noise_skill_term(entry["skill"]),
+            f"top_skills must not include noise terms like 'https': {entry}",
+        )
+
+
+def test_sender_intelligence_has_expected_shape() -> None:
+    result = get_sender_intelligence(days=30, limit=5)
+    for key in ("total_senders", "total_domains", "top_senders", "top_domains"):
+        require(key in result, f"Missing key {key!r}: {list(result.keys())}")
+    for entry in result["top_senders"]:
+        for key in ("sender_email", "total_drafts", "jobs", "hotlists", "avg_confidence", "duplicate_count", "duplicate_pct"):
+            require(key in entry, f"Missing key {key!r} in sender entry: {entry}")
+
+
+def test_sender_intelligence_jobs_hotlists_other_sum_to_total() -> None:
+    result = get_sender_intelligence(days=30, limit=15)
+    for entry in result["top_senders"]:
+        require(
+            entry["jobs"] + entry["hotlists"] + entry["other"] == entry["total_drafts"],
+            f"jobs+hotlists+other must equal total_drafts: {entry}",
+        )
+
+
+def test_dashboard_overview_includes_recruitment_and_sender_intelligence() -> None:
+    result = get_dashboard_overview()
+    for key in ("recruitment_intelligence", "sender_intelligence"):
+        require(key in result, f"Missing section {key!r}: {list(result.keys())}")
+
+
+def test_reports_recruitment_intelligence_endpoint() -> None:
+    app.dependency_overrides[get_current_user] = lambda: {"id": "test", "permissions": ["*"]}
+    try:
+        response = client.get("/reports/recruitment-intelligence")
+        require(response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_reports_sender_intelligence_endpoint() -> None:
+    app.dependency_overrides[get_current_user] = lambda: {"id": "test", "permissions": ["*"]}
+    try:
+        response = client.get("/reports/sender-intelligence")
+        require(response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_reports_ingestion_health_endpoint() -> None:
     app.dependency_overrides[get_current_user] = lambda: {"id": "test", "permissions": ["*"]}
     try:
@@ -286,6 +355,27 @@ def main() -> None:
 
     test_compute_accuracy_summary_includes_signature_fields()
     print("PASS: accuracy summary measures signature-field precision from real corrections, not just confidence")
+
+    test_recruitment_intelligence_has_expected_shape()
+    print("PASS: recruitment intelligence returns the expected shape")
+
+    test_recruitment_intelligence_top_skills_excludes_noise_terms()
+    print("PASS: recruitment intelligence top skills excludes noise terms like 'https'")
+
+    test_sender_intelligence_has_expected_shape()
+    print("PASS: sender intelligence returns the expected shape")
+
+    test_sender_intelligence_jobs_hotlists_other_sum_to_total()
+    print("PASS: sender intelligence jobs+hotlists+other sums to total_drafts")
+
+    test_dashboard_overview_includes_recruitment_and_sender_intelligence()
+    print("PASS: dashboard overview includes recruitment and sender intelligence")
+
+    test_reports_recruitment_intelligence_endpoint()
+    print("PASS: GET /reports/recruitment-intelligence returns 200")
+
+    test_reports_sender_intelligence_endpoint()
+    print("PASS: GET /reports/sender-intelligence returns 200")
 
     test_reports_ingestion_health_endpoint()
     print("PASS: GET /reports/ingestion-health returns 200")

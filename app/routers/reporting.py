@@ -10,7 +10,9 @@ from app.reporting.service import (
     get_ingestion_health,
     get_llm_cost_trend,
     get_parsing_quality,
+    get_recruitment_intelligence,
     get_review_queue_report,
+    get_sender_intelligence,
     get_signature_quality_report,
     get_taxonomy_overview,
     get_triage_activity,
@@ -107,3 +109,21 @@ def signature_quality_report(
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_signature_quality_report(days=days)
+
+
+@router.get("/recruitment-intelligence")
+def recruitment_intelligence(
+    days: int = 30,
+    limit: int = 15,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> dict[str, Any]:
+    return get_recruitment_intelligence(days=days, limit=limit)
+
+
+@router.get("/sender-intelligence")
+def sender_intelligence(
+    days: int = 30,
+    limit: int = 15,
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> dict[str, Any]:
+    return get_sender_intelligence(days=days, limit=limit)
