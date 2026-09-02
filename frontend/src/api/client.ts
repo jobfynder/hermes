@@ -1,8 +1,10 @@
 import type {
   AccuracySummary,
+  AssistantQueryResult,
   BlocklistEntry,
   CanonicalSkillEntry,
   ClaimPrepareResult,
+  DashboardOverview,
   DeleteDraftResult,
   DraftObject,
   DraftObjectType,
@@ -222,4 +224,10 @@ export const api = {
       backfilled_count: number
       backfilled_titles: string[]
     }>('/taxonomy/job-titles/backfill-related-titles', { method: 'POST' }),
+  getDashboardOverview: () => request<DashboardOverview>('/reports/overview'),
+  assistantQuery: (question: string, history: { role: string; content: string }[]) =>
+    request<AssistantQueryResult>('/assistant/query', {
+      method: 'POST',
+      body: JSON.stringify({ question, history }),
+    }),
 }

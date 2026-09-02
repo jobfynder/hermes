@@ -253,3 +253,49 @@ export interface JobTitleEntry {
   confidence: string | null
   source: string | null
 }
+
+export interface QueueHealthEntry {
+  pending_count: number
+  oldest_pending_days: number
+}
+
+export interface DashboardOverview {
+  taxonomy: {
+    total_skills: number
+    total_job_titles: number
+    skills_added_7d: number
+    skills_added_30d: number
+    job_titles_added_7d: number
+    job_titles_added_30d: number
+  }
+  queue_health: {
+    skill: QueueHealthEntry
+    job_title: QueueHealthEntry
+    boilerplate_line: QueueHealthEntry
+  }
+  triage_activity: {
+    date: string
+    approved_automated: number
+    approved_human: number
+    rejected_automated: number
+    rejected_human: number
+  }[]
+  llm_cost: {
+    available: boolean
+    days: { date: string; cost: number; traces: number }[]
+    total_cost?: number
+  }
+  parsing_quality: {
+    total_drafts: number
+    avg_confidence: number | null
+    needs_review_pct: number | null
+    by_type: Record<string, number>
+  }
+  generated_at: string
+}
+
+export interface AssistantQueryResult {
+  answer: string
+  tool_used: string | null
+  data: Record<string, unknown> | null
+}

@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { clearToken } from './api/client'
 import { TokenGate } from './components/TokenGate'
 import { AccuracyPage } from './pages/AccuracyPage'
+import { AssistantPage } from './pages/AssistantPage'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftListPage } from './pages/DraftListPage'
 import { JobTitlesTaxonomyPage } from './pages/JobTitlesTaxonomyPage'
 import { ModerationPage } from './pages/ModerationPage'
+import { ReportsPage } from './pages/ReportsPage'
 import { SkillsTaxonomyPage } from './pages/SkillsTaxonomyPage'
 
 type View =
@@ -15,6 +17,8 @@ type View =
   | { name: 'accuracy' }
   | { name: 'skills' }
   | { name: 'job-titles' }
+  | { name: 'reports' }
+  | { name: 'assistant' }
 
 function AppShell() {
   const [view, setView] = useState<View>({ name: 'list' })
@@ -60,6 +64,22 @@ function AppShell() {
               Blocklist &amp; taxonomy
             </button>
             <button
+              onClick={() => setView({ name: 'reports' })}
+              className={`text-xs font-medium transition ${
+                view.name === 'reports' ? 'text-accent' : 'text-ink-soft hover:text-ink'
+              }`}
+            >
+              Reports
+            </button>
+            <button
+              onClick={() => setView({ name: 'assistant' })}
+              className={`text-xs font-medium transition ${
+                view.name === 'assistant' ? 'text-accent' : 'text-ink-soft hover:text-ink'
+              }`}
+            >
+              Assistant
+            </button>
+            <button
               onClick={() => {
                 clearToken()
                 window.location.reload()
@@ -79,6 +99,8 @@ function AppShell() {
       {view.name === 'accuracy' && <AccuracyPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'skills' && <SkillsTaxonomyPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'job-titles' && <JobTitlesTaxonomyPage onBack={() => setView({ name: 'list' })} />}
+      {view.name === 'reports' && <ReportsPage onBack={() => setView({ name: 'list' })} />}
+      {view.name === 'assistant' && <AssistantPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'list' && <DraftListPage onSelect={(id) => setView({ name: 'detail', draftId: id })} />}
     </div>
   )
