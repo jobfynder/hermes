@@ -84,6 +84,169 @@ _ENGLISH_STOPWORDS = {
 _SPLIT_RE = re.compile(r"[,\n|/••]+")
 _PARENTHETICAL_RE = re.compile(r"\([^)]*\)")
 
+# --------------------------------------------------------------------
+# Shape-based noise filter: catches sentence fragments, person names,
+# table rows, and other non-term junk BEFORE it's ever queued as a
+# candidate, so it never costs a human OR an LLM call a judgment.
+#
+# Origin: a one-time cleanup of a 3,884-item candidate backlog (2026-09)
+# found ~1,585 items (41%) were confidently rejectable by shape alone --
+# "and global delivery teams", "Drive business alignment",
+# "Sathish.b@sparktekusa.com", "22 VD DATA ANALYST 4+Y ONSITE" -- none
+# of which needed an LLM or a human to recognize as junk. Promoting
+# those same rules into detection itself (rather than re-running a
+# cleanup pass after the fact) means this class of noise never reaches
+# the review queue again, for free, permanently -- the daily-volume
+# version of the same fix.
+# --------------------------------------------------------------------
+
+_NOISE_FILLER_WORDS = {
+    "and", "or", "if", "is", "are", "was", "were", "not", "with", "the",
+    "a", "an", "particularly", "including", "include", "prior", "strong",
+    "high", "sense", "of", "ability", "to", "for", "as", "in", "on",
+    "at", "by", "this", "that", "these", "those", "please", "must",
+    "should", "will", "can", "may", "need", "needs", "needed", "have",
+    "has", "had", "experience", "requires", "required", "preferred",
+    "good", "great", "excellent", "solid", "proven", "demonstrated",
+    "years", "year", "prefer", "presence", "present", "highly", "very",
+    "also", "etc", "such", "like",
+}
+
+_NOISE_LEADING_WORDS = {
+    "and", "or", "if", "with", "including", "particularly", "prior",
+    "strong", "high", "good", "great", "excellent", "solid", "proven",
+    "please", "must", "should", "will", "can", "may", "need", "needs",
+    "ability", "sense", "the", "a", "an", "this", "that", "not", "no",
+    "you", "your", "we", "our", "conduct", "coordinate", "create",
+    "review", "build", "ensure", "develop", "manage", "improve",
+    "support", "provide", "maintain", "design", "implement", "perform",
+    "monitor", "assist", "lead", "work", "collaborate", "drive",
+    "validate", "works", "leads", "helps", "help", "based",
+}
+
+_NOISE_TRAILING_WORDS = {
+    "and", "or", "if", "with", "the", "a", "an", "is", "are", "not",
+    "of", "to", "for", "in", "on", "at", "by",
+}
+
+_NOISE_VERB_START_RE = re.compile(
+    r"(?i)^(drive|validate|review|build|create|ensure|develop|manage|"
+    r"improve|support|provide|maintain|coordinate|design|implement|"
+    r"conduct|perform|monitor|assist|lead|work|collaborate|deliver|"
+    r"analyze|analyse|troubleshoot|configure|deploy|write|document|"
+    r"partner|engage|own|define|establish|execute|oversee)\b"
+)
+
+_NOISE_TABLE_ROW_RE = re.compile(
+    r"(?i)^\d{1,3}\s+[A-Z]{1,4}\s+.+\d+\+?Y\s+(REMOTE|ONSITE|HYBRID)\b"
+)
+
+_NOISE_WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9+#.\-]*")
+
+# Common first names seen leaking into the taxonomy from recruiter
+# signatures ("Durga Prasad", "Venkat Ram") -- not exhaustive, just
+# enough to catch a two-Title-Case-word term with no other tech marker
+# where either word is a common given/family name.
+_NOISE_COMMON_NAMES = {
+    "durga", "prasad", "raj", "mohit", "amit", "rahul", "priya", "sunil",
+    "vijay", "ravi", "kiran", "arun", "deepak", "manoj", "sanjay",
+    "ashok", "vikram", "anil", "rakesh", "suresh", "naveen", "gopal",
+    "krishna", "sai", "venkat", "srinivas", "praveen", "kumar", "singh",
+    "sharma", "patel", "gupta", "reddy", "nair", "iyer", "rao", "das",
+    "john", "mike", "michael", "david", "james", "robert", "william",
+    "mary", "jennifer", "linda", "susan", "karen", "nancy", "lisa",
+    "troy", "evan", "sarah", "chris", "mark", "steve", "paul", "kevin",
+    "brian", "jason", "eric", "scott", "andrew", "joshua", "daniel",
+    "matthew", "anthony", "donald", "george", "kenneth", "ryan",
+}
+
+_NOISE_TECH_MARKER_RE = re.compile(r"[0-9]|[.+#]|[A-Z]{2,}|_|::|/")
+
+_NOISE_ROLE_SUFFIX_WORDS = {
+    "engineer", "developer", "architect", "consultant", "analyst",
+    "administrator", "specialist", "manager", "lead", "platform",
+    "framework", "tool", "system", "cloud", "database", "api", "sdk",
+    "suite", "studio", "server", "software", "security", "network",
+    "integration", "automation", "pipeline", "warehouse", "gateway",
+    "broker", "cluster", "orchestrator", "scripting", "testing",
+    "governance", "modeling", "migration", "monitoring",
+}
+
+
+def _noise_looks_like_person_name(words: list[str]) -> bool:
+    if len(words) != 2:
+        return False
+    if not all(w[0].isupper() and w[1:].islower() for w in words if len(w) > 1):
+        return False
+    joined = " ".join(words)
+    if _NOISE_TECH_MARKER_RE.search(joined):
+        return False
+    lc = [w.lower() for w in words]
+    if lc[1] in _NOISE_ROLE_SUFFIX_WORDS:
+        return False
+    return lc[0] in _NOISE_COMMON_NAMES or lc[1] in _NOISE_COMMON_NAMES
+
+
+def _is_noise_skill_term(term: str) -> bool:
+    """True if `term` is confidently NOT a real skill/tool name -- a
+    sentence fragment, person name, table row, email, or similar junk --
+    and should never even be queued as a candidate. Deliberately
+    conservative: only fires on shapes verified (by manual sampling
+    against real production data) to be reliable, since a false
+    positive here silently discards a genuine new skill forever with no
+    review trail, unlike rejecting a queued candidate.
+    """
+    stripped = term.strip()
+    words = _NOISE_WORD_RE.findall(stripped)
+    word_lc = [w.lower() for w in words]
+
+    if "\xa0" in stripped or "@" in stripped or "http" in stripped.lower():
+        return True
+    if stripped.count("(") != stripped.count(")"):
+        return True
+    if _NOISE_TABLE_ROW_RE.match(stripped):
+        return True
+    if not words or len(words) > 5:
+        return True
+    if _NOISE_VERB_START_RE.match(stripped):
+        return True
+    if word_lc[0] in _NOISE_LEADING_WORDS or word_lc[-1] in _NOISE_TRAILING_WORDS:
+        return True
+
+    filler_count = sum(1 for w in word_lc if w in _NOISE_FILLER_WORDS)
+    if filler_count >= 2 or (filler_count >= 1 and len(words) <= 3):
+        return True
+
+    return _noise_looks_like_person_name(words)
+
+
+def _is_noise_job_title(term: str) -> bool:
+    """Same reasoning as _is_noise_skill_term, tuned for titles -- these
+    can legitimately run longer ("Senior SAP ERP Integration
+    Consultant") and don't get the trailing-word check (a title
+    genuinely can end in a word skills don't, e.g. "...Team Lead").
+    """
+    stripped = term.strip()
+    words = _NOISE_WORD_RE.findall(stripped)
+    word_lc = [w.lower() for w in words]
+
+    if "\xa0" in stripped or "@" in stripped or "http" in stripped.lower():
+        return True
+    if _NOISE_TABLE_ROW_RE.match(stripped):
+        return True
+    if not words or len(words) > 9:
+        return True
+    if _NOISE_VERB_START_RE.match(stripped):
+        return True
+    if word_lc[0] in _NOISE_LEADING_WORDS:
+        return True
+
+    filler_count = sum(1 for w in word_lc if w in _NOISE_FILLER_WORDS)
+    if filler_count >= 2:
+        return True
+
+    return _noise_looks_like_person_name(words)
+
 
 def _candidate_terms(section_text: str | None) -> list[str]:
     if not section_text:
@@ -119,6 +282,9 @@ def _candidate_terms(section_text: str | None) -> list[str]:
 
         # Needs at least one letter (skip bare years/numbers like "5+").
         if not re.search(r"[A-Za-z]", item):
+            continue
+
+        if _is_noise_skill_term(item):
             continue
 
         terms.append(item)
@@ -202,6 +368,9 @@ def find_unknown_job_title(job_title: str | None) -> str | None:
     # fallback chain in app/email_parsing/parsers.py, which now guards
     # against this at the source too). A real title always has a letter.
     if not re.search(r"[A-Za-z]", cleaned):
+        return None
+
+    if _is_noise_job_title(cleaned):
         return None
 
     key = normalize_taxonomy_key(cleaned)

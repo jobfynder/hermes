@@ -717,6 +717,55 @@ def test_find_unknown_job_title_ignores_a_loose_punctuation_duplicate() -> None:
     )
 
 
+def test_find_unknown_skill_terms_filters_sentence_fragments_and_noise() -> None:
+    # Real production incident: a one-time cleanup of a 3,884-item
+    # candidate backlog found ~41% was confidently-rejectable junk by
+    # shape alone -- fragments, verb phrases, emails, table rows, person
+    # names -- none needing an LLM or a human to recognize. Promoted
+    # into detection itself so it never reaches the queue again.
+    text = (
+        "Required Skills: ZGenuineSkillXyz, and global delivery teams, "
+        "Drive business alignment, Sathish.b@sparktekusa.com, "
+        "Venkat Ram, Strong customer focus, ZAnotherGenuineSkillAbc\n"
+    )
+
+    unknown = find_unknown_skill_terms(text)
+    require("ZGenuineSkillXyz" in unknown, f"A genuine new term must still be surfaced: {unknown}")
+    require("ZAnotherGenuineSkillAbc" in unknown, f"A genuine new term must still be surfaced: {unknown}")
+    require(
+        not any(
+            t in unknown
+            for t in (
+                "and global delivery teams",
+                "Drive business alignment",
+                "Sathish.b@sparktekusa.com",
+                "Venkat Ram",
+                "Strong customer focus",
+            )
+        ),
+        f"Sentence fragments, verb phrases, an email, and a person's name must never be queued: {unknown}",
+    )
+
+
+def test_find_unknown_job_title_filters_sentence_fragments_and_noise() -> None:
+    require(
+        find_unknown_job_title("Durga Prasad") is None,
+        "A person's name must never be queued as a job title candidate",
+    )
+    require(
+        find_unknown_job_title("22 VD DATA ANALYST 4+Y ONSITE") is None,
+        "A spreadsheet table row must never be queued as a job title candidate",
+    )
+    require(
+        find_unknown_job_title("Drive complex program delivery across teams") is None,
+        "A verb-phrase sentence fragment must never be queued as a job title candidate",
+    )
+    require(
+        find_unknown_job_title("ZGenuineTitleCandidateXyz Developer") == "ZGenuineTitleCandidateXyz Developer",
+        "A genuine new title must still be surfaced",
+    )
+
+
 def test_update_canonical_skill_renames_and_keeps_old_wording_as_alias() -> None:
     add_canonical_skill(name="ZSkillEditRenameSource")
 
@@ -1490,6 +1539,12 @@ def main() -> None:
 
     test_find_unknown_job_title_ignores_a_loose_punctuation_duplicate()
     print("PASS: a punctuation-only spelling variant of a known job title is not queued as unknown")
+
+    test_find_unknown_skill_terms_filters_sentence_fragments_and_noise()
+    print("PASS: sentence fragments, verb phrases, emails, and person names are never queued as skill candidates")
+
+    test_find_unknown_job_title_filters_sentence_fragments_and_noise()
+    print("PASS: sentence fragments, table rows, and person names are never queued as job title candidates")
 
     test_update_canonical_skill_renames_and_keeps_old_wording_as_alias()
     print("PASS: renaming a skill keeps the old name recognized as an alias")
