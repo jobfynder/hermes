@@ -6,6 +6,7 @@ import urllib.request
 from base64 import b64encode
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from app.prompt_runtime.local_prompts import get_local_prompt, list_local_prompts
 from app.prompt_runtime.models import PromptDefinition, PromptRegistryResponse
 
 PROMPTS_PATH = "/api/public/v2/prompts"
@@ -175,21 +176,28 @@ def _ensure_cache() -> None:
                 _cache["prompts"] = {}
 
 
-def list_prompts() -> PromptRegistryResponse:
+def _merged_prompts() -> dict[str, PromptDefinition]:
+    local = {prompt.prompt_id: prompt for prompt in list_local_prompts()}
     if not langfuse_configured():
-        return PromptRegistryResponse(
-            registry_version="hermes_langfuse_prompt_registry_v1",
-            prompt_count=0,
-            prompts=[],
-        )
+        return local
 
     _ensure_cache()
-    return _cache["registry"]
+    return {**local, **(_cache.get("prompts") or {})}
+
+
+def list_prompts() -> PromptRegistryResponse:
+    prompts = _merged_prompts()
+    return PromptRegistryResponse(
+        registry_version="hermes_prompt_registry_v1",
+        prompt_count=len(prompts),
+        prompts=list(prompts.values()),
+    )
 
 
 def get_prompt(prompt_id: str) -> PromptDefinition | None:
-    if not langfuse_configured():
-        return None
-
-    _ensure_cache()
-    return _cache["prompts"].get(prompt_id)
+    if langfuse_configured():
+        _ensure_cache()
+        found = (_cache.get("prompts") or {}).get(prompt_id)
+        if found:
+            return found
+    return get_local_prompt(prompt_id)

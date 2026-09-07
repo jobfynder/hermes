@@ -5,8 +5,20 @@ EMAIL_PATTERN = re.compile(
     r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
 )
 
+# International numbers first so "+91 89101 45846" is not sliced by the US
+# 3-3-4 pattern. Groups stay non-capturing: email-signature findall() must
+# still return the full match.
 PHONE_PATTERN = re.compile(
-    r"(?:(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})"
+    r"(?:"
+    r"\+[1-9]\d{0,2}[\s.-]?(?:\d[\s.-]?){6,13}\d"
+    r"|"
+    r"(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}"
+    r")"
+)
+
+LABELED_PHONE_PATTERN = re.compile(
+    r"(?:mobile|phone|tel|cell|whatsapp)[:\s]+(\+?[\d][\d\s().-]{7,18}\d)",
+    flags=re.IGNORECASE,
 )
 
 LINKEDIN_PATTERN = re.compile(
@@ -41,6 +53,22 @@ def extract_email(text: str) -> str | None:
 
 
 def extract_phone(text: str) -> str | None:
+    labeled = LABELED_PHONE_PATTERN.search(text or "")
+    if labeled:
+        return re.sub(r"\s+", " ", labeled.group(1).strip())
+
+    try:
+        import phonenumbers
+
+        for match in phonenumbers.PhoneNumberMatcher(text or "", "US"):
+            if phonenumbers.is_possible_number(match.number):
+                return phonenumbers.format_number(
+                    match.number,
+                    phonenumbers.PhoneNumberFormat.INTERNATIONAL,
+                )
+    except Exception:
+        pass
+
     match = PHONE_PATTERN.search(text or "")
     return match.group(0) if match else None
 

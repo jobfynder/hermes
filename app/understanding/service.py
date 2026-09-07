@@ -2,7 +2,7 @@ from app.config import HERMES_CLOUD_EXTRACTION_FALLBACK_ENABLED, HERMES_LLM_FALL
 from app.understanding.compression.token_budget import compress_to_token_budget
 from app.understanding.extractors.plain_text import extract_plain_text
 from app.understanding.fallback_policy import decide_fallback
-from app.understanding.llm_fallback import apply_llm_fallback
+from app.understanding.llm_fallback import apply_llm_fallback, merge_llm_extracted
 from app.understanding.models import DocumentKind, ExtractedText, RawDocument, UnderstandingResult
 from app.understanding.parsers.basic import parse_basic_structured_data
 from app.understanding.quality.scoring import score_extraction_quality
@@ -78,7 +78,9 @@ def build_understanding_result(
         fallback_dump["llm_fallback"] = llm_outcome
 
         if llm_outcome.get("used"):
-            structured_data["llm_fallback_extracted"] = llm_outcome["extracted"]
+            extracted = llm_outcome.get("extracted")
+            structured_data["llm_fallback_extracted"] = extracted
+            merge_llm_extracted(structured_data, extracted)
 
     result = UnderstandingResult(
         document_kind=document_kind,

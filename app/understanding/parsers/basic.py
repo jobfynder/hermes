@@ -16,6 +16,7 @@ from app.understanding.parsers.contact import (
     extract_phone,
     extract_work_authorization,
 )
+from app.understanding.parsers.resume_sections import extract_resume_sections
 from app.understanding.parsers.skills import extract_skills
 from app.understanding.structured import (
     GenericStructuredData,
@@ -91,14 +92,21 @@ def parse_basic_structured_data(
     probable_title = extract_probable_title(text)
 
     if document_kind == "resume":
+        sections = extract_resume_sections(text)
         return ResumeStructuredData(
             skills=skills,
             years_experience=years_experience,
-            current_title=probable_title,
+            current_title=probable_title or sections.get("current_title"),
+            name=sections.get("name"),
             email=extract_email(text),
-            phone=extract_phone(text),
+            phone=sections.get("phone") or extract_phone(text),
             linkedin_url=extract_linkedin_url(text),
+            location=sections.get("location"),
+            summary=sections.get("summary"),
             work_authorization=extract_work_authorization(text),
+            experience=sections.get("experience") or [],
+            education=sections.get("education") or [],
+            certifications=sections.get("certifications") or [],
             parser=parser,
         ).model_dump()
 

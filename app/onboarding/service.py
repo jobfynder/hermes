@@ -17,11 +17,34 @@ import json
 PROFILE_IMPORT_CONFIDENCE_THRESHOLD = 0.70
 PROFILE_SCHEMA_HINT = json.dumps({
     "display_name": "string|null",
+    "name": "string|null",
     "headline": "string|null",
+    "title": "string|null",
     "location": "string|null",
+    "phone": "string|null",
+    "email": "string|null",
     "skills": ["string"],
     "specializations": ["string"],
     "summary": "string|null",
+    "experience": [
+        {
+            "company": "string",
+            "title": "string",
+            "startDate": "string|null",
+            "endDate": "string|null",
+            "location": "string|null",
+            "description": "string|null",
+        }
+    ],
+    "education": [
+        {
+            "institution": "string",
+            "degree": "string|null",
+            "field": "string|null",
+            "year": "string|null",
+        }
+    ],
+    "certifications": ["string"],
 })
 
 

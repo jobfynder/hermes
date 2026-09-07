@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -20,11 +20,16 @@ class ResumeStructuredData(BaseModel):
     skills: list[ParsedSkill] = Field(default_factory=list)
     years_experience: int | None = None
     current_title: str | None = None
+    name: str | None = None
     email: str | None = None
     phone: str | None = None
     linkedin_url: str | None = None
     location: str | None = None
+    summary: str | None = None
     work_authorization: str | None = None
+    experience: list[dict[str, Any]] = Field(default_factory=list)
+    education: list[dict[str, Any]] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
     parser: ParserMetadata
 
 

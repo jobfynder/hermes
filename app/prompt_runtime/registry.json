@@ -70,6 +70,44 @@
       "metadata": {
         "human_review_required": true
       }
+    },
+    {
+      "prompt_id": "jf.onboarding.profile-import.extract",
+      "name": "Onboarding Profile Import Extract",
+      "domain": "onboarding",
+      "version": "v2",
+      "description": "Extracts a structured candidate profile from resume or LinkedIn text. Returns JSON only.",
+      "required_variables": ["clean_text", "profile_schema"],
+      "optional_variables": ["source_type"],
+      "system_template": "You extract a candidate profile from resume or LinkedIn text. Return ONLY valid JSON that matches the provided schema. Use only facts present in the source. Do not invent employers, dates, degrees, certifications, skills, phone numbers, or emails. Unknown fields must be null or []. Experience and education must be objects (company/title/dates, institution/degree/year), not strings. Keep the original international phone number exactly as written.",
+      "user_template": "Source type: {{source_type}}\n\nSchema:\n{{profile_schema}}\n\nSource text:\n{{clean_text}}\n\nReturn JSON only.",
+      "safety_policy": "hermes_resume_no_fabrication_v1",
+      "default_model": "anthropic/claude-haiku-4-5",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true,
+        "no_fabrication": true,
+        "source": "local"
+      }
+    },
+    {
+      "prompt_id": "jf.resume.parse",
+      "name": "Resume Parse",
+      "domain": "understanding",
+      "version": "v2",
+      "description": "Extracts structured resume fields as JSON when the deterministic parser is weak.",
+      "required_variables": ["clean_resume", "resume_schema"],
+      "optional_variables": [],
+      "system_template": "You parse a resume into structured JSON. Return ONLY valid JSON that matches the provided schema. Use only facts present in the resume. Do not invent employers, dates, degrees, certifications, skills, or contact details. Unknown fields must be null or []. Experience and education must be objects, not strings. Keep international phone numbers exactly as written.",
+      "user_template": "Schema:\n{{resume_schema}}\n\nResume:\n{{clean_resume}}\n\nReturn JSON only.",
+      "safety_policy": "hermes_resume_no_fabrication_v1",
+      "default_model": "anthropic/claude-haiku-4-5",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true,
+        "no_fabrication": true,
+        "source": "local"
+      }
     }
   ]
 }
