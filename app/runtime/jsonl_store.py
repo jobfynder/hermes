@@ -1,9 +1,18 @@
+import os
 import json
 from pathlib import Path
 from typing import Any
 
 
-RUNTIME_ROOT = Path("/hermes-runtime")
+# The real deployed container mounts a volume at /hermes-runtime, which is
+# why that stays the default -- but that path doesn't exist (and can't be
+# created) on a CI runner's root filesystem, which made every regression
+# script fail at import time before running a single test (every script
+# pulls this in transitively via app.channels.service -> app.access.
+# service -> app.runtime.events). HERMES_RUNTIME_ROOT lets CI point this
+# at a writable temp directory instead, without changing production
+# behavior at all.
+RUNTIME_ROOT = Path(os.getenv("HERMES_RUNTIME_ROOT", "/hermes-runtime"))
 
 
 def runtime_path(*parts: str) -> Path:
