@@ -552,6 +552,23 @@ def strip_job_board_boilerplate(text: str) -> str:
 #: firing on an ordinary single-position email's own numbered bullets.
 _NUMBERED_POSITION_RE = re.compile(r"(?im)^[ \t]*(\d{1,2})[ \t]*\)[ \t]*")
 
+# The ")" restriction above doesn't fully rule out a numbered list of
+# RESPONSIBILITIES within a single posting -- confirmed in production: a
+# "Role Descriptions: Yardi Support\n1)New User Setups\n2) Property
+# Setup\n3) Entity Setup\n..." block inside one real "YARDI CONSULTANT"
+# posting (which already had its own Job Title:/company from a labeled
+# field above this list) got read as 5 separate job postings -- the real
+# one plus 4 empty stubs, each missing title/company, dragging the whole
+# email's confidence down to the worst of the five and taking the
+# genuinely complete posting down with it. A responsibilities/duties-
+# style heading on the line immediately before the first numbered marker
+# is the reliable signal that what follows describes tasks, not distinct
+# positions.
+_RESPONSIBILITIES_HEADING_RE = re.compile(
+    r"(?i)\b(?:role\s*descriptions?|responsibilit(?:y|ies)|"
+    r"key\s*responsibilit(?:y|ies)|duties|job\s*duties)\b"
+)
+
 
 def _numbered_position_sections(text: str) -> list[str] | None:
     matches = list(_NUMBERED_POSITION_RE.finditer(text))
@@ -560,6 +577,10 @@ def _numbered_position_sections(text: str) -> list[str] | None:
     # backup" line deep in an unrelated single-position email shouldn't
     # be mistaken for the start of a multi-position list.
     if len(matches) < 2 or matches[0].group(1) != "1":
+        return None
+
+    preceding_lines = [line for line in text[: matches[0].start()].splitlines() if line.strip()]
+    if preceding_lines and _RESPONSIBILITIES_HEADING_RE.search(preceding_lines[-1]):
         return None
 
     # Multi-position emails from job-board relays (jobs.nvoids.com and
@@ -779,7 +800,7 @@ def parse_requirement_email(
         # times over. labeled_title is only trusted if it's plausibly a
         # real title; otherwise "Title:" is tried as its own explicit
         # fallback before giving up on labels entirely.
-        labeled_title = _extract_labeled_value(section, ["Job Title", "Position", "Role"])
+        labeled_title = _extract_labeled_value(section, ["Job Title", "Position", "Role", "Role Name"])
         if not _is_plausible_job_title(labeled_title):
             labeled_title = _extract_labeled_value(section, ["Title"])
         if not _is_plausible_job_title(labeled_title):

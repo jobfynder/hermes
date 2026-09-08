@@ -787,6 +787,104 @@ def test_numbered_positions_skip_llm_fallback() -> None:
     require("llm_fallback" not in updated, "No llm_fallback metadata should be attached when the fallback was skipped")
 
 
+def test_numbered_responsibilities_list_does_not_split_a_single_posting() -> None:
+    # Real production bug, reported by the user: a genuine single posting
+    # ("YARDI CONSULTANT", complete with its own Job Title:/company from a
+    # labeled field) got split into 5 "positions" because its own "Role
+    # Descriptions:" section used a ")"-numbered list for TASKS, not
+    # separate jobs -- exactly the shape _NUMBERED_POSITION_RE otherwise
+    # treats as a position list. The one real posting's job_title/company
+    # were discarded behind 4 garbage empty records, and the whole
+    # email's confidence collapsed to the worst of the five.
+    text = (
+        "Subject: YARDI CONSULTANT\n\n"
+        "Remove/unsubscribe   |   Update your contact and subscribed mailing list(s)   |   "
+        "Subscribe to mailing list(s) to receive requirements & resumes \n\n"
+        "From :\nKalyan,\nKK Software Associates\nkalyan@kksoftwareassociates.com\n"
+        "Reply to:   kalyan@kksoftwareassociates.com\n\n"
+        "Job Title: YARDI CONSULTANT\n"
+        "Location: Dallas, TX\n"
+        "Duration: 6 months\n\n"
+        "Broad understanding of Voyager 7, Core Commercial with international accounting "
+        "principles including tax, Investment Management, and Yardi database structure.\n\n"
+        "Role Descriptions: Yardi Support\n"
+        "1)New User Setups\n"
+        "2) Property Setup\n"
+        "3) Entity Setup\n"
+        "4) If any need to add GL accounts based on request with proper approval\n"
+        "5) To provide access past periods based on incidents on monthly basis.\n\n"
+        "Skills: Digital, Functional Programming Experience Required: 6-8\n\n"
+        "Sign-Up for your account with PROHIRES POWERHOUSE Recruiting Portal to broadcast "
+        "requirements & hotlists. \nHire our IT Recruiter at just $499/month ."
+    )
+
+    result = parse_requirement_email(text)
+
+    require(result["record_count"] == 1, f"A responsibilities list must not split this into multiple records: {result}")
+    require(
+        result["records"][0]["job_title"] == "YARDI CONSULTANT",
+        f"The one real posting's title must survive, got {result['records'][0]['job_title']!r}",
+    )
+
+
+def test_role_name_label_is_recognized_as_a_job_title() -> None:
+    # Real production example: "Role Name - X" alongside the already-
+    # handled "Job Title:"/"Position:"/"Role:" labels.
+    text = (
+        "Subject: Senior Functional QA - Hamilton, NJ\n\n"
+        "Role Name - Senior Functional QA\n"
+        "Location: Hamilton, NJ\n\n"
+        "Required Skills: Manual Testing, Selenium, SQL\n\n"
+        "Long enough body text describing the role for the requirement-evidence check.\n"
+    )
+
+    result = parse_requirement_email(text)
+    require(
+        result["records"][0]["job_title"] == "Senior Functional QA",
+        f"'Role Name -' must be recognized as a job-title label, got {result['records'][0]['job_title']!r}",
+    )
+
+
+def test_hiring_colon_subject_still_yields_a_title() -> None:
+    # Real production example: "Hiring: Title | ..." -- the existing
+    # "hiring "/"need "/etc. imperative-word strip only handled a space
+    # after the word, not a colon, so the whole subject-based title
+    # extraction failed for this (common) colon-labeled shape.
+    text = (
+        "Subject: Hiring: Mid Level Data Engineer | Databricks + Snowflake\n\n"
+        "📍 Location: Plano, TX\n\n"
+        "Required Skills: Databricks, Snowflake, Azure\n\n"
+        "Long enough body text describing the role for the requirement-evidence check, "
+        "without restating the title anywhere in the body itself.\n"
+    )
+
+    result = parse_requirement_email(text)
+    require(
+        result["records"][0]["job_title"] == "Mid Level Data Engineer",
+        f"A colon after the imperative word must still yield a title, got {result['records'][0]['job_title']!r}",
+    )
+
+
+def test_underscore_delimited_subject_still_yields_a_title() -> None:
+    # Real production example: "Title_Location_Interview details" with no
+    # space/pipe/dash before the underscore -- the title regex's allowed
+    # character class didn't include "_" and it wasn't a terminator
+    # either, so the match failed the instant it hit the first one.
+    text = (
+        "Subject: AWS Lead Data Engineer_Newark|NJ_Face to Face Interview is Must\n\n"
+        "Newark City, NJ (Hybrid)\n\n"
+        "Required Skills: AWS, Data Engineering, Python\n\n"
+        "Long enough body text describing the role for the requirement-evidence check, "
+        "without restating the title anywhere in the body itself.\n"
+    )
+
+    result = parse_requirement_email(text)
+    require(
+        result["records"][0]["job_title"] == "AWS Lead Data Engineer",
+        f"An underscore-delimited subject must still yield a title, got {result['records'][0]['job_title']!r}",
+    )
+
+
 def main() -> None:
     test_mailbox_routing()
     test_hotlist_parser()
@@ -806,6 +904,10 @@ def main() -> None:
     test_numbered_multi_position_email_splits_into_separate_records()
     test_single_numbered_bullet_does_not_trigger_multi_position_split()
     test_numbered_positions_skip_llm_fallback()
+    test_numbered_responsibilities_list_does_not_split_a_single_posting()
+    test_role_name_label_is_recognized_as_a_job_title()
+    test_hiring_colon_subject_still_yields_a_title()
+    test_underscore_delimited_subject_still_yields_a_title()
 
     print("PASS: exact mailbox routing")
     print("PASS: foreign-domain aliases rejected")
@@ -825,6 +927,10 @@ def main() -> None:
     print("PASS: a numbered multi-position email splits into separate records, not one garbled record")
     print("PASS: a single position's own numbered bullets don't trigger a false multi-position split")
     print("PASS: multi-position results skip the single-record LLM fallback entirely")
+    print("PASS: a numbered responsibilities/duties list within one posting is never mistaken for multiple positions")
+    print("PASS: 'Role Name -' is recognized as a job-title label")
+    print("PASS: a colon after 'Hiring'/'Need'/etc. in the subject still yields a title")
+    print("PASS: an underscore-delimited subject still yields a title")
     print("PASS: HERMES-850 parser guardrails")
 
 

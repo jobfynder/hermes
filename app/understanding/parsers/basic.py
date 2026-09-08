@@ -42,7 +42,13 @@ def extract_years_experience(text: str) -> int | None:
 
 def extract_probable_title(text: str) -> str | None:
     clean_text = re.sub(r"\s+", " ", text or "").strip()
-    clean_text = re.sub(r"^(need|hiring|looking for|seeking)\s+", "", clean_text, flags=re.IGNORECASE)
+    # ":" tolerated after the imperative word alongside plain whitespace --
+    # real subject lines routinely read "Hiring: Mid Level Data Engineer |
+    # ..." rather than "Hiring Mid Level Data Engineer", and without this
+    # the colon (outside the title regex's own allowed character class
+    # below, and not one of its terminators either) made the whole match
+    # fail at that position with no title recovered at all.
+    clean_text = re.sub(r"^(need|hiring|looking for|seeking)(?:\s*:\s*|\s+)", "", clean_text, flags=re.IGNORECASE)
 
     # "|" (or "||") as a terminator alongside "-"/","/"for" -- real
     # recruiter subject lines routinely read "Title | Location |" or
@@ -51,9 +57,11 @@ def extract_probable_title(text: str) -> str | None:
     # ... || f2F Interview"). Without it, the whole match fails the
     # moment it hits the "|" character (not in the allowed char class)
     # with no valid terminator at that position, so the title-shaped
-    # subject before the pipe was silently lost.
+    # subject before the pipe was silently lost. "_" is the same story --
+    # confirmed on a real subject shaped "AWS Lead Data Engineer_newark|
+    # NJ_Face to Face Interview is Must at Newark|NJ".
     match = re.search(
-        r"^([A-Za-z][A-Za-z0-9 .+#/-]{2,80}?)(?:\s+with|\s+having|\s+for|\s+-|\s*\|+\s*|,|$)",
+        r"^([A-Za-z][A-Za-z0-9 .+#/-]{2,80}?)(?:\s+with|\s+having|\s+for|\s+-|\s*\|+\s*|_+|,|$)",
         clean_text,
         flags=re.IGNORECASE,
     )
