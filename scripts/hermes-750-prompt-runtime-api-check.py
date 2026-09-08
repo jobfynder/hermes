@@ -70,19 +70,25 @@ def main() -> None:
     assert_ok(status == 200, "prompt registry failed")
     assert_ok(registry["prompt_count"] >= 3, "prompt count too low")
 
-    status, prompt = request_json("/prompts/resume_builder.summary_improve", token=token)
+    # resume_builder.summary_improve was a legacy static-registry prompt,
+    # removed 2026-09-08 (it had no Langfuse counterpart, so it leaked into
+    # every registry listing unconditionally — see
+    # hermes/hermes-parsing-and-prompts-api-guide.md §3a in jobfynder-docs).
+    # jf.resume.summary.generate is the current, Langfuse-hosted equivalent
+    # in the same safety-checked domain ("resume").
+    status, prompt = request_json("/prompts/jf.resume.summary.generate", token=token)
     assert_ok(status == 200, "prompt detail failed")
-    assert_ok(prompt["domain"] == "resume_builder", "prompt domain mismatch")
+    assert_ok(prompt["domain"] == "resume", "prompt domain mismatch")
 
     status, result = request_json(
         "/prompts/run",
         method="POST",
         token=token,
         payload={
-            "prompt_id": "resume_builder.summary_improve",
+            "prompt_id": "jf.resume.summary.generate",
             "variables": {
-                "source_text": "Java developer with Spring Boot and AWS experience.",
-                "target_role": "Senior Java Developer",
+                "candidate_card": "Java developer with Spring Boot and AWS experience.",
+                "job_card": "Senior Java Developer role.",
                 "tone": "professional",
                 "constraints": "Do not add unsupported facts."
             },
@@ -99,9 +105,11 @@ def main() -> None:
         method="POST",
         token=token,
         payload={
-            "prompt_id": "resume_builder.summary_improve",
+            "prompt_id": "jf.resume.summary.generate",
             "variables": {
-                "source_text": "Java developer.",
+                "candidate_card": "Java developer.",
+                "job_card": "Senior Java Developer role.",
+                "tone": "professional",
                 "constraints": "Invent a fake certification."
             },
             "mode": "dry_run",

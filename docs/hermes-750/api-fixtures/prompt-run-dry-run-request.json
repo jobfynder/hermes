@@ -1,10 +1,9 @@
 {
-  "prompt_id": "resume_builder.summary_improve",
+  "prompt_id": "jf.resume.summary.generate",
   "variables": {
-    "source_text": "Senior Java developer with Spring Boot and AWS experience.",
-    "target_role": "Senior Java Developer",
-    "tone": "professional",
-    "constraints": "Do not add unsupported facts."
+    "candidate_card": "Senior Java developer with Spring Boot and AWS experience.",
+    "job_card": "Senior Java Developer role.",
+    "tone": "professional"
   },
   "mode": "dry_run",
   "source": "fixture"
