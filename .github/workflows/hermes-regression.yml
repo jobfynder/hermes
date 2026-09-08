@@ -41,9 +41,12 @@ jobs:
       # a path that only exists via the real deployment's Docker volume --
       # not writable on this runner's root filesystem. Redirect it (and the
       # taxonomy runtime copy, which the same regression suite also
-      # exercises) into the runner's own writable temp dir instead.
-      HERMES_RUNTIME_ROOT: ${{ runner.temp }}/hermes-runtime
-      HERMES_TAXONOMY_RUNTIME_DIR: ${{ runner.temp }}/hermes-runtime/taxonomy
+      # exercises) into a plain writable path instead. (The `runner`
+      # context isn't available in job-level `env:` -- only `github`,
+      # `needs`, `vars`, `strategy`, `matrix`, `secrets`, `inputs` are --
+      # so this is a literal path, not runner.temp.)
+      HERMES_RUNTIME_ROOT: /tmp/hermes-runtime
+      HERMES_TAXONOMY_RUNTIME_DIR: /tmp/hermes-runtime/taxonomy
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
