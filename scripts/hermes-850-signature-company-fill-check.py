@@ -345,17 +345,26 @@ def test_full_reparse_recovers_from_stale_pre_relay_fix_data() -> None:
     backfill_full_reparse(dry_run=False)
 
     updated = get_draft_object(draft_id)
-    require(updated.status == "draft", f"Status must move from needs_review to draft, got {updated.status!r}")
+    signature = updated.payload["structured_data"]["signature"]
     email_parsing = updated.payload["structured_data"]["email_parsing"]
-    require(email_parsing["record_count"] == 1, f"Re-parse must fix the false 5-way split, got {email_parsing['record_count']}")
     require(
-        email_parsing["records"][0]["company"] == "KK Software Associates",
-        f"Re-parse must recover the company via the new relay_from_block detector, got {email_parsing['records'][0]}",
+        signature.get("method") == "relay_from_block",
+        f"Stored signature must be replaced by the fresh, correct parse: {signature}",
+    )
+    require(email_parsing["record_count"] == 1, f"Re-parse must fix the false 5-way split: {email_parsing}")
+    require(
+        email_parsing["records"][0].get("company") == "KK Software Associates",
+        f"Re-parse must recover the company via the new relay_from_block detector: {email_parsing['records'][0]}",
     )
     require(
-        updated.payload["structured_data"]["signature"]["method"] == "relay_from_block",
-        f"Stored signature must be replaced by the fresh, correct parse: {updated.payload['structured_data']['signature']}",
+        email_parsing.get("confidence") == 0.92,
+        f"Complete title+skills+company must score 0.92: confidence={email_parsing.get('confidence')} record={email_parsing['records'][0]}",
     )
+    require(
+        email_parsing.get("requires_review") is False,
+        f"email_parsing.requires_review must be False at 0.92 confidence: {email_parsing}",
+    )
+    require(updated.status == "draft", f"Status must move from needs_review to draft, got {updated.status!r}")
 
 
 def test_full_reparse_dry_run_writes_nothing() -> None:
