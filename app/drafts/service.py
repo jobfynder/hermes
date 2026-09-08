@@ -8,16 +8,20 @@ from app.email_parsing.classification_learning import record_classification_corr
 from app.email_parsing.llm_fallback import apply_hotlist_fallback, apply_job_requirement_fallback
 from app.email_parsing.parsers import apply_signature_company_fill, parse_email_business_records
 from app.email_parsing.provenance import (
+    CORRECTION_EXTRACTORS,
     HOTLIST_CONSULTANT_FIELDS,
     JOB_REQUIREMENT_FIELDS,
     build_email_parsing_provenance,
+    build_signature_provenance,
     record_field_provenance,
     record_reviewer_correction,
 )
-from app.email_parsing.signature_learning import record_signature_correction
+from app.email_parsing.signature import parse_email_signature
+from app.email_parsing.signature_learning import apply_learned_signature_patterns, record_signature_correction
 from app.integrations.core_job_push import push_job_to_core
 from app.runtime.db import cursor
 from app.runtime.events import emit_event
+from app.understanding.taxonomy.candidates import get_approved_boilerplate_lines
 
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult, DraftStatus
 
@@ -322,6 +326,140 @@ def backfill_signature_company_fill(dry_run: bool = True, limit: int | None = No
         "filled_count": len(filled_draft_ids),
         "moved_out_of_review_count": len(moved_out_of_review_ids),
         "filled_draft_ids": filled_draft_ids[:50],
+        "moved_out_of_review_ids": moved_out_of_review_ids[:50],
+    }
+
+
+def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dict[str, Any]:
+    """backfill_signature_company_fill (above) only ever reuses whatever
+    signature was already stored on a draft -- it can't benefit from a
+    signature-PARSER improvement shipped after that draft was first
+    intake'd (e.g. HERMES-850's relay_from_block detector, which taught
+    the parser to recognize a broadcast relay's rigid "From :\\n<name>,\\n
+    <company>\\n<email>" block; confirmed live: re-running dry_run=True
+    right after that shipped still reported 0 fillable drafts, because
+    the stored signature for all of them still says company_not_detected
+    -- it was never re-parsed). This re-runs the full deterministic
+    pipeline (parse_email_business_records, parse_email_signature,
+    apply_learned_signature_patterns, apply_signature_company_fill) from
+    each draft's own stored raw text, same as live intake, MINUS the LLM
+    fallback -- deliberately excluded here: this is a bulk operation over
+    however many thousands of drafts are in the backlog, and calling the
+    LLM fallback per-draft would be real, uncapped cost incurred without
+    the standing "deterministic first, LLM stays last resort" policy
+    being able to weigh in draft-by-draft. Run the LLM fallback
+    separately, deliberately, if that's ever wanted.
+
+    Skips any draft that already has a recorded reviewer/recruiter
+    correction (field_provenance extractor in CORRECTION_EXTRACTORS) --
+    a human already touched this draft's fields while it sat in
+    draft/needs_review, and a fresh re-parse from raw text would
+    silently discard that work. dry_run=True (the default) reports
+    counts without writing anything.
+    """
+    query = """
+        SELECT d.draft_id, d.payload, d.metadata, d.status
+        FROM drafts d
+        WHERE d.draft_type = 'draft_job_requirement'
+          AND d.status IN ('draft', 'needs_review')
+          AND NOT EXISTS (
+              SELECT 1 FROM field_provenance fp
+              WHERE fp.parse_run_id = d.draft_id::text
+                AND fp.extractor = ANY(%s)
+          )
+        ORDER BY d.created_at
+    """
+    params: list[Any] = [list(CORRECTION_EXTRACTORS)]
+    if limit is not None:
+        query += " LIMIT %s"
+        params.append(limit)
+
+    with cursor() as cur:
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+    extra_boilerplate_lines = get_approved_boilerplate_lines()
+
+    checked = 0
+    changed_draft_ids: list[str] = []
+    moved_out_of_review_ids: list[str] = []
+
+    for row in rows:
+        draft_id = str(row["draft_id"])
+        payload = row["payload"]
+        text = payload.get("text") or ""
+        sender_email = ((row["metadata"] or {}).get("sender") or {}).get("email")
+
+        if not text.strip():
+            continue
+
+        checked += 1
+        was_requires_review = row["status"] == "needs_review"
+        old_confidence = ((payload.get("structured_data") or {}).get("email_parsing") or {}).get("confidence")
+
+        email_parsing = parse_email_business_records(
+            text=text, document_kind="job_description", extra_boilerplate_lines=extra_boilerplate_lines
+        )
+        signature = parse_email_signature(text=text, sender_email=sender_email)
+        sender_domain = sender_email.rsplit("@", 1)[-1].lower() if sender_email and "@" in sender_email else None
+        apply_learned_signature_patterns(signature.get("contact", {}), sender_domain)
+        email_parsing, _ = apply_signature_company_fill(email_parsing, signature)
+
+        new_confidence = email_parsing.get("confidence", 0.0)
+        new_requires_review = bool(email_parsing.get("requires_review"))
+
+        # Only a change in outcome counts as "changed" -- a re-parse that
+        # reproduces the exact same confidence isn't worth a write.
+        if new_confidence == old_confidence:
+            continue
+
+        changed_draft_ids.append(draft_id)
+        new_status = "needs_review" if new_requires_review else "draft"
+
+        if was_requires_review and not new_requires_review:
+            moved_out_of_review_ids.append(draft_id)
+
+        if dry_run:
+            continue
+
+        structured = payload.get("structured_data") or {}
+        structured["email_parsing"] = email_parsing
+        structured["signature"] = signature
+        payload["structured_data"] = structured
+
+        with cursor() as cur:
+            cur.execute(
+                """
+                UPDATE drafts
+                SET payload = %s, confidence = %s, requires_review = %s,
+                    status = %s, updated_at = now()
+                WHERE draft_id = %s AND status IN ('draft', 'needs_review')
+                """,
+                (
+                    json.dumps(payload, default=str),
+                    new_confidence,
+                    new_requires_review,
+                    new_status,
+                    draft_id,
+                ),
+            )
+
+        entries = build_email_parsing_provenance(email_parsing)
+        if signature.get("detected"):
+            entries += build_signature_provenance(signature)
+        record_field_provenance(parse_run_id=draft_id, entries=entries)
+
+        emit_event(
+            "draft.full_reparse_backfilled",
+            {"draft_id": draft_id, "new_status": new_status},
+        )
+
+    return {
+        "dry_run": dry_run,
+        "checked_count": checked,
+        "changed_count": len(changed_draft_ids),
+        "moved_out_of_review_count": len(moved_out_of_review_ids),
+        "changed_draft_ids": changed_draft_ids[:50],
         "moved_out_of_review_ids": moved_out_of_review_ids[:50],
     }
 

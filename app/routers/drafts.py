@@ -8,6 +8,7 @@ from app.claim.service import get_claim_by_draft
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
 from app.drafts.service import (
     apply_field_corrections,
+    backfill_full_reparse,
     backfill_signature_company_fill,
     delete_draft_object,
     get_draft_object,
@@ -77,6 +78,15 @@ class SignatureCompanyFillBackfillResult(BaseModel):
     moved_out_of_review_ids: list[str]
 
 
+class FullReparseBackfillResult(BaseModel):
+    dry_run: bool
+    checked_count: int
+    changed_count: int
+    moved_out_of_review_count: int
+    changed_draft_ids: list[str]
+    moved_out_of_review_ids: list[str]
+
+
 class DraftSummaryEntry(BaseModel):
     draft_id: str
     draft_type: DraftObjectType
@@ -129,6 +139,28 @@ def backfill_signature_company_fill_endpoint(
     call it once to sanity-check before dry_run=False actually applies.
     """
     return backfill_signature_company_fill(dry_run=dry_run, limit=limit)
+
+
+@router.post("/backfill/full-reparse", response_model=FullReparseBackfillResult)
+def backfill_full_reparse_endpoint(
+    dry_run: bool = True,
+    limit: int | None = None,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> dict:
+    """Full re-parse backlog cleanup, needed after a signature/parser
+    IMPROVEMENT (not just the one-time addition of apply_signature_
+    company_fill covered by the endpoint above) -- e.g. HERMES-850's
+    relay_from_block signature detector, which the backfill above can't
+    benefit from because it only reuses whatever signature was already
+    stored, never re-parses raw text. Re-runs the full deterministic
+    pipeline (no LLM fallback -- see backfill_full_reparse's docstring
+    for why that's deliberately excluded from a bulk operation) from
+    each draft's own stored text. Never touches a draft a human has
+    already corrected while it sat in draft/needs_review.
+
+    dry_run=True (the default) reports counts without writing anything.
+    """
+    return backfill_full_reparse(dry_run=dry_run, limit=limit)
 
 
 @router.get("/{draft_id}", response_model=DraftObject)
