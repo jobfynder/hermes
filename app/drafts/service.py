@@ -356,6 +356,16 @@ def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dic
     draft/needs_review, and a fresh re-parse from raw text would
     silently discard that work. dry_run=True (the default) reports
     counts without writing anything.
+
+    Performance note, measured against production: ~0.5s/draft, so a
+    single call over the whole backlog (order of 15,000+ rows) risks a
+    very long blocking HTTP request. Intended usage against a large
+    backlog is several bounded `limit=`-ed calls (dry_run=False) rather
+    than one unlimited call -- ORDER BY d.updated_at, plus this
+    function bumping updated_at even on a no-op row (see below), is
+    what makes repeated calls with the same limit actually advance
+    through the backlog each time instead of re-selecting the same
+    oldest-by-created_at rows forever.
     """
     query = """
         SELECT d.draft_id, d.payload, d.metadata, d.status
@@ -367,7 +377,7 @@ def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dic
               WHERE fp.parse_run_id = d.draft_id::text
                 AND fp.extractor = ANY(%s)
           )
-        ORDER BY d.created_at
+        ORDER BY d.updated_at
     """
     params: list[Any] = [list(CORRECTION_EXTRACTORS)]
     if limit is not None:
@@ -409,8 +419,21 @@ def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dic
         new_requires_review = bool(email_parsing.get("requires_review"))
 
         # Only a change in outcome counts as "changed" -- a re-parse that
-        # reproduces the exact same confidence isn't worth a write.
+        # reproduces the exact same confidence isn't worth a payload
+        # rewrite. But still bump updated_at (dry_run=False only) even
+        # here: this backlog is large enough that one call over the
+        # whole thing risks a very long blocking request, so the
+        # intended usage is several bounded `limit=`-ed calls. ORDER BY
+        # d.updated_at (above) plus this touch is what makes repeated
+        # calls with the same `limit` actually advance through the
+        # backlog instead of re-selecting the same oldest-by-created_at
+        # rows forever -- including the genuinely unresolvable ones,
+        # which never became eligible for a real payload write and so
+        # would otherwise permanently occupy the front of the queue.
         if new_confidence == old_confidence:
+            if not dry_run:
+                with cursor() as cur:
+                    cur.execute("UPDATE drafts SET updated_at = now() WHERE draft_id = %s", (draft_id,))
             continue
 
         changed_draft_ids.append(draft_id)

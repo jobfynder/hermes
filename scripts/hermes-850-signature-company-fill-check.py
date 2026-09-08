@@ -400,6 +400,60 @@ def test_full_reparse_never_touches_a_draft_a_human_already_corrected() -> None:
     )
 
 
+def test_full_reparse_touches_a_stuck_drafts_updated_at_so_batches_advance() -> None:
+    # A draft whose re-parse reproduces the exact same confidence as
+    # before (genuinely unresolvable -- e.g. free text with nothing
+    # structured at all) still needs updated_at bumped when dry_run=
+    # False. Without it, ORDER BY d.updated_at (used so repeated bounded
+    # `limit=`-ed calls advance through a large backlog instead of
+    # re-selecting the same rows every time) would leave this row
+    # permanently at the front of the queue -- a bounded call could
+    # never advance past it to reach later, still-fixable drafts.
+    stuck_text = "Totally unparseable free text with nothing structured in it at all."
+    stuck_email_parsing = {
+        "parser": {"name": "hermes_email_deterministic_parser", "uses_llm": False},
+        "document_kind": "job_description",
+        "records": [
+            _job_record(
+                job_title=None, company=None, required_skills=[],
+                warnings=["job_title_missing", "required_skills_not_identified", "company_missing"],
+                parse_confidence=0.35, requires_review=True,
+            )
+        ],
+        "record_count": 1,
+        "confidence": 0.35,
+        "requires_review": True,
+        "warnings": ["one_or_more_requirements_require_review"],
+    }
+    draft = create_draft_object(
+        draft_type="draft_job_requirement",
+        source="test_stuck_draft_fixture",
+        source_ref="full-reparse-stuck-1",
+        channel="email",
+        source_message_id="full-reparse-stuck-1",
+        payload={
+            "text": stuck_text,
+            "document_kind": "job_description",
+            "structured_data": {"email_parsing": stuck_email_parsing, "signature": {"detected": False, "contact": {}}},
+        },
+        confidence=0.35,
+        requires_review=True,
+    )
+
+    before = get_draft_object(draft.draft_id)
+    backfill_full_reparse(dry_run=False)
+    after = get_draft_object(draft.draft_id)
+
+    require(
+        after.updated_at != before.updated_at,
+        f"A genuinely-stuck (unchanged) draft must still have updated_at bumped: before={before.updated_at} after={after.updated_at}",
+    )
+    require(
+        after.payload["structured_data"]["email_parsing"]["confidence"] == 0.35,
+        "A genuinely-stuck draft's payload must stay exactly as it was -- only updated_at moves",
+    )
+
+
 if __name__ == "__main__":
     test_fills_company_from_detected_signature_and_clears_review()
     print("PASS: signature-detected company fills the gap and clears requires_review")
@@ -436,5 +490,8 @@ if __name__ == "__main__":
 
     test_full_reparse_never_touches_a_draft_a_human_already_corrected()
     print("PASS: full-reparse never overwrites a draft a human already corrected")
+
+    test_full_reparse_touches_a_stuck_drafts_updated_at_so_batches_advance()
+    print("PASS: full-reparse bumps updated_at on a stuck draft so bounded batches keep advancing")
 
     print("hermes-850-signature-company-fill-check: all checks passed")
