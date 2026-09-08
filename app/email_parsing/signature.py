@@ -62,6 +62,34 @@ RAW_HEADER_BLOCK_RE = re.compile(
     r"(?im)^\s*from\s*:\s*.+\r?\n\s*(?:sent|date)\s*:\s*.+"
 )
 
+# Some broadcast/relay platforms (confirmed in production: PROHIRES
+# POWERHOUSE) prepend a rigid block identifying the actual poster right
+# after the subject/unsubscribe boilerplate, instead of (or as well as) a
+# traditional "Regards," signoff at the bottom:
+#     From :
+#     Dildaar,
+#     alltechconsultinginc
+#     dsingh@alltechconsultinginc.com
+#     Reply to:   dsingh@alltechconsultinginc.com
+# Without this, the tail-window fallback below latches onto the
+# platform's own generic marketing footer at the very end ("Sign-Up for
+# your account with ... Recruiting Portal") and finds nothing extractable
+# there -- the real poster identity sitting right here at the top goes
+# entirely unparsed, not because it's ambiguous but because it's in a
+# shape the generic heuristics don't recognize: a single first name with
+# a trailing comma fails NAME_LINE_RE's 2-4-capitalized-word requirement,
+# and a glued lowercase company like "alltechconsultinginc" has no
+# COMPANY_SUFFIX_RE-recognizable suffix. Matched and extracted
+# positionally instead of through those heuristics, because this
+# template's fixed line order is a stronger signal than either regex for
+# exactly this shape.
+RELAY_FROM_BLOCK_RE = re.compile(
+    r"(?im)^[ \t]*from[ \t]*:[ \t]*\n"
+    r"[ \t]*(?P<name>[^\n,]{1,60}),[ \t]*\n"
+    r"[ \t]*(?P<company>[^\n]{1,80}?)[ \t]*\n"
+    r"[ \t]*(?P<email>[^\s@]+@[^\s@]+\.[a-zA-Z]{2,})[ \t]*$"
+)
+
 QUOTE_PREFIX_LINE_RE = re.compile(r"^\s*>")
 
 SIGNOFF_RE = re.compile(
@@ -111,8 +139,17 @@ TRACKING_URL_RE = re.compile(
 # URL into every posting's signature/footer -- confirmed in production:
 # it was being captured as the recruiter's "website", when it's actually
 # the relay's own platform link and says nothing about the recruiter's
-# company. Extend as more relay platforms show up in traffic.
-JOB_BOARD_RELAY_URL_RE = re.compile(r"(?i)https?://(?:[\w-]+\.)*(?:nvoids\.com)")
+# company. Also used to exclude a relay's own domain from
+# _sender_domain_website_fallback below, since some relays (PROHIRES
+# POWERHOUSE) send FROM their own shared domain rather than just linking
+# to it -- confirmed in production, 2900+ drafts from
+# phph0xx@prohirespowerhouse.com, all getting "website":
+# "https://prohirespowerhouse.com" derived from the sender's own address
+# rather than left honestly blank. Extend as more relay platforms show
+# up in traffic.
+JOB_BOARD_RELAY_URL_RE = re.compile(
+    r"(?i)https?://(?:[\w-]+\.)*(?:nvoids\.com|prohirespowerhouse\.com)"
+)
 
 
 _FORWARDED_HEADER_LINE_RE = re.compile(
@@ -700,6 +737,37 @@ def _structural_span_in_window(
     return block_start, block_end, "structural", None
 
 
+def _detect_relay_from_block(
+    lines: list[str], limit: int
+) -> tuple[int, int, dict[str, str]] | None:
+    """Looks for RELAY_FROM_BLOCK_RE within the first `limit` lines.
+    Returns (start_line, end_line, {"name", "company", "email"}) using
+    line indices into the original `lines` list, or None if the block
+    isn't present. Deliberately bounded to a small window near the top --
+    this is a specific, rigid template, not a general-purpose pattern
+    that should be allowed to match anywhere an email happens to contain
+    the word "From" followed by a name-shaped line and an email address.
+    """
+    window_lines = lines[:limit]
+    window_text = "\n".join(window_lines)
+    match = RELAY_FROM_BLOCK_RE.search(window_text)
+    if match is None:
+        return None
+
+    start_line = window_text.count("\n", 0, match.start())
+    end_line = start_line + match.group(0).count("\n") + 1
+
+    return (
+        start_line,
+        end_line,
+        {
+            "name": match.group("name").strip(),
+            "company": match.group("company").strip(),
+            "email": match.group("email").strip(),
+        },
+    )
+
+
 def _detect_signature_span(
     lines: list[str], search_end: int, head_start: int | None = None
 ) -> tuple[int, int, str, str | None] | None:
@@ -803,11 +871,24 @@ def parse_email_signature(
         else boundary
     )
 
-    span = _detect_signature_span(
-        lines,
-        search_end,
-        head_start=_skip_forwarded_header_block(lines, boundary) if is_pure_forward else None,
-    )
+    # Checked before the generic span detection below, not as a fallback
+    # from it: when this rigid relay template is present, it's a stronger
+    # signal than a signoff/tail-window guess could ever be, and letting
+    # the tail-window check run first would just let it win by matching
+    # first (see RELAY_FROM_BLOCK_RE above for why the generic name/
+    # company heuristics can't recognize this shape anyway).
+    relay_block = _detect_relay_from_block(lines, min(20, search_end))
+
+    if relay_block is not None:
+        span = (relay_block[0], relay_block[1], "relay_from_block", None)
+        relay_captures = relay_block[2]
+    else:
+        span = _detect_signature_span(
+            lines,
+            search_end,
+            head_start=_skip_forwarded_header_block(lines, boundary) if is_pure_forward else None,
+        )
+        relay_captures = None
 
     if span is None:
         return {
@@ -845,10 +926,25 @@ def parse_email_signature(
     contact: dict[str, Any] = {}
     warnings: list[str] = []
 
-    name_field = _extract_name(content_lines, signoff_line)
-    title_field, company_field = _extract_title_and_company(
-        content_lines, name_field["value"] if name_field else None
-    )
+    if relay_captures is not None:
+        # Positional, not heuristic -- see RELAY_FROM_BLOCK_RE. title_field
+        # stays None: this template never carries a job title (the job
+        # posting's own "Role:"/"Job Title:" label elsewhere already
+        # covers that), so there's nothing to guess here.
+        name_field = _field(
+            relay_captures["name"], raw=relay_captures["name"], confidence=0.90,
+            method="relay_from_block", source=relay_captures["name"],
+        )
+        title_field = None
+        company_field = _field(
+            relay_captures["company"], raw=relay_captures["company"], confidence=0.90,
+            method="relay_from_block", source=relay_captures["company"],
+        )
+    else:
+        name_field = _extract_name(content_lines, signoff_line)
+        title_field, company_field = _extract_title_and_company(
+            content_lines, name_field["value"] if name_field else None
+        )
 
     # Structural extraction needs a title keyword, a recognized company
     # suffix, or 2-4 capitalized words on one line to anchor on -- none
