@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app.email_parsing.signature import parse_email_signature
+from app.email_parsing.signature import parse_email_signature, warm_ner_pipeline
 
 
 def require(condition: bool, message: str) -> None:
@@ -433,6 +433,20 @@ def test_prohirespowerhouse_domain_never_captured_as_website() -> None:
     )
 
 
+def test_warm_ner_pipeline_never_raises() -> None:
+    # Real production incident: loading the NER model cold took well over
+    # ten minutes on the deployed hardware and used to happen inside
+    # whatever ordinary request first needed it -- indistinguishable from
+    # a hang. warm_ner_pipeline() is called once at app startup instead
+    # (app/main.py) specifically so that cost never lands on a live
+    # request again. Not timing-sensitive here (CI may not even have
+    # spacy/en_core_web_sm installed, in which case this returns
+    # immediately) -- this just confirms the function exists, is safe to
+    # call, and never raises regardless of whether the model is present.
+    warm_ner_pipeline()
+    warm_ner_pipeline()  # second call must be free (lru_cache) and just as safe
+
+
 def main() -> int:
     print("HERMES-850 email signature check started")
 
@@ -480,6 +494,9 @@ def main() -> int:
 
     test_prohirespowerhouse_domain_never_captured_as_website()
     print("PASS: prohirespowerhouse.com is never captured as the recruiter's own website")
+
+    test_warm_ner_pipeline_never_raises()
+    print("PASS: warm_ner_pipeline() is safe to call, with or without the model installed")
 
     print("HERMES-850 email signature check PASSED")
     return 0

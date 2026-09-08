@@ -498,8 +498,22 @@ def _get_ner_pipeline():
 
     try:
         return spacy.load("en_core_web_sm")
-    except OSError:
+    except OSError:  # pragma: no cover - exercised only if model missing
         return None
+
+
+def warm_ner_pipeline() -> None:
+    """Forces the lazy load above to happen now, not on whatever request
+    happens to hit is_pure_forward first. Real production incident: on
+    this deployment's hardware, loading en_core_web_sm cold took well
+    over ten minutes (not the "a few seconds" this module's own docstring
+    assumed) -- a single ordinary request landing on a freshly-started
+    process paid that entire cost synchronously, indistinguishable from a
+    hang until it (eventually) returned. Call this once at application
+    startup (see app/main.py) so that cost lands during deploy, where a
+    slow start is expected and doesn't masquerade as a broken request.
+    """
+    _get_ner_pipeline()
 
 
 def _looks_like_a_person_name(candidate: str) -> bool:
