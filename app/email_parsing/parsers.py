@@ -919,6 +919,72 @@ def parse_requirement_email(
     }
 
 
+def apply_signature_company_fill(
+    email_parsing: dict[str, Any], signature: dict[str, Any]
+) -> tuple[dict[str, Any], bool]:
+    """Deterministic gap-fill, zero LLM calls: the sender's own signature
+    block (app/email_parsing/signature.py, regex/NER only) frequently
+    states the company/agency name even when the job-requirement body
+    itself never labels one explicitly -- see _score_requirement_record's
+    docstring: measured against production, 90% of real job postings have
+    a null company field. HERMES-950's review-queue report confirms
+    company_missing is by far the largest requires_review driver (67% of
+    all review warnings in a 30-day sample).
+
+    Must run BEFORE apply_job_requirement_fallback (app/email_parsing/
+    llm_fallback.py): filling the gap here can push a record's confidence
+    at or above FALLBACK_CONFIDENCE_THRESHOLD, and that function already
+    skips the LLM call once confidence clears the threshold -- so
+    resolving this deterministically first is what keeps the LLM a true
+    last resort rather than the first move on a majority of postings,
+    which matters at this traffic volume and its cost.
+
+    Only ever fills `company` when it's genuinely empty -- never
+    overrides a value the deterministic parser itself found. Restricted
+    to the single-job-per-email case, same reasoning as
+    apply_job_requirement_fallback: a multi-position email's several
+    postings can legitimately be for different end clients even though
+    the sender's own signature only names one company (their own
+    agency), so stamping it onto every position would risk being wrong
+    for the others -- that case is left for a human, same as today.
+    """
+    records = email_parsing.get("records") or []
+
+    if len(records) != 1:
+        return email_parsing, False
+
+    record = records[0]
+
+    if record.get("company"):
+        return email_parsing, False
+
+    company_field = signature.get("contact", {}).get("company_name")
+    company_value = company_field.get("value") if isinstance(company_field, dict) else None
+
+    if not company_value:
+        return email_parsing, False
+
+    record["company"] = company_value
+
+    has_title = "job_title_missing" not in record.get("warnings", [])
+    has_requirement_evidence = "required_skills_not_identified" not in record.get("warnings", [])
+    confidence, warnings = _score_requirement_record(has_title, has_requirement_evidence, has_company=True)
+
+    record["parse_confidence"] = confidence
+    record["requires_review"] = confidence < 0.70
+    record["warnings"] = warnings
+
+    email_parsing["records"] = [record]
+    email_parsing["confidence"] = confidence
+    email_parsing["requires_review"] = record["requires_review"]
+    email_parsing["warnings"] = (
+        ["one_or_more_requirements_require_review"] if record["requires_review"] else []
+    )
+    email_parsing["signature_filled_fields"] = ["company"]
+
+    return email_parsing, True
+
+
 def parse_email_business_records(
     text: str,
     document_kind: str,

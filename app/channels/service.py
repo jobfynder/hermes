@@ -9,6 +9,7 @@ from app.email_parsing.classification_learning import get_domain_bias
 from app.email_parsing.dedupe import register_and_check
 from app.email_parsing.llm_fallback import apply_hotlist_fallback, apply_job_requirement_fallback
 from app.email_parsing.parsers import (
+    apply_signature_company_fill,
     classify_email_by_confidence,
     parse_email_business_records,
     strip_job_board_boilerplate,
@@ -381,30 +382,12 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
             extra_boilerplate_lines=get_approved_boilerplate_lines(),
         )
 
-        # LLM extraction fallback (spec section 7.5, step 7) -- only
-        # engages below FALLBACK_CONFIDENCE_THRESHOLD, using the same
-        # audited LiteLLM/Langfuse path and the same prompts already
-        # proven elsewhere (jf.jobs.jd.extract, jf.broadcast.hotlist.
-        # extract). The deterministic parsers above never call an LLM
-        # themselves -- this is a strictly separate, later stage. See
-        # app/email_parsing/llm_fallback.py.
-        if document_kind == "job_description":
-            email_parsing, _ = apply_job_requirement_fallback(request.text or "", email_parsing)
-        elif document_kind == "hotlist":
-            email_parsing, _ = apply_hotlist_fallback(request.text or "", email_parsing)
-
-        structured_data["email_parsing"] = email_parsing
-
-        email_confidence = email_parsing.get("confidence")
-
-        if isinstance(email_confidence, int | float):
-            confidence = float(email_confidence)
-
         # Deterministic signature extraction (no LLM -- see
-        # app/email_parsing/signature.py PARSER_METADATA). Additive to
-        # structured_data, never overrides document_kind/email_parsing
-        # confidence above: a signature is metadata about the sender, not
-        # the business record the email is classified as.
+        # app/email_parsing/signature.py PARSER_METADATA), run before the
+        # fallback section below on purpose: apply_signature_company_fill
+        # (next) uses this to resolve the single biggest requires_review
+        # driver (company_missing) without an LLM call, which only works
+        # if the signature is already available at that point.
         signature_started_at = perf_counter()
         signature = parse_email_signature(
             text=request.text or "",
@@ -423,6 +406,36 @@ def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespon
         apply_learned_signature_patterns(signature.get("contact", {}), signature_sender_domain)
 
         structured_data["signature"] = signature
+
+        # Gap-fill chain, deterministic-first (standing cost policy: LLM
+        # fallback is a last resort on high-volume regular traffic, never
+        # the first move). apply_signature_company_fill only ever touches
+        # `company` and only when it's empty -- see its docstring in
+        # app/email_parsing/parsers.py for why it must run before the LLM
+        # fallback below, not after: filling the gap here can push
+        # confidence at/above FALLBACK_CONFIDENCE_THRESHOLD and that
+        # fallback already skips the LLM call once confidence clears it.
+        if document_kind == "job_description":
+            email_parsing, _ = apply_signature_company_fill(email_parsing, signature)
+
+        # LLM extraction fallback (spec section 7.5, step 7) -- only
+        # engages below FALLBACK_CONFIDENCE_THRESHOLD, using the same
+        # audited LiteLLM/Langfuse path and the same prompts already
+        # proven elsewhere (jf.jobs.jd.extract, jf.broadcast.hotlist.
+        # extract). The deterministic parsers above never call an LLM
+        # themselves -- this is a strictly separate, later stage. See
+        # app/email_parsing/llm_fallback.py.
+        if document_kind == "job_description":
+            email_parsing, _ = apply_job_requirement_fallback(request.text or "", email_parsing)
+        elif document_kind == "hotlist":
+            email_parsing, _ = apply_hotlist_fallback(request.text or "", email_parsing)
+
+        structured_data["email_parsing"] = email_parsing
+
+        email_confidence = email_parsing.get("confidence")
+
+        if isinstance(email_confidence, int | float):
+            confidence = float(email_confidence)
 
         emit_event(
             "signature.parser_latency",
