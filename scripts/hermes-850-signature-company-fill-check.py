@@ -15,9 +15,14 @@ from unittest.mock import patch
 
 from app.channels.models import ChannelIntakeRequest, ChannelSender
 from app.channels.service import process_channel_intake
-from app.drafts.service import backfill_signature_company_fill, create_draft_object, get_draft_object
+from app.drafts.service import (
+    backfill_full_reparse,
+    backfill_signature_company_fill,
+    create_draft_object,
+    get_draft_object,
+)
 from app.email_parsing.parsers import apply_signature_company_fill
-from app.email_parsing.provenance import build_email_parsing_provenance
+from app.email_parsing.provenance import build_email_parsing_provenance, record_reviewer_correction
 
 
 def require(condition: bool, message: str) -> None:
@@ -254,6 +259,136 @@ def test_backfill_skips_drafts_with_no_signature_company() -> None:
     require(unchanged.status == "needs_review", "A genuinely unresolvable draft must be left exactly as it was")
 
 
+_YARDI_TEXT = (
+    "Subject: YARDI CONSULTANT\n\n"
+    "Remove/unsubscribe   |   Update your contact and subscribed mailing list(s)   |   "
+    "Subscribe to mailing list(s) to receive requirements & resumes \n\n"
+    "From :\nKalyan,\nKK Software Associates\nkalyan@kksoftwareassociates.com\n"
+    "Reply to:   kalyan@kksoftwareassociates.com\n\n"
+    "Job Title: YARDI CONSULTANT\n"
+    "Location: Dallas, TX\n\n"
+    "Broad understanding of Voyager 7, Core Commercial with international accounting "
+    "principles, Investment Management, and Yardi database structure.\n\n"
+    "Role Descriptions: Yardi Support\n"
+    "1)New User Setups\n"
+    "2) Property Setup\n"
+    "3) Entity Setup\n"
+    "4) If any need to add GL accounts based on request with proper approval\n"
+    "5) To provide access past periods based on incidents on monthly basis.\n\n"
+    "Skills: Digital, Functional Programming Experience Required: 6-8\n\n"
+    "Sign-Up for your account with PROHIRES POWERHOUSE Recruiting Portal to broadcast "
+    "requirements & hotlists. \nHire our IT Recruiter at just $499/month ."
+)
+
+
+def _create_stale_draft_pre_relay_and_split_fixes(source_message_id: str) -> str:
+    """Simulates a draft parsed and stored BEFORE HERMES-850's
+    relay_from_block signature detector and numbered-responsibilities-
+    list guard shipped: the real _YARDI_TEXT stored as-is, but the
+    STORED parse results shaped exactly as the old, buggy code would
+    have produced them -- signature detected with nothing extracted
+    (fell through to the platform's own marketing footer), and 5 false
+    job-requirement records from the over-eager numbered-list split.
+    backfill_signature_company_fill (the narrower, older backfill) is
+    powerless here since it only ever reuses this already-wrong stored
+    signature -- this is exactly the gap backfill_full_reparse exists
+    to close, by re-parsing _YARDI_TEXT itself with the current code.
+    """
+    stale_records = [
+        {**_job_record(job_title="YARDI CONSULTANT" if i == 0 else None, source_section=i + 1), "warnings": ["job_title_missing", "company_missing"] if i else ["company_missing"]}
+        for i in range(5)
+    ]
+    email_parsing = {
+        "parser": {"name": "hermes_email_deterministic_parser", "uses_llm": False},
+        "document_kind": "job_description",
+        "records": stale_records,
+        "record_count": 5,
+        "confidence": 0.35,
+        "requires_review": True,
+        "warnings": ["one_or_more_requirements_require_review"],
+    }
+    signature = {
+        "detected": True,
+        "method": "structural",
+        "contact": {"job_title": {"value": "Hire our IT Recruiter at just $499/month ."}},
+    }
+
+    draft = create_draft_object(
+        draft_type="draft_job_requirement",
+        source="test_pre_relay_fix_backfill_fixture",
+        source_ref=source_message_id,
+        channel="email",
+        source_message_id=source_message_id,
+        payload={
+            "text": _YARDI_TEXT,
+            "document_kind": "job_description",
+            "structured_data": {"email_parsing": email_parsing, "signature": signature},
+        },
+        confidence=0.35,
+        requires_review=True,
+        metadata={"sender": {"email": "kalyan@kksoftwareassociates.com"}},
+    )
+    return draft.draft_id
+
+
+def test_full_reparse_recovers_from_stale_pre_relay_fix_data() -> None:
+    draft_id = _create_stale_draft_pre_relay_and_split_fixes("full-reparse-1")
+
+    result = backfill_full_reparse(dry_run=False)
+
+    require(draft_id in result["changed_draft_ids"], f"Must report this draft as changed: {result}")
+    require(draft_id in result["moved_out_of_review_ids"], "Must report it moved out of review")
+
+    updated = get_draft_object(draft_id)
+    require(updated.status == "draft", f"Status must move from needs_review to draft, got {updated.status!r}")
+    email_parsing = updated.payload["structured_data"]["email_parsing"]
+    require(email_parsing["record_count"] == 1, f"Re-parse must fix the false 5-way split, got {email_parsing['record_count']}")
+    require(
+        email_parsing["records"][0]["company"] == "KK Software Associates",
+        f"Re-parse must recover the company via the new relay_from_block detector, got {email_parsing['records'][0]}",
+    )
+    require(
+        updated.payload["structured_data"]["signature"]["method"] == "relay_from_block",
+        f"Stored signature must be replaced by the fresh, correct parse: {updated.payload['structured_data']['signature']}",
+    )
+
+
+def test_full_reparse_dry_run_writes_nothing() -> None:
+    draft_id = _create_stale_draft_pre_relay_and_split_fixes("full-reparse-dry-run-1")
+
+    result = backfill_full_reparse(dry_run=True)
+
+    require(draft_id in result["changed_draft_ids"], f"Dry run must still report this draft as changeable: {result}")
+
+    unchanged = get_draft_object(draft_id)
+    require(unchanged.status == "needs_review", "Dry run must not change status")
+    require(
+        unchanged.payload["structured_data"]["email_parsing"]["record_count"] == 5,
+        "Dry run must not write the re-parsed result back",
+    )
+
+
+def test_full_reparse_never_touches_a_draft_a_human_already_corrected() -> None:
+    draft_id = _create_stale_draft_pre_relay_and_split_fixes("full-reparse-human-corrected-1")
+
+    # A reviewer corrected a field on this draft while it still sat in
+    # needs_review (allowed today: apply_field_corrections doesn't
+    # require the draft to be resolved first) -- that must never be
+    # silently discarded by a bulk re-parse.
+    record_reviewer_correction(draft_id, "job.company", before=None, after="Reviewer-Confirmed Company LLC")
+
+    result = backfill_full_reparse(dry_run=False)
+
+    require(draft_id not in result["changed_draft_ids"], f"A human-corrected draft must never be touched: {result}")
+
+    unchanged = get_draft_object(draft_id)
+    require(unchanged.status == "needs_review", "Status must stay exactly as the human left it")
+    require(
+        unchanged.payload["structured_data"]["email_parsing"]["record_count"] == 5,
+        "Stored payload must stay exactly as the human left it",
+    )
+
+
 if __name__ == "__main__":
     test_fills_company_from_detected_signature_and_clears_review()
     print("PASS: signature-detected company fills the gap and clears requires_review")
@@ -281,5 +416,14 @@ if __name__ == "__main__":
 
     test_backfill_skips_drafts_with_no_signature_company()
     print("PASS: backfill leaves a genuinely unresolvable draft untouched")
+
+    test_full_reparse_recovers_from_stale_pre_relay_fix_data()
+    print("PASS: full-reparse backfill recovers company/record-count from stale pre-fix stored data")
+
+    test_full_reparse_dry_run_writes_nothing()
+    print("PASS: full-reparse dry_run reports without writing anything")
+
+    test_full_reparse_never_touches_a_draft_a_human_already_corrected()
+    print("PASS: full-reparse never overwrites a draft a human already corrected")
 
     print("hermes-850-signature-company-fill-check: all checks passed")
