@@ -68,6 +68,7 @@ jobs:
             scripts/hermes-850-provenance-check.py \
             scripts/hermes-850-review-endpoints-check.py \
             scripts/hermes-850-self-learning-classification-check.py \
+            scripts/hermes-850-signature-company-fill-check.py \
             scripts/hermes-850-sender-resolution-check.py \
             scripts/hermes-400-taxonomy-validation.py \
             scripts/hermes-400-signal-extraction-check.py \

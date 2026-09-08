@@ -71,23 +71,34 @@ def build_job_requirement_provenance(
     record: dict[str, Any],
     extractor: str,
     llm_filled_fields: set[str] | None = None,
+    signature_filled_fields: set[str] | None = None,
+    signature_extractor: str = 'hermes_email_signature_parser',
 ) -> list[dict[str, Any]]:
-    """Per-field, not per-record: apply_job_requirement_fallback() only
-    fills fields the deterministic parser left empty, so a single record
-    can legitimately mix deterministic and llm_fallback provenance.
+    """Per-field, not per-record: apply_job_requirement_fallback() and
+    apply_signature_company_fill() (app/email_parsing/parsers.py) each
+    only fill fields the deterministic parser left empty, so a single
+    record can legitimately mix deterministic, signature_fill, and
+    llm_fallback provenance across its fields.
     """
     llm_filled_fields = llm_filled_fields or set()
+    signature_filled_fields = signature_filled_fields or set()
     confidence = float(record.get('parse_confidence', 0.0))
     entries = []
 
     for field in JOB_REQUIREMENT_FIELDS:
-        is_llm = field in llm_filled_fields
+        if field in llm_filled_fields:
+            extractor_tag, method = JOB_FALLBACK_PROMPT_ID, 'llm_fallback'
+        elif field in signature_filled_fields:
+            extractor_tag, method = signature_extractor, 'signature_fill'
+        else:
+            extractor_tag, method = extractor, 'deterministic'
+
         entries.append(
             _entry(
                 f'job.{field}',
                 record.get(field),
-                extractor=JOB_FALLBACK_PROMPT_ID if is_llm else extractor,
-                extraction_method='llm_fallback' if is_llm else 'deterministic',
+                extractor=extractor_tag,
+                extraction_method=method,
                 confidence=confidence,
             )
         )
@@ -161,8 +172,11 @@ def build_email_parsing_provenance(email_parsing: dict[str, Any]) -> list[dict[s
 
     if document_kind == 'job_description':
         llm_filled_fields = set(email_parsing.get('llm_filled_fields') or [])
+        signature_filled_fields = set(email_parsing.get('signature_filled_fields') or [])
         for record in email_parsing.get('records', []):
-            entries.extend(build_job_requirement_provenance(record, extractor, llm_filled_fields))
+            entries.extend(
+                build_job_requirement_provenance(record, extractor, llm_filled_fields, signature_filled_fields)
+            )
     elif document_kind == 'hotlist':
         llm_used = bool((email_parsing.get('llm_fallback') or {}).get('used'))
         method = 'llm_fallback' if llm_used else 'deterministic'
