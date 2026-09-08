@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from app.channels.models import ChannelIntakeRequest, ChannelSender
 from app.channels.service import process_channel_intake
+from app.drafts.service import backfill_signature_company_fill, create_draft_object, get_draft_object
 from app.email_parsing.parsers import apply_signature_company_fill
 from app.email_parsing.provenance import build_email_parsing_provenance
 
@@ -171,6 +172,88 @@ def test_provenance_tags_signature_filled_company_distinctly() -> None:
     require(by_path["job.job_title"]["extraction_method"] == "deterministic", "Untouched field must stay deterministic")
 
 
+def _create_stale_pre_fix_draft(source_message_id: str, company_name: str | None = "Indus River Technologies") -> str:
+    """Builds a draft the way create_draft_object would have before
+    HERMES-850's signature-company-fill shipped: company genuinely
+    empty, requires_review True, status therefore 'needs_review' -- but
+    with a signature block that (as of the fix) is fully capable of
+    resolving it. Bypasses process_channel_intake entirely so the new
+    live-path fix doesn't just resolve this at creation time, which
+    would defeat the point of testing the backfill against old data.
+    """
+    email_parsing = {
+        "parser": {"name": "hermes_email_deterministic_parser", "uses_llm": False},
+        "document_kind": "job_description",
+        "records": [_job_record()],
+        "record_count": 1,
+        "confidence": 0.65,
+        "requires_review": True,
+        "warnings": ["one_or_more_requirements_require_review"],
+    }
+    signature = (
+        {"detected": True, "contact": {"company_name": {"value": company_name, "confidence": 0.8}}}
+        if company_name
+        else {"detected": False, "contact": {}}
+    )
+
+    draft = create_draft_object(
+        draft_type="draft_job_requirement",
+        source="test_pre_fix_backfill_fixture",
+        source_ref=source_message_id,
+        channel="email",
+        source_message_id=source_message_id,
+        payload={
+            "text": "fixture text",
+            "document_kind": "job_description",
+            "structured_data": {"email_parsing": email_parsing, "signature": signature},
+        },
+        confidence=0.65,
+        requires_review=True,
+    )
+    return draft.draft_id
+
+
+def test_backfill_dry_run_reports_but_writes_nothing() -> None:
+    draft_id = _create_stale_pre_fix_draft("backfill-dry-run-1")
+
+    result = backfill_signature_company_fill(dry_run=True)
+
+    require(draft_id in result["filled_draft_ids"], f"Dry run must still report this draft as fillable: {result}")
+    require(draft_id in result["moved_out_of_review_ids"], "Dry run must report it would move out of review")
+
+    unchanged = get_draft_object(draft_id)
+    require(unchanged.status == "needs_review", "Dry run must not change status")
+    require(unchanged.requires_review is True, "Dry run must not change requires_review")
+    record = unchanged.payload["structured_data"]["email_parsing"]["records"][0]
+    require(record.get("company") is None, "Dry run must not write the filled company back")
+
+
+def test_backfill_applies_and_moves_status_out_of_review() -> None:
+    draft_id = _create_stale_pre_fix_draft("backfill-apply-1")
+
+    result = backfill_signature_company_fill(dry_run=False)
+
+    require(draft_id in result["filled_draft_ids"], f"Must report this draft as filled: {result}")
+    require(draft_id in result["moved_out_of_review_ids"], "Must report it moved out of review")
+
+    updated = get_draft_object(draft_id)
+    require(updated.status == "draft", f"Status must move from needs_review to draft, got {updated.status!r}")
+    require(updated.requires_review is False, "requires_review must be recomputed to False")
+    record = updated.payload["structured_data"]["email_parsing"]["records"][0]
+    require(record.get("company") == "Indus River Technologies", f"Company must be persisted, got {record}")
+
+
+def test_backfill_skips_drafts_with_no_signature_company() -> None:
+    draft_id = _create_stale_pre_fix_draft("backfill-no-sig-1", company_name=None)
+
+    result = backfill_signature_company_fill(dry_run=False)
+
+    require(draft_id not in result["filled_draft_ids"], "Must not report a draft with nothing to fill")
+
+    unchanged = get_draft_object(draft_id)
+    require(unchanged.status == "needs_review", "A genuinely unresolvable draft must be left exactly as it was")
+
+
 if __name__ == "__main__":
     test_fills_company_from_detected_signature_and_clears_review()
     print("PASS: signature-detected company fills the gap and clears requires_review")
@@ -189,5 +272,14 @@ if __name__ == "__main__":
 
     test_provenance_tags_signature_filled_company_distinctly()
     print("PASS: signature-filled company is tagged distinctly in provenance")
+
+    test_backfill_dry_run_reports_but_writes_nothing()
+    print("PASS: backfill dry_run reports what would change without writing anything")
+
+    test_backfill_applies_and_moves_status_out_of_review()
+    print("PASS: backfill fills company and moves a resolved draft out of needs_review")
+
+    test_backfill_skips_drafts_with_no_signature_company()
+    print("PASS: backfill leaves a genuinely unresolvable draft untouched")
 
     print("hermes-850-signature-company-fill-check: all checks passed")

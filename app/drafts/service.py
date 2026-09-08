@@ -6,10 +6,12 @@ from psycopg import errors
 
 from app.email_parsing.classification_learning import record_classification_correction
 from app.email_parsing.llm_fallback import apply_hotlist_fallback, apply_job_requirement_fallback
-from app.email_parsing.parsers import parse_email_business_records
+from app.email_parsing.parsers import apply_signature_company_fill, parse_email_business_records
 from app.email_parsing.provenance import (
     HOTLIST_CONSULTANT_FIELDS,
     JOB_REQUIREMENT_FIELDS,
+    build_email_parsing_provenance,
+    record_field_provenance,
     record_reviewer_correction,
 )
 from app.email_parsing.signature_learning import record_signature_correction
@@ -218,6 +220,110 @@ def list_draft_objects() -> list[DraftObject]:
         rows = cur.fetchall()
 
     return [_row_to_draft(row) for row in rows]
+
+
+def backfill_signature_company_fill(dry_run: bool = True, limit: int | None = None) -> dict[str, Any]:
+    """One-shot pass over the existing draft_job_requirement backlog
+    (status still 'draft' or 'needs_review' -- never touches published/
+    rejected/spam) applying apply_signature_company_fill (app/
+    email_parsing/parsers.py) retroactively. That fill runs
+    automatically on every new email since HERMES-850's signature-
+    company-fill change; this clears the backlog that existed before it
+    shipped, same relationship bulk_backfill_related_titles (app/
+    understanding/taxonomy/loader.py) has to the taxonomy candidate it
+    backfills.
+
+    Same guarantees as the live path: only ever touches a record whose
+    `company` is genuinely empty, never overrides one the parser already
+    found, and only a draft's status/confidence/requires_review actually
+    change -- never force-published, never force-approved. dry_run=True
+    (the default) computes and reports what WOULD change without writing
+    anything, so the caller can sanity-check counts before actually
+    running it.
+    """
+    query = """
+        SELECT draft_id, payload
+        FROM drafts
+        WHERE draft_type = 'draft_job_requirement'
+          AND status IN ('draft', 'needs_review')
+        ORDER BY created_at
+    """
+    if limit is not None:
+        query += " LIMIT %s"
+
+    with cursor() as cur:
+        cur.execute(query, (limit,) if limit is not None else None)
+        rows = cur.fetchall()
+
+    checked = 0
+    filled_draft_ids: list[str] = []
+    moved_out_of_review_ids: list[str] = []
+
+    for row in rows:
+        draft_id = str(row["draft_id"])
+        payload = row["payload"]
+        structured = payload.get("structured_data") or {}
+        email_parsing = structured.get("email_parsing") or {}
+        signature = structured.get("signature") or {}
+
+        if not email_parsing.get("records"):
+            continue
+
+        checked += 1
+        was_requires_review = bool(email_parsing.get("requires_review"))
+        updated_email_parsing, filled = apply_signature_company_fill(dict(email_parsing), signature)
+
+        if not filled:
+            continue
+
+        filled_draft_ids.append(draft_id)
+        new_requires_review = bool(updated_email_parsing.get("requires_review"))
+        new_status = "needs_review" if new_requires_review else "draft"
+
+        if was_requires_review and not new_requires_review:
+            moved_out_of_review_ids.append(draft_id)
+
+        if dry_run:
+            continue
+
+        structured["email_parsing"] = updated_email_parsing
+        payload["structured_data"] = structured
+
+        with cursor() as cur:
+            cur.execute(
+                """
+                UPDATE drafts
+                SET payload = %s, confidence = %s, requires_review = %s,
+                    status = %s, updated_at = now()
+                WHERE draft_id = %s AND status IN ('draft', 'needs_review')
+                """,
+                (
+                    json.dumps(payload, default=str),
+                    updated_email_parsing.get("confidence", 0.0),
+                    new_requires_review,
+                    new_status,
+                    draft_id,
+                ),
+            )
+
+        record_field_provenance(
+            parse_run_id=draft_id,
+            entries=build_email_parsing_provenance(updated_email_parsing),
+        )
+
+        emit_event(
+            "draft.signature_company_backfilled",
+            {"draft_id": draft_id, "new_status": new_status},
+        )
+
+    return {
+        "dry_run": dry_run,
+        "checked_count": checked,
+        "filled_count": len(filled_draft_ids),
+        "moved_out_of_review_count": len(moved_out_of_review_ids),
+        "filled_draft_ids": filled_draft_ids[:50],
+        "moved_out_of_review_ids": moved_out_of_review_ids[:50],
+    }
 
 
 def _draft_summary_title(row: dict) -> str:

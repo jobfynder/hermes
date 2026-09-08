@@ -8,6 +8,7 @@ from app.claim.service import get_claim_by_draft
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
 from app.drafts.service import (
     apply_field_corrections,
+    backfill_signature_company_fill,
     delete_draft_object,
     get_draft_object,
     list_draft_objects,
@@ -67,6 +68,15 @@ class FieldProvenanceEntry(BaseModel):
     recorded_at: str
 
 
+class SignatureCompanyFillBackfillResult(BaseModel):
+    dry_run: bool
+    checked_count: int
+    filled_count: int
+    moved_out_of_review_count: int
+    filled_draft_ids: list[str]
+    moved_out_of_review_ids: list[str]
+
+
 class DraftSummaryEntry(BaseModel):
     draft_id: str
     draft_type: DraftObjectType
@@ -99,6 +109,26 @@ def list_drafts_summary(
     "summary" is never swallowed as a draft_id path param.
     """
     return list_draft_summaries(include_duplicates=include_duplicates)
+
+
+@router.post("/backfill/signature-company-fill", response_model=SignatureCompanyFillBackfillResult)
+def backfill_signature_company_fill_endpoint(
+    dry_run: bool = True,
+    limit: int | None = None,
+    _user: dict = Depends(require_permission("drafts:publish")),
+) -> dict:
+    """One-time backlog cleanup for HERMES-850's signature-company-fill
+    change (app/email_parsing/parsers.py: apply_signature_company_fill),
+    which only runs automatically on NEW email intake -- this applies it
+    retroactively to draft_job_requirement drafts already sitting in
+    'draft'/'needs_review' from before that change shipped. Registered
+    ahead of /{draft_id} so "backfill" is never swallowed as a draft_id
+    path param, same reasoning as /summary above.
+
+    dry_run=True (the default) reports counts without writing anything --
+    call it once to sanity-check before dry_run=False actually applies.
+    """
+    return backfill_signature_company_fill(dry_run=dry_run, limit=limit)
 
 
 @router.get("/{draft_id}", response_model=DraftObject)
