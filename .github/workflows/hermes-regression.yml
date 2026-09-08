@@ -37,6 +37,13 @@ jobs:
       HERMES_PROMPT_RUNTIME_DRY_RUN: "true"
       CORE_API_BASE_URL: https://uat.jobfynder.com/api
       HERMES_SERVICE_TOKEN: ci-test-token
+      # app/runtime/jsonl_store.py's RUNTIME_ROOT defaults to /hermes-runtime,
+      # a path that only exists via the real deployment's Docker volume --
+      # not writable on this runner's root filesystem. Redirect it (and the
+      # taxonomy runtime copy, which the same regression suite also
+      # exercises) into the runner's own writable temp dir instead.
+      HERMES_RUNTIME_ROOT: ${{ runner.temp }}/hermes-runtime
+      HERMES_TAXONOMY_RUNTIME_DIR: ${{ runner.temp }}/hermes-runtime/taxonomy
       PYTHONPATH: ${{ github.workspace }}
 
     steps:
