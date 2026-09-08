@@ -357,12 +357,19 @@ def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dic
     silently discard that work. dry_run=True (the default) reports
     counts without writing anything.
 
-    Performance note, measured against production: ~0.5s/draft, so a
-    single call over the whole backlog (order of 15,000+ rows) risks a
-    very long blocking HTTP request. Intended usage against a large
-    backlog is several bounded `limit=`-ed calls (dry_run=False) rather
-    than one unlimited call -- ORDER BY d.updated_at, plus this
-    function bumping updated_at even on a no-op row (see below), is
+    Performance note, measured against production: re-parsing itself is
+    ~0.5s/draft (regex/NLP work, no DB access), so a single call over
+    the whole backlog (order of 15,000+ rows) still risks a very long
+    blocking HTTP request -- intended usage against a large backlog is
+    several bounded `limit=`-ed calls (dry_run=False) rather than one
+    unlimited call. All of a call's writes (the payload/status update
+    for every changed draft, every no-op row's updated_at touch, and
+    every provenance insert) happen in ONE transaction at the end
+    instead of one per row -- an earlier version opened a fresh
+    transaction per row and a 100-row batch didn't finish in 180s: a
+    bulk operation over thousands of rows can't afford a network
+    round-trip per row on top of the parsing cost. ORDER BY d.updated_at
+    plus bumping updated_at on every examined row (changed or not) is
     what makes repeated calls with the same limit actually advance
     through the backlog each time instead of re-selecting the same
     oldest-by-created_at rows forever.
@@ -393,6 +400,12 @@ def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dic
     checked = 0
     changed_draft_ids: list[str] = []
     moved_out_of_review_ids: list[str] = []
+
+    # Phase 1: pure CPU-bound re-parsing, no database access at all --
+    # collects what needs writing without touching the DB per-row. See
+    # phase 2 below for why this split matters.
+    touch_only_ids: list[str] = []
+    writes: list[tuple[str, dict, float, bool, str, list[dict[str, Any]]]] = []
 
     for row in rows:
         draft_id = str(row["draft_id"])
@@ -431,9 +444,7 @@ def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dic
         # which never became eligible for a real payload write and so
         # would otherwise permanently occupy the front of the queue.
         if new_confidence == old_confidence:
-            if not dry_run:
-                with cursor() as cur:
-                    cur.execute("UPDATE drafts SET updated_at = now() WHERE draft_id = %s", (draft_id,))
+            touch_only_ids.append(draft_id)
             continue
 
         changed_draft_ids.append(draft_id)
@@ -450,32 +461,52 @@ def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dic
         structured["signature"] = signature
         payload["structured_data"] = structured
 
-        with cursor() as cur:
-            cur.execute(
-                """
-                UPDATE drafts
-                SET payload = %s, confidence = %s, requires_review = %s,
-                    status = %s, updated_at = now()
-                WHERE draft_id = %s AND status IN ('draft', 'needs_review')
-                """,
-                (
-                    json.dumps(payload, default=str),
-                    new_confidence,
-                    new_requires_review,
-                    new_status,
-                    draft_id,
-                ),
-            )
-
         entries = build_email_parsing_provenance(email_parsing)
         if signature.get("detected"):
             entries += build_signature_provenance(signature)
-        record_field_provenance(parse_run_id=draft_id, entries=entries)
 
-        emit_event(
-            "draft.full_reparse_backfilled",
-            {"draft_id": draft_id, "new_status": new_status},
-        )
+        writes.append((draft_id, payload, new_confidence, new_requires_review, new_status, entries))
+
+    # Phase 2: one transaction for the whole batch instead of one per row
+    # -- measured against production: this endpoint was originally ~0.5s/
+    # draft on reads but effectively unusable on writes (a 100-row batch
+    # didn't finish in 180s) because every row opened its own `with
+    # cursor()` (its own commit/round-trip) for the UPDATE and again for
+    # record_field_provenance. A bulk operation over thousands of rows
+    # can't afford a network round-trip per row; batching every write for
+    # this call into one commit is what makes a `limit=`-ed batch actually
+    # fast enough to run repeatedly.
+    if not dry_run and (touch_only_ids or writes):
+        with cursor() as cur:
+            if touch_only_ids:
+                cur.executemany(
+                    "UPDATE drafts SET updated_at = now() WHERE draft_id = %s",
+                    [(draft_id,) for draft_id in touch_only_ids],
+                )
+
+            for draft_id, payload, new_confidence, new_requires_review, new_status, entries in writes:
+                cur.execute(
+                    """
+                    UPDATE drafts
+                    SET payload = %s, confidence = %s, requires_review = %s,
+                        status = %s, updated_at = now()
+                    WHERE draft_id = %s AND status IN ('draft', 'needs_review')
+                    """,
+                    (
+                        json.dumps(payload, default=str),
+                        new_confidence,
+                        new_requires_review,
+                        new_status,
+                        draft_id,
+                    ),
+                )
+                record_field_provenance(parse_run_id=draft_id, entries=entries, cur=cur)
+
+        for draft_id, _payload, _new_confidence, _new_requires_review, new_status, _entries in writes:
+            emit_event(
+                "draft.full_reparse_backfilled",
+                {"draft_id": draft_id, "new_status": new_status},
+            )
 
     return {
         "dry_run": dry_run,
