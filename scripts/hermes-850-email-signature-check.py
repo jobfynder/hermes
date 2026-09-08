@@ -356,6 +356,83 @@ def test_website_fallback_never_fires_for_a_freemail_sender() -> None:
     )
 
 
+def test_relay_from_block_extracts_name_company_email_positionally() -> None:
+    # Real production fixture (PROHIRES POWERHOUSE relay, HERMES-850
+    # signature-parsing gap): a rigid "From :\n<name>,\n<company>\n
+    # <email>\nReply to: <email>" block at the top, no "Regards,"-style
+    # signoff anywhere -- without RELAY_FROM_BLOCK_RE, this fell through
+    # to the platform's own generic marketing footer at the very end and
+    # extracted nothing at all (name/company/email all "_not_detected").
+    text = (
+        "Subject: PL SQL Developer\n\n"
+        "Remove/unsubscribe   |   Update your contact and subscribed mailing list(s)   |   "
+        "Subscribe to mailing list(s) to receive requirements & resumes \n\n"
+        "From :\n"
+        "Dildaar,\n"
+        "alltechconsultinginc\n"
+        "dsingh@alltechconsultinginc.com\n"
+        "Reply to:   dsingh@alltechconsultinginc.com\n\n"
+        "Role: PL SQL Developer \n\n"
+        "Required skills: Oracle SQL, PL/SQL\n\n"
+        "Sign-Up for your account with PROHIRES POWERHOUSE Recruiting Portal to broadcast requirements & hotlists. \n"
+        "Hire our IT Recruiter at just $499/month .\n"
+    )
+
+    sig = parse_email_signature(text=text, sender_email="phph001@prohirespowerhouse.com")
+    contact = contact_values(sig)
+
+    require(sig["detected"] is True, f"Must detect the relay's From: block as a signature: {sig}")
+    require(sig["method"] == "relay_from_block", f"Must be tagged with its own method, got {sig['method']!r}")
+    require(contact.get("full_name") == "Dildaar", f"Must extract the name positionally, got {contact}")
+    require(
+        contact.get("company_name") == "alltechconsultinginc",
+        f"Must extract the company positionally even with no recognizable suffix, got {contact}",
+    )
+    require(contact.get("email") == "dsingh@alltechconsultinginc.com", f"Must extract the email, got {contact}")
+    require(sig["requires_review"] is False, f"A fully-resolved relay block must not require review: {sig}")
+
+
+def test_relay_from_block_never_fires_on_a_real_forwarded_header() -> None:
+    # RAW_HEADER_BLOCK_RE-shaped forwards ("From: X <email>\nSent: ...")
+    # already have their own handling -- must not collide with the new
+    # relay-block detector, which requires "From:" alone on its own line.
+    text = """Subject: FW: AWS Connect Solutions Engineer - Oncor
+
+From: harry@itecsus.com <harry@itecsus.com>
+Sent: Saturday, August 29, 2026 6:38 AM
+To: Jobs Nvoids <jobs@nvoids.com>
+Subject: AWS Connect Solutions Engineer - Oncor
+
+Required skills: Amazon Connect, AWS Lambda
+"""
+
+    sig = parse_email_signature(text=text, sender_email="jobs@jobfynder.com")
+
+    require(
+        sig.get("method") != "relay_from_block",
+        f"A real 'From: X <email>\\nSent: ...' header block must never be mistaken for the relay template: {sig}",
+    )
+
+
+def test_prohirespowerhouse_domain_never_captured_as_website() -> None:
+    # Companion to test_job_board_relay_url_never_captured_as_website --
+    # this relay is different in kind: it sends FROM its own shared
+    # domain (phph00x@prohirespowerhouse.com) rather than just linking to
+    # it, so the sender-domain fallback needs the same exclusion the
+    # text-URL path already has, or it derives the same wrong answer
+    # from a second angle. Confirmed in production: 2900+ drafts from
+    # this domain all got "website": "https://prohirespowerhouse.com".
+    text = "Regards,\nSomeone\n"
+
+    sig = parse_email_signature(text=text, sender_email="phph001@prohirespowerhouse.com")
+    contact = contact_values(sig)
+
+    require(
+        contact.get("website") is None,
+        f"A known relay's own domain must never be used as the sender-domain website fallback, got {contact.get('website')!r}",
+    )
+
+
 def main() -> int:
     print("HERMES-850 email signature check started")
 
@@ -394,6 +471,15 @@ def main() -> int:
 
     test_website_fallback_never_fires_for_a_freemail_sender()
     print("PASS: the sender-domain website fallback never fires for a freemail sender")
+
+    test_relay_from_block_extracts_name_company_email_positionally()
+    print("PASS: a relay's rigid From: block extracts name/company/email positionally")
+
+    test_relay_from_block_never_fires_on_a_real_forwarded_header()
+    print("PASS: the relay-block detector never collides with a real forwarded email header")
+
+    test_prohirespowerhouse_domain_never_captured_as_website()
+    print("PASS: prohirespowerhouse.com is never captured as the recruiter's own website")
 
     print("HERMES-850 email signature check PASSED")
     return 0
