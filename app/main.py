@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.email_parsing.signature import warm_ner_pipeline
 from app.runtime.db import init_schema
 from app.routers import submissions
 from app.routers import integrations
@@ -54,6 +55,18 @@ def _init_landing_database() -> None:
     # -- safe to run on every process start, including every replica in a
     # multi-instance deployment.
     init_schema()
+
+
+@app.on_event("startup")
+def _warm_signature_ner_pipeline() -> None:
+    # See warm_ner_pipeline's own docstring (app/email_parsing/signature.py)
+    # -- real production incident: loading this model cold took well over
+    # ten minutes on this deployment's hardware, and without this it
+    # happened synchronously inside whatever ordinary request first hit
+    # the NER fallback path on a freshly-started process, indistinguishable
+    # from a hang. Paying that cost here means a slow container start,
+    # not a mysteriously stuck API call.
+    warm_ner_pipeline()
 
 app.include_router(health_router)
 app.include_router(jobs_router)

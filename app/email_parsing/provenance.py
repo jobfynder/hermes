@@ -187,40 +187,55 @@ def build_email_parsing_provenance(email_parsing: dict[str, Any]) -> list[dict[s
     return entries
 
 
-def record_field_provenance(parse_run_id: str, entries: list[dict[str, Any]], *, transaction_cursor=None) -> None:
+def record_field_provenance(parse_run_id: str, entries: list[dict[str, Any]], cur: Any = None, *, transaction_cursor=None) -> None:
+    """cur: reuse an already-open cursor/transaction instead of opening a
+    fresh one (each `with cursor()` is its own commit -- fine for a single
+    draft, but a real cost multiplier for a bulk caller like
+    backfill_full_reparse doing this hundreds/thousands of times in a
+    row; see that function's docstring for the measured impact). Every
+    existing call site keeps opening its own cursor exactly as before by
+    just not passing this.
+    """
+    if transaction_cursor is not None:
+        if cur is not None and cur is not transaction_cursor:
+            raise ValueError('Conflicting provenance transaction cursors')
+        cur = transaction_cursor
     if not entries:
         return
 
-    from contextlib import nullcontext
-    with (nullcontext(transaction_cursor) if transaction_cursor is not None else cursor()) as cur:
-        cur.executemany(
-            '''
-            INSERT INTO field_provenance (
-                parse_run_id, field_path, raw_value, normalized_value,
-                source_region, extractor, extraction_method, confidence, value_kind
-            ) VALUES (
-                %(parse_run_id)s, %(field_path)s, %(raw_value)s, %(normalized_value)s,
-                %(source_region)s, %(extractor)s, %(extraction_method)s, %(confidence)s, %(value_kind)s
-            )
-            ''',
-            [
-                {
-                    'parse_run_id': parse_run_id,
-                    'field_path': entry['field_path'],
-                    'raw_value': (
-                        entry['raw_value'] if isinstance(entry.get('raw_value'), str) or entry.get('raw_value') is None
-                        else json.dumps(entry['raw_value'], default=str)
-                    ),
-                    'normalized_value': json.dumps(entry.get('normalized_value'), default=str),
-                    'source_region': entry.get('source_region'),
-                    'extractor': entry['extractor'],
-                    'extraction_method': entry['extraction_method'],
-                    'confidence': entry['confidence'],
-                    'value_kind': entry['value_kind'],
-                }
-                for entry in entries
-            ],
+    query = '''
+        INSERT INTO field_provenance (
+            parse_run_id, field_path, raw_value, normalized_value,
+            source_region, extractor, extraction_method, confidence, value_kind
+        ) VALUES (
+            %(parse_run_id)s, %(field_path)s, %(raw_value)s, %(normalized_value)s,
+            %(source_region)s, %(extractor)s, %(extraction_method)s, %(confidence)s, %(value_kind)s
         )
+        '''
+    params = [
+        {
+            'parse_run_id': parse_run_id,
+            'field_path': entry['field_path'],
+            'raw_value': (
+                entry['raw_value'] if isinstance(entry.get('raw_value'), str) or entry.get('raw_value') is None
+                else json.dumps(entry['raw_value'], default=str)
+            ),
+            'normalized_value': json.dumps(entry.get('normalized_value'), default=str),
+            'source_region': entry.get('source_region'),
+            'extractor': entry['extractor'],
+            'extraction_method': entry['extraction_method'],
+            'confidence': entry['confidence'],
+            'value_kind': entry['value_kind'],
+        }
+        for entry in entries
+    ]
+
+    if cur is not None:
+        cur.executemany(query, params)
+        return
+
+    with cursor() as cur:
+        cur.executemany(query, params)
 
 
 def load_field_provenance(parse_run_id: str) -> list[dict[str, Any]]:
