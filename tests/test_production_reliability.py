@@ -180,6 +180,18 @@ class BackfillIntegrationTests(unittest.TestCase):
         with cursor() as cur:
             cur.execute('DELETE FROM idempotency_keys WHERE key=%s', (key,))
 
+    def test_concurrent_schema_initialization(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from app.runtime import db
+        table = 'schema_race_' + uuid4().hex
+        with patch.object(db, 'SCHEMA', f'CREATE TABLE IF NOT EXISTS {table}(id INTEGER)'):
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                futures = [pool.submit(db.init_schema) for _ in range(4)]
+                for future in futures:
+                    future.result()
+        with cursor() as cur:
+            cur.execute(f'DROP TABLE {table}')
+
 
 if __name__ == '__main__':
     unittest.main()

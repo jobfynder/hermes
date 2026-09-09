@@ -329,6 +329,9 @@ CREATE TABLE IF NOT EXISTS signature_corrections (
 
 def init_schema() -> None:
     with cursor() as cur:
+        # CREATE TABLE IF NOT EXISTS can still race in PostgreSQL's type
+        # catalog when API and workers start against a new schema together.
+        cur.execute('SELECT pg_advisory_xact_lock(892310482)')
         cur.execute(SCHEMA)
 
 
