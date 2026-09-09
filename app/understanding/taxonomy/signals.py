@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 
 from app.understanding.taxonomy.loader import (
+    cache_by_taxonomy,
     get_canonical_skill_entries,
     get_job_title_entries,
     get_skill_alias_entries,
@@ -24,6 +26,7 @@ class SignalCandidate:
     confidence: str
 
 
+@lru_cache(maxsize=32768)
 def _safe_phrase_pattern(phrase: str) -> re.Pattern[str]:
     escaped = re.escape(phrase.strip())
     return re.compile(rf"(?<![A-Za-z0-9]){escaped}(?![A-Za-z0-9])", re.IGNORECASE)
@@ -37,6 +40,7 @@ def _candidate_key(candidate: SignalCandidate) -> tuple[str, str, str]:
     )
 
 
+@cache_by_taxonomy
 def _build_skill_candidates() -> list[SignalCandidate]:
     candidates: list[SignalCandidate] = []
 
@@ -85,6 +89,7 @@ def _build_skill_candidates() -> list[SignalCandidate]:
     return _dedupe_candidates(candidates)
 
 
+@cache_by_taxonomy
 def _build_title_candidates() -> list[SignalCandidate]:
     candidates: list[SignalCandidate] = []
 
@@ -160,8 +165,14 @@ def _extract_candidates(text: str, candidates: list[SignalCandidate]) -> list[di
 
     seen: set[tuple[str, int, int]] = set()
     results: list[dict[str, object]] = []
+    # ASCII case-insensitive regexes additionally match these four Unicode
+    # characters. Preserve that behavior in the cheap literal prefilter;
+    # non-ASCII phrases always use the original regex path.
+    folded_text = text.translate(str.maketrans({'İ': 'i', 'ı': 'i', 'ſ': 's', 'K': 'k'})).lower()
 
     for candidate in candidates:
+        if candidate.phrase.isascii() and candidate.phrase.strip().lower() not in folded_text:
+            continue
         pattern = _safe_phrase_pattern(candidate.phrase)
 
         for match in pattern.finditer(text):

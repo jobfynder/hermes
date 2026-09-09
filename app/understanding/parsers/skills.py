@@ -19,10 +19,12 @@ def normalize_text(text: str) -> str:
 
 def has_exact_skill_phrase(text: str, phrase: str) -> bool:
     normalized_text = normalize_text(text)
-    normalized_phrase = normalize_text(phrase)
+    return _skill_pattern(phrase).search(normalized_text) is not None
 
-    pattern = r"(?<![a-z0-9])" + re.escape(normalized_phrase) + r"(?![a-z0-9])"
-    return re.search(pattern, normalized_text) is not None
+
+@lru_cache(maxsize=32768)
+def _skill_pattern(phrase: str):
+    return re.compile(r"(?<![a-z0-9])" + re.escape(normalize_text(phrase)) + r"(?![a-z0-9])")
 
 
 def skill_match_terms(skill_entry: dict[str, Any]) -> list[str]:
@@ -65,6 +67,7 @@ def extract_skills(
 
     normalized_text = normalize_text(text)
     token_window_text = " ".join(token.text for token in doc)
+    normalized_window = normalize_text(token_window_text)
     found: dict[str, dict[str, Any]] = {}
 
     for skill_entry in skill_entries:
@@ -74,7 +77,7 @@ def extract_skills(
             continue
 
         for term in skill_match_terms(skill_entry):
-            if has_exact_skill_phrase(normalized_text, term):
+            if normalize_text(term) in normalized_text and _skill_pattern(term).search(normalized_text) is not None:
                 found[skill_name.lower()] = {
                     "name": skill_name,
                     "confidence": 1.0,
@@ -91,7 +94,7 @@ def extract_skills(
         best_term = skill_name
 
         for term in fuzzy_match_terms(skill_entry):
-            score = fuzz.partial_ratio(normalize_text(term), normalize_text(token_window_text))
+            score = fuzz.partial_ratio(normalize_text(term), normalized_window)
 
             if score > best_score:
                 best_score = score

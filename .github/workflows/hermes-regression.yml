@@ -48,6 +48,7 @@ jobs:
       HERMES_RUNTIME_ROOT: /tmp/hermes-runtime
       HERMES_TAXONOMY_RUNTIME_DIR: /tmp/hermes-runtime/taxonomy
       PYTHONPATH: ${{ github.workspace }}
+      HERMES_RELIABILITY_TEST_DB: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +62,9 @@ jobs:
 
       - name: Initialize schema
         run: python3 -c "from app.runtime.db import init_schema; init_schema()"
+
+      - name: Backfill and consumer reliability
+        run: python3 -m unittest tests.test_production_reliability -v
 
       - name: Run regression suite
         run: |

@@ -3,7 +3,8 @@ import os
 import re
 import shutil
 from datetime import UTC, datetime
-from functools import lru_cache
+from functools import lru_cache, wraps
+from threading import RLock
 from pathlib import Path
 from typing import Any
 
@@ -742,13 +743,30 @@ def get_canonical_job_titles() -> list[str]:
     ]
 
 
-def build_skill_alias_index() -> dict[str, str]:
-    """Deliberately uncached, unlike the load_* functions it's built from
-    -- those already handle staleness (mtime-checked), and reconstructing
-    this dict from their result is a rebuild over a few hundred entries,
-    microseconds, not worth a second caching layer that would need its
-    own invalidation story on top of theirs.
+def cache_by_taxonomy(function):
+    """Reuse derived indexes until the existing source caches reload.
+
+    Retaining source objects avoids id reuse and observes both cross-process
+    file changes and explicit clear_taxonomy_cache calls.
     """
+    sources = None
+    result = None
+    lock = RLock()
+    @wraps(function)
+    def cached():
+        nonlocal sources, result
+        current = (load_canonical_skills_taxonomy(), load_job_titles_taxonomy(),
+                   load_skill_aliases_taxonomy(), load_title_aliases_taxonomy())
+        with lock:
+            if sources is None or any(a is not b for a, b in zip(sources, current)):
+                result = function()
+                sources = current
+            return result
+    return cached
+
+
+@cache_by_taxonomy
+def build_skill_alias_index() -> dict[str, str]:
     index: dict[str, str] = {}
 
     for entry in get_canonical_skill_entries():
@@ -774,6 +792,7 @@ def build_skill_alias_index() -> dict[str, str]:
     return index
 
 
+@cache_by_taxonomy
 def build_title_alias_index() -> dict[str, str]:
     index: dict[str, str] = {}
 

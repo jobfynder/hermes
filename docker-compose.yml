@@ -47,6 +47,7 @@ services:
 
     environment:
       - PYTHONPATH=/app
+      - HERMES_ENV=production
       - HERMES_RBAC_ENFORCEMENT=enabled
       - HERMES_ACCESS_CONTROL_FILE=/hermes-runtime/access-control/users.json
       - DATABASE_URL=postgresql://hermes:${HERMES_POSTGRES_PASSWORD}@hermes-postgres:5432/hermes
@@ -63,6 +64,14 @@ services:
     build: .
     container_name: hermes-graph-consumer
     restart: unless-stopped
+    init: true
+    stop_grace_period: 150s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.stat('/tmp/hermes-graph-heartbeat').st_mtime < 30"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     command: python scripts/hermes-850-graph-notification-consumer.py
     depends_on:
       hermes-postgres:
@@ -79,5 +88,32 @@ services:
       - /opt/jobfynder-docs:/jobfynder-docs
       - /opt/hermes-runtime:/hermes-runtime
 
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  hermes-backfill-worker:
+    build: .
+    container_name: hermes-backfill-worker
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 150s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,time; assert time.time()-os.stat('/tmp/hermes-backfill-heartbeat').st_mtime < 150"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    command: python scripts/hermes-backfill-worker.py
+    depends_on:
+      hermes-postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://hermes:${HERMES_POSTGRES_PASSWORD}@hermes-postgres:5432/hermes
+    volumes:
+      - /opt/jobfynder-docs:/jobfynder-docs:ro
+      - /opt/hermes-runtime:/hermes-runtime
     extra_hosts:
       - "host.docker.internal:host-gateway"

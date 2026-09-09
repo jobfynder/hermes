@@ -204,6 +204,14 @@ def enforce_optional_action_access(request: ChannelIntakeRequest) -> list[str]:
 
 
 def process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeResponse:
+    # A crash or processing deadline must not leave a committed dedupe key
+    # without the draft it protects. All database writes commit together.
+    from app.runtime.db import transaction
+    with transaction():
+        return _process_channel_intake(request)
+
+
+def _process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeResponse:
     duplicate_key = build_duplicate_key(request)
 
     access_errors = enforce_optional_action_access(request)

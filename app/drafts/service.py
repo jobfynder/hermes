@@ -408,9 +408,10 @@ def backfill_full_reparse(dry_run: bool = True, limit: int | None = None) -> dic
         new_confidence = email_parsing.get("confidence", 0.0)
         new_requires_review = bool(email_parsing.get("requires_review"))
 
-        # Only a change in outcome counts as "changed" -- a re-parse that
-        # reproduces the exact same confidence isn't worth a write.
-        if new_confidence == old_confidence:
+        old_structured = payload.get("structured_data") or {}
+        if (email_parsing == (old_structured.get("email_parsing") or {})
+                and signature == (old_structured.get("signature") or {})
+                and row["status"] == ("needs_review" if new_requires_review else "draft")):
             continue
 
         changed_draft_ids.append(draft_id)

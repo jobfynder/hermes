@@ -187,11 +187,12 @@ def build_email_parsing_provenance(email_parsing: dict[str, Any]) -> list[dict[s
     return entries
 
 
-def record_field_provenance(parse_run_id: str, entries: list[dict[str, Any]]) -> None:
+def record_field_provenance(parse_run_id: str, entries: list[dict[str, Any]], *, transaction_cursor=None) -> None:
     if not entries:
         return
 
-    with cursor() as cur:
+    from contextlib import nullcontext
+    with (nullcontext(transaction_cursor) if transaction_cursor is not None else cursor()) as cur:
         cur.executemany(
             '''
             INSERT INTO field_provenance (

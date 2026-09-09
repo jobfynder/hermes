@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 from app.email_parsing.routing import classify_recipient_mailbox
 from app.runtime.jsonl_store import read_json, runtime_path, write_json
@@ -112,7 +113,14 @@ def _get_graph_access_token() -> str | None:
     return body.get('access_token')
 
 
-def fetch_graph_message(resource: str | None) -> dict[str, Any] | None:
+class GraphFetchError(RuntimeError):
+    def __init__(self, code, retry_after=0):
+        self.code = code
+        self.retry_after = retry_after
+        super().__init__(f'Graph fetch failed: {code}')
+
+
+def fetch_graph_message(resource: str | None, *, raise_errors=False) -> dict[str, Any] | None:
     '''Fetches the full message resource referenced by a Graph change
     notification. `resource` is the notification's own `resource` field
     (e.g. "Users/{id}/Messages/{message-id}"), fetched directly against
@@ -136,6 +144,8 @@ def fetch_graph_message(resource: str | None) -> dict[str, Any] | None:
     '''
     access_token = _get_graph_access_token()
     if not access_token or not resource:
+        if raise_errors:
+            raise GraphFetchError('auth_or_resource_missing')
         return None
 
     request = Request(f'{GRAPH_API_BASE}/{resource.lstrip("/")}', method='GET')
@@ -144,7 +154,17 @@ def fetch_graph_message(resource: str | None) -> dict[str, Any] | None:
     try:
         with urlopen(request, timeout=15) as response:
             return json.loads(response.read().decode('utf-8'))
-    except Exception:
+    except HTTPError as exc:
+        if raise_errors:
+            try:
+                retry_after = max(0, min(3600, int(exc.headers.get('Retry-After', '0'))))
+            except (TypeError, ValueError):
+                retry_after = 0
+            raise GraphFetchError(str(exc.code), retry_after) from exc
+        return None
+    except Exception as exc:
+        if raise_errors:
+            raise GraphFetchError('transport') from exc
         return None
 
 

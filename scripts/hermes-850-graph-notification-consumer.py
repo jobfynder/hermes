@@ -62,6 +62,11 @@ import json
 import logging
 import os
 import sys
+import signal
+import time
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
 
 import pika
 
@@ -69,6 +74,7 @@ from app.channels.models import ChannelIntakeRequest
 from app.runtime.db import init_schema
 from app.channels.service import process_channel_intake
 from app.providers.microsoft_graph.service import (
+    GraphFetchError,
     fetch_graph_message,
     normalize_graph_message,
     verify_notification_client_state,
@@ -155,7 +161,11 @@ def _handle_notification(notification: dict) -> str:
         )
         return "rejected"
 
-    message = fetch_graph_message(notification.get("resource"))
+    try:
+        message = fetch_graph_message(notification.get("resource"), raise_errors=True)
+    except GraphFetchError as exc:
+        logger.warning('Graph fetch failure code=%s retry_after=%s', exc.code, exc.retry_after)
+        return {'code': 'fetch_http_' + exc.code, 'retry_after': exc.retry_after}
     if not message:
         logger.warning(
             "Could not fetch Graph message for resource=%s -- missing "
@@ -180,6 +190,17 @@ def _handle_notification(notification: dict) -> str:
         result.requires_review,
     )
     return "processed"
+
+
+def _process_with_deadline(notification):
+    def timeout(_signum, _frame):
+        raise TimeoutError('Graph processing exceeded 120 seconds')
+    signal.signal(signal.SIGALRM, timeout)
+    signal.alarm(120)
+    try:
+        return _handle_notification(notification)
+    finally:
+        signal.alarm(0)
 
 
 def _publish(channel, exchange: str, routing_key: str, envelope: dict, expiration_ms: int | None = None) -> None:
@@ -235,14 +256,24 @@ def _on_message(channel, method, _properties, body: bytes) -> None:
         channel.basic_ack(delivery_tag=method.delivery_tag)
         return
 
-    try:
-        outcome = _handle_notification(notification)
-    except Exception:
-        logger.exception(
-            "Unhandled error processing Graph notification (resource=%s)",
-            notification.get("resource"),
-        )
-        outcome = "error"
+    # The parent owns ALL Pika operations. A spawned process avoids both
+    # blocking I/O and CPU/regex GIL starvation on the heartbeat thread.
+    future = _executor.submit(_process_with_deadline, notification)
+    _pending.append((future, channel, method, envelope, time.monotonic()))
+
+
+def _finish_message(channel, method, envelope, outcome) -> None:
+    notification = envelope["notification"]
+    retry_after = 0
+    if isinstance(outcome, dict):
+        retry_after = outcome.get('retry_after', 0)
+        outcome = outcome['code']
+    if outcome in {'fetch_http_404', 'fetch_http_410'}:
+        # Preserve stale/deleted references for audit; repeated retries cannot
+        # repair them, and must not hold up newly arriving email.
+        _publish_dead_letter(channel, envelope, outcome)
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        return
 
     if outcome in {"processed", "rejected"}:
         channel.basic_ack(delivery_tag=method.delivery_tag)
@@ -256,7 +287,7 @@ def _on_message(channel, method, _properties, body: bytes) -> None:
 
     if retry_count < GRAPH_MAX_RETRIES:
         envelope["retry_count"] = retry_count + 1
-        delay_ms = GRAPH_RETRY_BACKOFF_MS[retry_count]
+        delay_ms = max(GRAPH_RETRY_BACKOFF_MS[retry_count], int(retry_after * 1000))
         _publish(channel, RETRY_EXCHANGE, GRAPH_RETRY_ROUTING_KEY, envelope, expiration_ms=delay_ms)
         # Ack only after the retry publish is broker-confirmed. If publish
         # raises, the delivery remains unacked and is requeued on connection
@@ -284,25 +315,61 @@ def _on_message(channel, method, _properties, body: bytes) -> None:
 
 
 def main() -> None:
+    global _executor
     logger.info("hermes-graph-consumer starting, queue=%s", QUEUE_NAME)
 
     _validate_startup_config()
     init_schema()  # idempotent; hermes-api also calls this at its own startup
 
-    connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
+    parameters = pika.URLParameters(RABBITMQ_URL)
+    parameters.heartbeat = 60
+    parameters.blocked_connection_timeout = 120
+    connection = pika.BlockingConnection(parameters)
     channel = connection.channel()
     channel.confirm_delivery()
     _declare_topology(channel)
-    channel.basic_qos(prefetch_count=10)
-    channel.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_message)
+    channel.basic_qos(prefetch_count=1)
+    consumer_tag = channel.basic_consume(queue=QUEUE_NAME, on_message_callback=_on_message)
+    _executor = ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
+    stopping = False
+    def stop(_signum, _frame):
+        nonlocal stopping
+        stopping = True
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
 
     logger.info("hermes-graph-consumer ready, consuming from %s", QUEUE_NAME)
     try:
-        channel.start_consuming()
-    except KeyboardInterrupt:
-        channel.stop_consuming()
+        cancelled = False
+        while connection.is_open:
+            connection.process_data_events(time_limit=0.25)
+            Path('/tmp/hermes-graph-heartbeat').touch()
+            for item in list(_pending):
+                future, delivery_channel, method, envelope, started = item
+                if not future.done():
+                    continue
+                try:
+                    outcome = future.result()
+                except Exception:
+                    logger.exception("Graph processing failed")
+                    outcome = "error"
+                _finish_message(delivery_channel, method, envelope, outcome)
+                _pending.remove(item)
+                logger.info("Graph delivery completed outcome=%s duration_seconds=%.3f", outcome, time.monotonic() - started)
+            if stopping:
+                if not cancelled:
+                    channel.basic_cancel(consumer_tag)
+                    cancelled = True
+                if not _pending:
+                    break
     finally:
-        connection.close()
+        if connection.is_open:
+            connection.close()
+        _executor.shutdown(wait=False, cancel_futures=True)
+
+
+_executor = None
+_pending = []
 
 
 if __name__ == "__main__":

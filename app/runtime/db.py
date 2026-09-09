@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+from contextvars import ContextVar
 from typing import Any, Iterator
 
 from psycopg.rows import dict_row
@@ -26,6 +27,26 @@ from psycopg_pool import ConnectionPool
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 
 _pool: ConnectionPool | None = None
+_transaction_connection = ContextVar('hermes_transaction_connection', default=None)
+
+
+@contextlib.contextmanager
+def transaction():
+    """Atomic intake persistence, including its transport dedupe key.
+
+    Nested cursor calls use savepoints so best-effort enrichment failures
+    cannot poison the enclosing intake transaction.
+    """
+    if _transaction_connection.get() is not None:
+        yield
+        return
+    with get_pool().connection() as conn:
+        with conn.transaction():
+            token = _transaction_connection.set(conn)
+            try:
+                yield
+            finally:
+                _transaction_connection.reset(token)
 
 
 def get_pool() -> ConnectionPool:
@@ -51,12 +72,44 @@ def cursor() -> Iterator[Any]:
     clean exit, rolls back on exception. This is the only way the rest
     of the codebase touches the database; nothing holds a connection
     open across a request."""
+    active = _transaction_connection.get()
+    if active is not None:
+        with active.transaction():
+            with active.cursor(row_factory=dict_row) as cur:
+                yield cur
+        return
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
             yield cur
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS draft_backfill_jobs (
+    job_id UUID PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('full-reparse', 'signature-company-fill')),
+    dry_run BOOLEAN NOT NULL DEFAULT TRUE,
+    status TEXT NOT NULL DEFAULT 'queued',
+    batch_size INTEGER NOT NULL CHECK (batch_size BETWEEN 1 AND 100),
+    item_limit INTEGER,
+    total_count INTEGER NOT NULL DEFAULT 0,
+    processed_count INTEGER NOT NULL DEFAULT 0,
+    changed_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    failed_count INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_batch_seconds DOUBLE PRECISION,
+    last_error TEXT
+);
+CREATE TABLE IF NOT EXISTS draft_backfill_items (
+    job_id UUID NOT NULL REFERENCES draft_backfill_jobs(job_id),
+    draft_id UUID NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    error TEXT,
+    PRIMARY KEY(job_id, draft_id)
+);
+CREATE INDEX IF NOT EXISTS idx_backfill_pending ON draft_backfill_items(job_id, draft_id) WHERE status = 'pending';
+
 CREATE TABLE IF NOT EXISTS drafts (
     draft_id            UUID PRIMARY KEY,
     draft_type          TEXT NOT NULL,

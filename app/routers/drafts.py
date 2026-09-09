@@ -1,7 +1,11 @@
 from typing import Any
+from typing import Literal
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from app.drafts.backfill import create_job, get_job, control_job
+from app.runtime.db import cursor
 
 from app.claim.models import EmailClaim
 from app.claim.service import get_claim_by_draft
@@ -102,6 +106,45 @@ class DraftSummaryEntry(BaseModel):
 router = APIRouter(prefix="/drafts", tags=["Drafts"])
 
 
+class BackfillJobRequest(BaseModel):
+    job_id: UUID
+    kind: Literal['full-reparse', 'signature-company-fill'] = 'full-reparse'
+    dry_run: bool = True
+    batch_size: int = Field(default=10, ge=1, le=100)
+    limit: int | None = Field(default=None, ge=1)
+
+
+@router.post('/backfill/jobs', status_code=202)
+def enqueue_backfill(request: BackfillJobRequest, _user: dict = Depends(require_permission('drafts:publish'))):
+    try:
+        return create_job(**request.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get('/backfill/jobs')
+def list_backfill_jobs(_user: dict = Depends(require_permission('drafts:read'))):
+    with cursor() as cur:
+        cur.execute('SELECT * FROM draft_backfill_jobs ORDER BY created_at DESC LIMIT 50')
+        return cur.fetchall()
+
+
+@router.get('/backfill/jobs/{job_id}')
+def read_backfill_job(job_id: UUID, _user: dict = Depends(require_permission('drafts:read'))):
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail='Backfill job not found')
+    return job
+
+
+@router.post('/backfill/jobs/{job_id}/{action}')
+def change_backfill_job(job_id: UUID, action: Literal['pause','resume','cancel'], _user: dict = Depends(require_permission('drafts:publish'))):
+    job = control_job(job_id, action)
+    if not job:
+        raise HTTPException(status_code=409, detail='Job not found or transition is not allowed')
+    return job
+
+
 @router.get("", response_model=list[DraftObject])
 def list_drafts(
     _user: dict = Depends(require_permission("drafts:read")),
@@ -124,7 +167,7 @@ def list_drafts_summary(
 @router.post("/backfill/signature-company-fill", response_model=SignatureCompanyFillBackfillResult)
 def backfill_signature_company_fill_endpoint(
     dry_run: bool = True,
-    limit: int | None = None,
+    limit: int = Query(default=5, ge=1, le=20),
     _user: dict = Depends(require_permission("drafts:publish")),
 ) -> dict:
     """One-time backlog cleanup for HERMES-850's signature-company-fill
@@ -138,13 +181,15 @@ def backfill_signature_company_fill_endpoint(
     dry_run=True (the default) reports counts without writing anything --
     call it once to sanity-check before dry_run=False actually applies.
     """
-    return backfill_signature_company_fill(dry_run=dry_run, limit=limit)
+    if not dry_run:
+        raise HTTPException(status_code=409, detail='Use POST /drafts/backfill/jobs for durable background processing')
+    return backfill_signature_company_fill(dry_run=True, limit=limit)
 
 
 @router.post("/backfill/full-reparse", response_model=FullReparseBackfillResult)
 def backfill_full_reparse_endpoint(
     dry_run: bool = True,
-    limit: int | None = None,
+    limit: int = Query(default=5, ge=1, le=20),
     _user: dict = Depends(require_permission("drafts:publish")),
 ) -> dict:
     """Full re-parse backlog cleanup, needed after a signature/parser
@@ -160,7 +205,9 @@ def backfill_full_reparse_endpoint(
 
     dry_run=True (the default) reports counts without writing anything.
     """
-    return backfill_full_reparse(dry_run=dry_run, limit=limit)
+    if not dry_run:
+        raise HTTPException(status_code=409, detail='Use POST /drafts/backfill/jobs for durable background processing')
+    return backfill_full_reparse(dry_run=True, limit=limit)
 
 
 @router.get("/{draft_id}", response_model=DraftObject)
