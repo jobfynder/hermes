@@ -42,6 +42,7 @@ def transaction():
         return
     with get_pool().connection() as conn:
         with conn.transaction():
+            conn.execute('SELECT pg_advisory_xact_lock_shared(892310482)')
             token = _transaction_connection.set(conn)
             try:
                 yield
@@ -67,19 +68,23 @@ def get_pool() -> ConnectionPool:
 
 
 @contextlib.contextmanager
-def cursor() -> Iterator[Any]:
+def cursor(*, schema_init=False) -> Iterator[Any]:
     """Yields a dict-row cursor inside its own transaction -- commits on
     clean exit, rolls back on exception. This is the only way the rest
     of the codebase touches the database; nothing holds a connection
     open across a request."""
     active = _transaction_connection.get()
     if active is not None:
+        if schema_init:
+            raise RuntimeError('Schema initialization cannot run inside intake')
         with active.transaction():
             with active.cursor(row_factory=dict_row) as cur:
                 yield cur
         return
     with get_pool().connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
+            if not schema_init:
+                cur.execute('SELECT pg_advisory_xact_lock_shared(892310482)')
             yield cur
 
 
@@ -328,7 +333,7 @@ CREATE TABLE IF NOT EXISTS signature_corrections (
 
 
 def init_schema() -> None:
-    with cursor() as cur:
+    with cursor(schema_init=True) as cur:
         # CREATE TABLE IF NOT EXISTS can still race in PostgreSQL's type
         # catalog when API and workers start against a new schema together.
         cur.execute('SELECT pg_advisory_xact_lock(892310482)')

@@ -192,6 +192,22 @@ class BackfillIntegrationTests(unittest.TestCase):
         with cursor() as cur:
             cur.execute(f'DROP TABLE {table}')
 
+    def test_schema_waits_for_intake_before_taking_table_locks(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+        from app.runtime import db
+        entered = Event()
+        with patch.object(db, 'SCHEMA', 'SELECT 1'):
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                with db.transaction():
+                    def initialize():
+                        entered.set()
+                        db.init_schema()
+                    future = pool.submit(initialize)
+                    self.assertTrue(entered.wait(2))
+                    self.assertFalse(future.done())
+                future.result(timeout=5)
+
 
 if __name__ == '__main__':
     unittest.main()
