@@ -393,23 +393,25 @@ def _find_loosely_matching_pending_candidate(cur, signal_type: str, term: str) -
     pending rows -- an already-approved or -rejected term is handled by
     find_unknown_skill_terms/find_unknown_job_title's own loose-index
     check before this function is ever called, so this is purely about
-    not splitting one real term into two pending review rows. A table
-    scan over one signal_type's pending rows, not indexed -- fine at
-    review-queue scale (low hundreds), not worth a schema change for.
+    not splitting one real term into two pending review rows. Uses a partial expression index so lookup cost does not grow with
+    the full pending queue, including high-volume boilerplate lines.
     """
     loose = _loose_key(term)
     if not loose:
         return None
 
+    # normalized_term is already lowercase ASCII plus punctuation/spaces.
+    # Match the partial expression index, fetching only the selected row's
+    # JSON fields instead of decoding every pending candidate for every line.
     cur.execute(
         "SELECT id, term, normalized_term, distinct_senders, sample_draft_ids FROM taxonomy_candidates "
-        "WHERE signal_type = %s AND status = 'pending'",
-        (signal_type,),
+        "WHERE signal_type = %s AND status = 'pending' "
+        "AND regexp_replace(normalized_term, '[^a-z0-9]', '', 'g') = %s "
+        "ORDER BY id LIMIT 1",
+        (signal_type, loose),
     )
-    for row in cur.fetchall():
-        if _loose_key(row["normalized_term"]) == loose:
-            return row
-    return None
+    return cur.fetchone()
+
 
 
 def _upsert_candidate(

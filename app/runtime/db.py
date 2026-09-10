@@ -284,6 +284,9 @@ CREATE TABLE IF NOT EXISTS taxonomy_candidates (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_taxonomy_candidates_term ON taxonomy_candidates (signal_type, normalized_term);
 CREATE INDEX IF NOT EXISTS idx_taxonomy_candidates_status ON taxonomy_candidates (status);
+CREATE INDEX IF NOT EXISTS idx_taxonomy_candidates_pending_loose
+ON taxonomy_candidates (signal_type, (regexp_replace(normalized_term, '[^a-z0-9]', '', 'g')), id)
+WHERE status = 'pending';
 
 -- Who approved/rejected a candidate, for audit -- added after the table
 -- above already existed in production, so it's an ALTER not part of the
