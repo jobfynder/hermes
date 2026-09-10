@@ -1,4 +1,5 @@
 import re
+from html import unescape
 from typing import Any
 
 from app.understanding.models import DocumentKind, ExtractedText
@@ -41,14 +42,14 @@ def extract_years_experience(text: str) -> int | None:
 
 
 def extract_probable_title(text: str) -> str | None:
-    clean_text = re.sub(r"\s+", " ", text or "").strip()
+    clean_text = re.sub(r"\s+", " ", unescape(text or "")).strip()
     # ":" tolerated after the imperative word alongside plain whitespace --
     # real subject lines routinely read "Hiring: Mid Level Data Engineer |
     # ..." rather than "Hiring Mid Level Data Engineer", and without this
     # the colon (outside the title regex's own allowed character class
     # below, and not one of its terminators either) made the whole match
     # fail at that position with no title recovered at all.
-    clean_text = re.sub(r"^(need|hiring|looking for|seeking)(?:\s*:\s*|\s+)", "", clean_text, flags=re.IGNORECASE)
+    clean_text = re.sub(r"^(?:(?:urgent|immediate)\s+)?(?:need|hiring|looking for|seeking)(?:\s*:\s*|\s+)(?:for\s+)?", "", clean_text, flags=re.IGNORECASE)
 
     # "|" (or "||") as a terminator alongside "-"/","/"for" -- real
     # recruiter subject lines routinely read "Title | Location |" or
@@ -61,7 +62,7 @@ def extract_probable_title(text: str) -> str | None:
     # confirmed on a real subject shaped "AWS Lead Data Engineer_newark|
     # NJ_Face to Face Interview is Must at Newark|NJ".
     match = re.search(
-        r"^([A-Za-z][A-Za-z0-9 .+#/-]{2,80}?)(?:\s+with|\s+having|\s+for|\s+-|\s*\|+\s*|_+|,|$)",
+        r"^((?:[A-Za-z]|\.NET\b)[A-Za-z0-9 .+#/()&-]{2,80}?)(?:\s+with|\s+having|\s+for|\s+-|\s*\|+\s*|_+|,|$)",
         clean_text,
         flags=re.IGNORECASE,
     )
@@ -69,7 +70,7 @@ def extract_probable_title(text: str) -> str | None:
     if not match:
         return None
 
-    title = match.group(1).strip(" .,-")
+    title = match.group(1).strip(" ,-").rstrip(".")
     title_keywords = [
         "developer",
         "engineer",
@@ -81,6 +82,12 @@ def extract_probable_title(text: str) -> str | None:
         "consultant",
         "recruiter",
         "lead",
+        "designer",
+        "researcher",
+        "technician",
+        "scientist",
+        "specialist",
+        "tester",
     ]
 
     if any(keyword in title.lower() for keyword in title_keywords):

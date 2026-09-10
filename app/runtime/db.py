@@ -91,7 +91,7 @@ def cursor(*, schema_init=False) -> Iterator[Any]:
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS draft_backfill_jobs (
     job_id UUID PRIMARY KEY,
-    kind TEXT NOT NULL CHECK (kind IN ('full-reparse', 'signature-company-fill')),
+    kind TEXT NOT NULL CHECK (kind IN ('full-reparse', 'review-reparse', 'signature-company-fill')),
     dry_run BOOLEAN NOT NULL DEFAULT TRUE,
     status TEXT NOT NULL DEFAULT 'queued',
     batch_size INTEGER NOT NULL CHECK (batch_size BETWEEN 1 AND 100),
@@ -106,6 +106,16 @@ CREATE TABLE IF NOT EXISTS draft_backfill_jobs (
     last_batch_seconds DOUBLE PRECISION,
     last_error TEXT
 );
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint
+        WHERE conrelid='draft_backfill_jobs'::regclass
+        AND conname='draft_backfill_jobs_kind_check'
+        AND position('review-reparse' in pg_get_constraintdef(oid))=0) THEN
+        ALTER TABLE draft_backfill_jobs DROP CONSTRAINT draft_backfill_jobs_kind_check;
+        ALTER TABLE draft_backfill_jobs ADD CONSTRAINT draft_backfill_jobs_kind_check
+            CHECK (kind IN ('full-reparse','review-reparse','signature-company-fill'));
+    END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS draft_backfill_items (
     job_id UUID NOT NULL REFERENCES draft_backfill_jobs(job_id),
     draft_id UUID NOT NULL,

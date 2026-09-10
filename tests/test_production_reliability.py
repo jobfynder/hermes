@@ -96,6 +96,16 @@ class BackfillIntegrationTests(unittest.TestCase):
                     VALUES (%s,'draft_job_requirement','needs_review','reliability_test',%s,'2000-01-01')''',
                     (draft_id, json.dumps({'text': 'Test', 'structured_data': {'email_parsing': {'confidence': 0.5, 'records': []}}})))
 
+    def test_review_reparse_excludes_ready_drafts(self):
+        with cursor() as cur:
+            cur.execute("UPDATE drafts SET status='draft' WHERE draft_id=%s", (self.ids[0],))
+        job_id = uuid4()
+        job = backfill.create_job(job_id, 'review-reparse', dry_run=True)
+        self.assertEqual(job['total_count'], 2)
+        with cursor() as cur:
+            cur.execute('SELECT draft_id FROM draft_backfill_items WHERE job_id=%s', (job_id,))
+            self.assertNotIn(self.ids[0], [row['draft_id'] for row in cur.fetchall()])
+
     def tearDown(self):
         with cursor() as cur:
             cur.execute('DELETE FROM field_provenance WHERE parse_run_id=ANY(%s)', ([str(i) for i in self.ids],))

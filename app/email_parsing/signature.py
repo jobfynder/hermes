@@ -93,7 +93,7 @@ RELAY_FROM_BLOCK_RE = re.compile(
 QUOTE_PREFIX_LINE_RE = re.compile(r"^\s*>")
 
 SIGNOFF_RE = re.compile(
-    r"(?im)^[ \t>]*(?:-{2,}|thanks(?:\s+(?:so much|again))?|thank you|"
+    r"(?im)^[ \t>]*(?:-{2,}|thanks(?:[ \t]+(?:so much|again|(?:&|and)[ \t]+regards))?|thank you|"
     r"regards|best regards|kind regards|warm regards|warmest regards|best|"
     r"sincerely|cheers|respectfully)[ \t]*[,.!]?[ \t]*$"
 )

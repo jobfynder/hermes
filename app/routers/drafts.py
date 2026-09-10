@@ -108,7 +108,7 @@ router = APIRouter(prefix="/drafts", tags=["Drafts"])
 
 class BackfillJobRequest(BaseModel):
     job_id: UUID
-    kind: Literal['full-reparse', 'signature-company-fill'] = 'full-reparse'
+    kind: Literal['full-reparse', 'review-reparse', 'signature-company-fill'] = 'full-reparse'
     dry_run: bool = True
     batch_size: int = Field(default=10, ge=1, le=100)
     limit: int | None = Field(default=None, ge=1)

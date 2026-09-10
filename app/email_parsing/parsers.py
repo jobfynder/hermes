@@ -124,6 +124,29 @@ def _extract_labeled_value(text: str, labels: list[str]) -> str | None:
     return match.group(1).strip()
 
 
+def _extract_heading_title(text: str) -> str | None:
+    """Recover title headings from flattened email tables and body headers.
+
+    Require a title label or an adjacent location line; never scan arbitrary
+    prose for a role word and mistake it for the advertised position.
+    """
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()[:80] if line.strip()]
+    for index, line in enumerate(lines):
+        if re.fullmatch(r"(?:job title|title|position|role)\s*:?", line, re.I):
+            if index + 1 < len(lines):
+                candidate = lines[index + 1]
+                if len(candidate) <= 100 and extract_probable_title(candidate):
+                    return candidate
+        if index + 1 >= len(lines) or len(line) > 100:
+            continue
+        if not re.search(r"\b(?:developer|engineer|architect|analyst|designer|researcher|technician|scientist|specialist|tester|manager|administrator|consultant|lead)(?:\s+L[123])?$", line, re.I):
+            continue
+        following = lines[index + 1]
+        if re.match(r"(?:(?i:location)\s*[:\-]|[A-Z][A-Za-z .]+,\s*[A-Z]{2}\b)", following) and extract_probable_title(line):
+            return line
+    return None
+
+
 def _is_plausible_job_title(value: str | None) -> bool:
     """A real job title always has at least one letter and more than a
     couple of characters -- rejects the "Position: 1" ordinal-number
@@ -571,7 +594,10 @@ _RESPONSIBILITIES_HEADING_RE = re.compile(
 
 
 def _numbered_position_sections(text: str) -> list[str] | None:
-    matches = list(_NUMBERED_POSITION_RE.finditer(text))
+    matches = [
+        m for m in _NUMBERED_POSITION_RE.finditer(text)
+        if text[m.end():].splitlines() and extract_probable_title(text[m.end():].splitlines()[0].strip())
+    ]
 
     # Require the list to actually start at 1 -- a stray "12) call
     # backup" line deep in an unrelated single-position email shouldn't
@@ -647,6 +673,9 @@ def _title_label_value_at(text: str, match: re.Match[str]) -> str:
 
 
 def _split_requirement_sections(text: str) -> list[str]:
+    # Contact titles and screening steps after the signoff are not jobs.
+    body = _strip_forwarded_header_block(text)
+    text = _strip_job_description_footer(body) or body or text
     matches = list(
         re.finditer(
             r"(?im)^\s*(?:job title|position|role)\s*[:\-]",
@@ -673,6 +702,10 @@ def _split_requirement_sections(text: str) -> list[str]:
     previous_value: str | None = None
     for match in matches:
         value = _title_label_value_at(text, match)
+        # A repeated Role/Position label also introduces work mode or prose.
+        # Only a compact title-shaped value can create another job boundary.
+        if not extract_probable_title(value) or len(value) > 100:
+            continue
         if value and value == previous_value:
             continue
         deduped_matches.append(match)
@@ -812,6 +845,7 @@ def parse_requirement_email(
         job_title = (
             labeled_title
             or numbered_title
+            or _extract_heading_title(section)
             or structured.get("job_title")
             # Only the first section inherits the email's own subject as a
             # title guess -- a multi-posting email splitting into several

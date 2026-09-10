@@ -26,7 +26,7 @@ def get_job(job_id):
 
 def create_job(job_id, kind, dry_run=True, batch_size=10, limit=None):
     job_id = UUID(str(job_id))
-    if kind not in ('full-reparse', 'signature-company-fill') or not 1 <= batch_size <= 100:
+    if kind not in ('full-reparse', 'review-reparse', 'signature-company-fill') or not 1 <= batch_size <= 100:
         raise ValueError('Invalid backfill kind or batch size')
     if limit is not None and limit < 1:
         raise ValueError('limit must be positive')
@@ -48,9 +48,10 @@ def create_job(job_id, kind, dry_run=True, batch_size=10, limit=None):
         cur.execute('''INSERT INTO draft_backfill_items(job_id,draft_id)
             SELECT %s, d.draft_id FROM drafts d
             WHERE d.draft_type='draft_job_requirement' AND d.status IN ('draft','needs_review')
+            AND (%s <> 'review-reparse' OR d.status='needs_review')
             AND NOT EXISTS (SELECT 1 FROM field_provenance fp
                 WHERE fp.parse_run_id=d.draft_id::text AND fp.extractor=ANY(%s))
-            ORDER BY d.created_at,d.draft_id LIMIT %s''', (job_id, list(CORRECTION_EXTRACTORS), limit))
+            ORDER BY d.created_at,d.draft_id LIMIT %s''', (job_id, kind, list(CORRECTION_EXTRACTORS), limit))
         total = cur.rowcount
         cur.execute("UPDATE draft_backfill_jobs SET total_count=%s,status=%s WHERE job_id=%s RETURNING *",
                     (total, 'queued' if total else 'completed', job_id))
@@ -75,7 +76,7 @@ def prepare_row(row, kind, boilerplate):
     structured = payload.get('structured_data') or {}
     old_parsing = structured.get('email_parsing') or {}
     old_signature = structured.get('signature') or {}
-    if kind == 'full-reparse':
+    if kind in ('full-reparse', 'review-reparse'):
         text = payload.get('text') or ''
         if not text.strip():
             return None

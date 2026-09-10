@@ -41,6 +41,7 @@ WORK_AUTH_PATTERNS = [
     # Corp-to-Corp/W2/1099-as-a-billing-arrangement are deliberately left
     # to extract_employment_type() (job_description_fields.py), which
     # already covers that half of the same staffing-lingo overlap.
+    ("Any Visa", r"\b(?:any visa|all visa types? (?:ok|accepted|allowed))\b"),
     ("Independent Visa", r"\bindependent visa\b"),
     ("No Sponsorship", r"\b(?:no sponsorship|without sponsorship|sponsorship not (?:available|provided))\b"),
     ("EAD", r"\b(?:ead|work authorization|work authorised|work authorized)\b"),
