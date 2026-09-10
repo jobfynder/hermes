@@ -152,6 +152,30 @@ def list_drafts(
     return list_draft_objects()
 
 
+@router.post('/review/reconcile-ready')
+def reconcile_ready_reviews(
+    dry_run: bool = True,
+    limit: int = Query(default=100, ge=1, le=200),
+    _user: dict = Depends(require_permission('drafts:publish')),
+):
+    from app.drafts.review_rules import reconcile_review_status
+    return reconcile_review_status(dry_run=dry_run, limit=limit)
+
+
+@router.get('/page')
+def list_drafts_page(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+    status: Literal['draft','needs_review','published','rejected','spam'] | None = None,
+    draft_type: DraftObjectType | None = None,
+    search: str = Query(default='', max_length=200),
+    include_duplicates: bool = False,
+    _user: dict = Depends(require_permission('drafts:read')),
+):
+    from app.drafts.listing import list_draft_page
+    return list_draft_page(page, page_size, status, draft_type, search, include_duplicates)
+
+
 @router.get("/summary", response_model=list[DraftSummaryEntry])
 def list_drafts_summary(
     include_duplicates: bool = False,

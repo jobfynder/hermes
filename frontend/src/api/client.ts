@@ -71,6 +71,8 @@ export const api = {
   listDrafts: () => request<DraftObject[]>('/drafts'),
   listDraftSummaries: (includeDuplicates = false) =>
     request<DraftSummaryEntry[]>(`/drafts/summary?include_duplicates=${includeDuplicates}`),
+  listDraftPage: (params: URLSearchParams, signal?: AbortSignal) =>
+    request<{ items: DraftSummaryEntry[]; page: number; page_size: number; total_count: number; counts: { total: number; needsReview: number; spam: number } }>(`/drafts/page?${params}`, { signal }),
   getDraft: (id: string) => request<DraftObject>(`/drafts/${id}`),
   getProvenance: (id: string) => request<FieldProvenanceEntry[]>(`/drafts/${id}/provenance`),
   getClaim: (id: string) => request<EmailClaim | null>(`/drafts/${id}/claim`).catch((err) => {

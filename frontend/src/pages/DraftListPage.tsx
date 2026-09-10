@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { ConfidenceMeter } from '../components/ConfidenceMeter'
 import { draftTypeLabel } from '../components/DraftTypeLabel'
-import { PaginationControls, usePagination } from '../components/Pagination'
+import { PaginationControls } from '../components/Pagination'
 import { StatusBadge } from '../components/StatusBadge'
 import type { DraftObjectType, DraftStatus, DraftSummaryEntry } from '../types'
 
@@ -46,52 +46,50 @@ export function DraftListPage({
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null)
   const [showDuplicates, setShowDuplicates] = useState(false)
 
-  function load() {
-    setError(null)
-    api
-      .listDraftSummaries(showDuplicates)
-      .then((d) => {
-        setDrafts(d)
-        setLastLoadedAt(new Date())
-      })
-      .catch((err) => setError(err.message ?? 'Failed to load drafts'))
-  }
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  const [totalCount, setTotalCount] = useState(0)
+  const [counts, setCounts] = useState({ total: 0, needsReview: 0, spam: 0 })
+  const [query, setQuery] = useState('')
+  const [refresh, setRefresh] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize))
+  const pageItems = drafts ?? []
+  const load = () => setRefresh((n) => n + 1)
 
-  useEffect(load, [showDuplicates])
+  useEffect(() => {
+    const timer = window.setTimeout(() => { setQuery(search.trim()); setPage(1) }, 300)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize), include_duplicates: String(showDuplicates) })
+    if (typeFilter !== 'all') params.set('draft_type', typeFilter)
+    if (statusFilter !== 'all') params.set('status', statusFilter)
+    if (query) params.set('search', query)
+    setError(null)
+    setLoading(true)
+    api.listDraftPage(params, controller.signal).then((result) => {
+      if (controller.signal.aborted) return
+      setDrafts(result.items)
+      setTotalCount(result.total_count)
+      setCounts(result.counts)
+      setPage(result.page)
+      setLastLoadedAt(new Date())
+    }).catch((err) => {
+      if (!controller.signal.aborted) setError(err.message ?? 'Failed to load drafts')
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false)
+    })
+    return () => controller.abort()
+  }, [page, pageSize, typeFilter, statusFilter, query, showDuplicates, refresh])
 
   useEffect(() => {
     if (!autoRefresh) return
-    const id = window.setInterval(load, 30000)
-    return () => window.clearInterval(id)
-  }, [autoRefresh, showDuplicates])
-
-  const filtered = useMemo(() => {
-    if (!drafts) return []
-    const q = search.trim().toLowerCase()
-    return drafts.filter((d) => {
-      if (typeFilter !== 'all' && d.draft_type !== typeFilter) return false
-      if (statusFilter !== 'all' && d.status !== statusFilter) return false
-      if (q) {
-        const haystack = `${d.display_title} ${d.metadata.sender?.email ?? ''} ${d.source_message_id ?? ''}`.toLowerCase()
-        if (!haystack.includes(q)) return false
-      }
-      return true
-    })
-  }, [drafts, typeFilter, statusFilter, search])
-
-  const counts = useMemo(() => {
-    if (!drafts) return { total: 0, needsReview: 0, spam: 0 }
-    return {
-      total: drafts.length,
-      needsReview: drafts.filter((d) => d.status === 'needs_review').length,
-      spam: drafts.filter((d) => d.status === 'spam').length,
-    }
-  }, [drafts])
-
-  const { pageItems, page, pageCount, pageSize, setPage, setPageSize } = usePagination(
-    filtered,
-    `${search}|${typeFilter}|${statusFilter}`,
-  )
+    const timer = window.setInterval(() => { if (!document.hidden) load() }, 30000)
+    return () => window.clearInterval(timer)
+  }, [autoRefresh])
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -126,7 +124,7 @@ export function DraftListPage({
             <input
               type="checkbox"
               checked={showDuplicates}
-              onChange={(e) => setShowDuplicates(e.target.checked)}
+              onChange={(e) => { setShowDuplicates(e.target.checked); setPage(1) }}
               className="accent-accent"
             />
             Show duplicates
@@ -142,9 +140,10 @@ export function DraftListPage({
           </label>
           <button
             onClick={load}
+            disabled={loading}
             className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
           >
-            Refresh
+            {loading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
       </header>
@@ -152,13 +151,14 @@ export function DraftListPage({
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
           value={search}
+          maxLength={200}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search title, sender, message id…"
           className="min-w-56 flex-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
         />
         <select
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as DraftObjectType | 'all')}
+          onChange={(e) => { setTypeFilter(e.target.value as DraftObjectType | 'all'); setPage(1) }}
           className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           {TYPE_FILTERS.map((t) => (
@@ -169,7 +169,7 @@ export function DraftListPage({
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as DraftStatus | 'all')}
+          onChange={(e) => { setStatusFilter(e.target.value as DraftStatus | 'all'); setPage(1) }}
           className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
         >
           {STATUS_FILTERS.map((s) => (
@@ -224,7 +224,7 @@ export function DraftListPage({
                 <td className="px-4 py-3 whitespace-nowrap text-ink-soft">{timeAgo(d.created_at ?? null)}</td>
               </tr>
             ))}
-            {drafts && filtered.length === 0 && (
+            {drafts && !loading && totalCount === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-ink-soft">
                   No drafts match these filters.
@@ -244,9 +244,9 @@ export function DraftListPage({
           page={page}
           pageCount={pageCount}
           pageSize={pageSize}
-          totalCount={filtered.length}
+          totalCount={totalCount}
           onPageChange={setPage}
-          onPageSizeChange={setPageSize}
+          onPageSizeChange={(size) => { setPageSize(size); setPage(1) }}
         />
       </div>
     </div>
