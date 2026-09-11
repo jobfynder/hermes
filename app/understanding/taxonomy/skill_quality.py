@@ -18,6 +18,14 @@ NON_SKILL_TERMS = frozenset({
 
 def skill_noise_reason(name: str) -> str | None:
     value=re.sub(r'\s+',' ',name or '').strip()
+    if re.search(r'(?i)\b(?:stakeholders?|leadership|mentoring|teamwork|interpersonal|adaptability|adaptable|soft skills?|technical writing|time management|problem solv(?:ing|er)|contract negotiations)\b',value):
+        return 'nontechnical_professional_skill'
+    if re.search(r'(?i)\bcommunications?\b',value) and not re.search(r'(?i)\b(?:protocols?|network|wireless|serial|interprocess|inter-process|unified|devices?|systems?|TCP|MQTT|Modbus)\b',value):
+        return 'nontechnical_professional_skill'
+    if re.search(r'(?i)\b(?:collaborat(?:e|ing|ion)|presentations?)\b',value) and not re.search(r'(?i)\b(?:Miro|SharePoint|Teams|GitHub|Confluence|protocols?|tools?)\b',value):
+        return 'nontechnical_professional_skill'
+    if re.search(r'(?i)\banalytical skills\b|^exceptional analytical$|^writing and diagram',value):
+        return 'nontechnical_professional_skill'
     if value.lower() in NON_SKILL_TERMS:
         return 'standalone_prose_or_metadata'
     if re.match(r'(?i)^(?:and|or|including|prior knowledge of|experience with|familiarity with)\s+',value):

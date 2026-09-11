@@ -15,6 +15,12 @@ class SkillQualityTests(unittest.TestCase):
         for term in ['Go','Rust','Chef','Puppet','Make','BASIC','Ruby on Rails','Qlik Sense','Infrastructure as Code','Adobe Experience Manager','Advanced SQL','Microsoft Copilot','ASP.NET Core']:
             self.assertIsNone(skill_noise_reason(term),term)
 
+    def test_technical_only_policy(self):
+        for term in ['Stakeholder Management','Technical Writing','Teamwork','Excellent Communication','Leadership Coaching','time management','structured problem solving']:
+            self.assertEqual(skill_noise_reason(term),'nontechnical_professional_skill')
+        for term in ['Communication Protocols','Unified Communications','Wireless Communication','Telecommunications','Microsoft Teams','Miro collaboration tools','analytical queries']:
+            self.assertIsNone(skill_noise_reason(term),term)
+
     def test_invalid_addition_does_not_access_database(self):
         with patch('app.understanding.taxonomy.loader.cursor') as db:
             with self.assertRaises(ValueError):add_canonical_skill('Overall')

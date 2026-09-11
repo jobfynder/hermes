@@ -102,12 +102,12 @@ _SYSTEM_PROMPT = (
 )
 
 
-def generate_skill_description(name: str, category: str | None = None) -> str | None:
+def generate_skill_description(name: str, category: str | None = None, *, allow_llm: bool = False) -> str | None:
     deterministic = _deterministic_description(name)
     if deterministic:
         return deterministic
 
-    if not litellm_configured():
+    if not allow_llm or not litellm_configured():
         return None
 
     user_prompt = f"Term: {name}"

@@ -156,11 +156,11 @@ def classify_batch(terms: list[str], system_prompt: str) -> list[str]:
 
 
 def triage(signal_type: str, system_prompt: str) -> dict:
-    if signal_type == "skill":
+    if signal_type in {"skill", "job_title", "boilerplate_line"}:
         # Skill additions require explicit review. No classifier or glossary
         # model calls for automated skill promotion.
         return {"processed": 0, "approved": 0, "rejected": 0,
-                "left_for_review": 0, "skipped_reason": "automatic_skill_approval_disabled"}
+                "left_for_review": 0, "skipped_reason": "automatic_taxonomy_llm_triage_disabled"}
     candidates = list_taxonomy_candidates(status="pending")
     candidates = [c for c in candidates if c["signal_type"] == signal_type]
     candidates.sort(key=lambda c: c["first_seen_at"])

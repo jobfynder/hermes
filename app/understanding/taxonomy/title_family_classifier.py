@@ -87,7 +87,7 @@ _SYSTEM_PROMPT = (
 )
 
 
-def classify_job_title_family(title: str, known_families: list[str]) -> tuple[str, str]:
+def classify_job_title_family(title: str, known_families: list[str], *, allow_llm: bool = False) -> tuple[str, str]:
     """Returns (family, method) -- method is 'deterministic', 'llm', or
     'none', so a caller can tell which titles still genuinely need a
     human's eye (method='none' means neither path could place it).
@@ -100,7 +100,7 @@ def classify_job_title_family(title: str, known_families: list[str]) -> tuple[st
     if deterministic:
         return deterministic, "deterministic"
 
-    if not litellm_configured():
+    if not allow_llm or not litellm_configured():
         return "Unclassified", "none"
 
     user_prompt = f"Job title: {title}\nExisting families: {', '.join(sorted(known_families))}"
