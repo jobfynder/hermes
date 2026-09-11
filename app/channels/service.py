@@ -365,7 +365,8 @@ def _process_channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeRespo
             filename=None,
             content_type="text/plain",
             document_kind=understanding_document_kind(document_kind),
-        )
+        ),
+        skip_llm_fallback=request.channel == "email",
     )
 
     understanding_dict = understanding.model_dump()

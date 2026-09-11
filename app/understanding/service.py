@@ -78,9 +78,9 @@ def build_understanding_result(
         fallback_dump["llm_fallback"] = llm_outcome
 
         if llm_outcome.get("used"):
-            extracted = llm_outcome.get("extracted")
-            structured_data["llm_fallback_extracted"] = extracted
-            merge_llm_extracted(structured_data, extracted)
+            llm_extracted = llm_outcome.get("extracted")
+            structured_data["llm_fallback_extracted"] = llm_extracted
+            merge_llm_extracted(structured_data, llm_extracted)
 
     result = UnderstandingResult(
         document_kind=document_kind,

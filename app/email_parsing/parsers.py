@@ -802,7 +802,8 @@ def parse_requirement_email(
                 filename=None,
                 content_type="text/plain",
                 document_kind="job_description",
-            )
+            ),
+            skip_llm_fallback=True,
         )
 
         structured = understanding.structured_data
