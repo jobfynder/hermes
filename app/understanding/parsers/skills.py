@@ -39,6 +39,10 @@ def skill_match_terms(skill_entry: dict[str, Any]) -> list[str]:
 
 
 def fuzzy_match_terms(skill_entry: dict[str, Any]) -> list[str]:
+    # Learned candidates have not been evaluated for fuzzy matching. Require
+    # exact evidence instead of finding a common substring in a whole email.
+    if skill_entry.get("source") == "taxonomy_candidate_approved":
+        return []
     # Short aliases like js/ts/py are useful for exact matching, but unsafe
     # for fuzzy matching: fuzz.partial_ratio scores a short needle against
     # the best-matching substring of the whole email body, and the shorter

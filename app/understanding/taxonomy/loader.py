@@ -1,3 +1,4 @@
+from app.understanding.taxonomy.skill_quality import skill_noise_reason
 import json
 import os
 import re
@@ -182,6 +183,9 @@ def add_canonical_skill(
     its own when this function's transaction ends, so there is no
     matching unlock call to forget.
     """
+    if skill_noise_reason(name):
+        raise ValueError('Skill name is prose, metadata, or an incomplete fragment')
+
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
 

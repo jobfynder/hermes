@@ -21,6 +21,7 @@ import re
 from functools import lru_cache
 
 from app.runtime.db import cursor
+from app.understanding.taxonomy.skill_quality import skill_noise_reason
 from app.understanding.parsers.job_description_fields import (
     extract_preferred_skills_text,
     extract_required_skills_text,
@@ -196,6 +197,8 @@ def _is_noise_skill_term(term: str) -> bool:
     positive here silently discards a genuine new skill forever with no
     review trail, unlike rejecting a queued candidate.
     """
+    if skill_noise_reason(term):
+        return True
     stripped = term.strip()
     words = _NOISE_WORD_RE.findall(stripped)
     word_lc = [w.lower() for w in words]
@@ -704,6 +707,8 @@ def approve_taxonomy_candidate(
         return {"approved": False, "reason": "candidate_not_found_or_already_reviewed"}
 
     if row["signal_type"] == "skill":
+        if skill_noise_reason(row["term"]):
+            return {"approved": False, "reason": "invalid_skill_name"}
         # Best-effort: a description is a nice-to-have annotation the
         # approval itself never depends on. generate_skill_description
         # already swallows its own failures and returns None rather than

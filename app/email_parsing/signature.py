@@ -84,9 +84,9 @@ RAW_HEADER_BLOCK_RE = re.compile(
 # template's fixed line order is a stronger signal than either regex for
 # exactly this shape.
 RELAY_FROM_BLOCK_RE = re.compile(
-    r"(?im)^[ \t]*from[ \t]*:[ \t]*\n"
-    r"[ \t]*(?P<name>[^\n,]{1,60}),[ \t]*\n"
-    r"[ \t]*(?P<company>[^\n]{1,80}?)[ \t]*\n"
+    r"(?im)^[ \t]*from[ \t]*:[ \t]*\n(?:[ \t]*\n){0,3}"
+    r"[ \t]*(?P<name>[^\n,]{1,60}),[ \t]*\n(?:[ \t]*\n){0,3}"
+    r"[ \t]*(?P<company>[^\n]{1,80}?)[ \t]*\n(?:[ \t]*\n){0,3}"
     r"[ \t]*(?P<email>[^\s@]+@[^\s@]+\.[a-zA-Z]{2,})[ \t]*$"
 )
 

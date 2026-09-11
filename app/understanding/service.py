@@ -13,7 +13,7 @@ from app.runtime.cache import build_cache_key, cache_get, cache_set
 
 
 DEFAULT_LLM_CONTEXT_TOKENS = 1200
-PARSER_VERSION = "basic_local_parser_v1"
+PARSER_VERSION = "basic_local_parser_v2_skill_evidence"
 PARSE_CACHE_TTL_SECONDS = 86400
 CACHEABLE_DOCUMENT_KINDS = {"resume", "job_description"}
 
