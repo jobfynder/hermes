@@ -33,6 +33,7 @@ import json
 from typing import Any
 
 from app.prompt_runtime.extraction_fallback import run_llm_fallback
+from app.email_parsing.parsers import _score_requirement_record, _hotlist_record_confidence
 
 # Matches parse_requirement_email/parse_hotlist_email's own requires_review
 # cutoff (app/email_parsing/parsers.py) -- "needs a second pass" and "needs
@@ -113,6 +114,9 @@ def apply_job_requirement_fallback(clean_text: str, email_parsing: dict[str, Any
     else in the record stays attributed to the deterministic parser,
     because it was.
     """
+    if not clean_text.strip():
+        return email_parsing, set()
+
     records = email_parsing.get("records") or []
 
     # This only ever fills gaps on records[0] -- built for the single-
@@ -137,6 +141,7 @@ def apply_job_requirement_fallback(clean_text: str, email_parsing: dict[str, Any
         prompt_id=JOB_FALLBACK_PROMPT_ID,
         variables={"clean_jd": clean_text, "job_schema": JOB_SCHEMA_HINT, "taxonomy_subset": "[]"},
         source="email_requirement_extract",
+        cache_ttl_seconds=86400,
     )
     email_parsing["llm_fallback"] = {
         "used": outcome.get("used", False),
@@ -161,15 +166,26 @@ def apply_job_requirement_fallback(clean_text: str, email_parsing: dict[str, Any
             filled_fields.add(field)
 
     if filled_fields:
-        record["parse_confidence"] = max(record.get("parse_confidence", 0.0), 0.75)
-        record["requires_review"] = record["parse_confidence"] < FALLBACK_CONFIDENCE_THRESHOLD
-        record["warnings"] = [w for w in record.get("warnings", []) if "missing" not in w]
+        # A model contribution is not proof that required fields are complete.
+        confidence, warnings = _score_requirement_record(
+            bool(record.get("job_title")),
+            bool(record.get("required_skills")) or (
+                "warnings" in record
+                and "required_skills_not_identified" not in record["warnings"]
+                and bool(record.get("job_description"))
+            ),
+            bool(record.get("company")),
+        )
+        record["parse_confidence"] = min(confidence, 0.75)
+        record["requires_review"] = confidence < FALLBACK_CONFIDENCE_THRESHOLD
+        record["warnings"] = warnings
 
         email_parsing["records"] = [record]
         email_parsing["record_count"] = 1
         email_parsing["confidence"] = record["parse_confidence"]
         email_parsing["requires_review"] = record["requires_review"]
         email_parsing["llm_filled_fields"] = sorted(filled_fields)
+        email_parsing["warnings"] = ["one_or_more_requirements_require_review"] if record["requires_review"] else []
 
     return email_parsing, filled_fields
 
@@ -180,6 +196,9 @@ def apply_hotlist_fallback(clean_text: str, email_parsing: dict[str, Any]) -> tu
     LLM path actually produced a usable replacement, so the caller can
     tag every field in every resulting record as llm_fallback.
     """
+    if not clean_text.strip():
+        return email_parsing, False
+
     if email_parsing.get("confidence", 0.0) >= FALLBACK_CONFIDENCE_THRESHOLD:
         return email_parsing, False
 
@@ -187,6 +206,7 @@ def apply_hotlist_fallback(clean_text: str, email_parsing: dict[str, Any]) -> tu
         prompt_id=HOTLIST_FALLBACK_PROMPT_ID,
         variables={"hotlist_schema": HOTLIST_SCHEMA_HINT, "message": clean_text},
         source="email_hotlist_extract",
+        cache_ttl_seconds=86400,
     )
     email_parsing["llm_fallback"] = {
         "used": outcome.get("used", False),
@@ -215,12 +235,19 @@ def apply_hotlist_fallback(clean_text: str, email_parsing: dict[str, Any]) -> tu
                 "warnings": [],
             }
         )
+        confidence = min(_hotlist_record_confidence(record), 0.75)
+        record["parse_confidence"] = confidence
+        record["requires_review"] = confidence < FALLBACK_CONFIDENCE_THRESHOLD
+        if not record.get("candidate_name"):
+            record["warnings"].append("candidate_name_missing")
+        if not (record.get("primary_job_title") or record.get("primary_skills")):
+            record["warnings"].append("primary_role_or_skills_missing")
         new_records.append(record)
 
     email_parsing["records"] = new_records
     email_parsing["record_count"] = len(new_records)
-    email_parsing["confidence"] = 0.75
-    email_parsing["requires_review"] = False
-    email_parsing["warnings"] = []
+    email_parsing["confidence"] = min(record["parse_confidence"] for record in new_records)
+    email_parsing["requires_review"] = any(record["requires_review"] for record in new_records)
+    email_parsing["warnings"] = ["one_or_more_consultants_require_review"] if email_parsing["requires_review"] else []
 
     return email_parsing, True
