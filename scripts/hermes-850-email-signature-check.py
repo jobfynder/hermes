@@ -121,16 +121,8 @@ Required skills: Amazon Connect, AWS Lambda
     )
 
 
-def test_ner_fallback_recovers_fragmented_name() -> None:
-    # Regression fixture for the specific limitation flagged after the
-    # pure-forward fix above shipped: a real vendor's forwarded postings
-    # render the sender's own name/company as one bare token per line
-    # ("From: / / Harry, / / ITECSUS / / harry@itecsus.com") with no
-    # title keyword, no recognized company suffix, and no multi-word
-    # name on a single line -- nothing the regex-only pass can anchor
-    # on. The NER fallback (en_core_web_sm, gated to only the
-    # is_pure_forward case -- see parse_email_signature) should recover
-    # at least the person's name from this.
+def test_relay_block_recovers_fragmented_name() -> None:
+    # Spaced relay headers now have a deterministic positional extractor.
     text = """Subject: FW: AWS Connect Solutions Engineer with IVR Exp : Houston, TX
 
 From: harry@itecsus.com <harry@itecsus.com>
@@ -157,13 +149,13 @@ Reply to: harry@itecsus.com
 
     require(
         contact.get("full_name") == "Harry",
-        f"NER fallback should recover the sender's first name from a "
+        f"Relay parsing should recover the sender's first name from a "
         f"fragmented one-token-per-line signature: {contact}",
     )
     require(
-        sig["contact"]["full_name"]["method"] == "ner_person",
-        f"A NER-recovered field must be tagged with its own method, "
-        f"not attributed to a structural match it isn't: {sig['contact']['full_name']}",
+        sig["contact"]["full_name"]["method"] == "relay_from_block",
+        f"A relay-recovered field must be tagged with its own method, "
+        f"preserving deterministic provenance: {sig['contact']['full_name']}",
     )
 
 
@@ -459,8 +451,8 @@ def main() -> int:
     test_forwarded_header_block_itself_is_not_mistaken_for_signature()
     print("PASS: forwarded header block's own Subject: line is not mistaken for a job title")
 
-    test_ner_fallback_recovers_fragmented_name()
-    print("PASS: NER fallback recovers a name from a fragmented one-token-per-line signature")
+    test_relay_block_recovers_fragmented_name()
+    print("PASS: deterministic relay parsing recovers a fragmented one-token-per-line signature")
 
     test_ner_fallback_does_not_fabricate_names_from_an_untrustworthy_span()
     print("PASS: NER fallback stays off for a span with no real signature content")
