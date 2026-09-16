@@ -678,7 +678,7 @@ def _split_requirement_sections(text: str) -> list[str]:
     text = _strip_job_description_footer(body) or body or text
     matches = list(
         re.finditer(
-            r"(?im)^\s*(?:job title|position|role)\s*[:\-]",
+            r"(?im)^\s*(?:job title|title|position|role)\s*[:\-]",
             text,
         )
     )

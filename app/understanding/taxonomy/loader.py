@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import tempfile
 from datetime import UTC, datetime
 from functools import lru_cache, wraps
 from threading import RLock
@@ -96,6 +97,25 @@ def _loose_key(value: str | None) -> str:
     if not value:
         return ""
     return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def _write_json_atomic(path: Path, data: dict[str, Any]) -> None:
+    """Readers see either complete revision, never a truncated JSON file."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=path.name + ".", suffix=".tmp", delete=False) as handle:
+            temporary = Path(handle.name)
+            json.dump(data, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        if path.exists():
+            os.chmod(temporary, path.stat().st_mode)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -214,7 +234,7 @@ def add_canonical_skill(
                 "description_source": "ai_generated" if description else None,
             }
         )
-        _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        _write_json_atomic(_writable_taxonomy_path("canonical_skills.json"), data)
         clear_taxonomy_cache()
 
 
@@ -268,7 +288,7 @@ def set_skill_description(
                     entry["description_edited_by"] = edited_by
                     entry["description_edited_at"] = _utc_now_iso()
 
-                _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+                _write_json_atomic(_writable_taxonomy_path("canonical_skills.json"), data)
                 clear_taxonomy_cache()
                 return True
 
@@ -330,7 +350,7 @@ def update_canonical_skill(
         if category is not None:
             entry["category"] = category
 
-        _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        _write_json_atomic(_writable_taxonomy_path("canonical_skills.json"), data)
         clear_taxonomy_cache()
 
     return {"updated": True, "name": entry["name"]}
@@ -356,7 +376,7 @@ def delete_canonical_skill(name: str) -> dict[str, Any]:
             return {"deleted": False, "reason": "skill_not_found"}
 
         data["skills"] = remaining
-        _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        _write_json_atomic(_writable_taxonomy_path("canonical_skills.json"), data)
         clear_taxonomy_cache()
 
     return {"deleted": True, "name": name}
@@ -373,7 +393,7 @@ def bulk_delete_skills(names: list[str]) -> dict[str, Any]:
         data["skills"] = [e for e in data["skills"] if normalize_taxonomy_key(e.get("name")) not in wanted_keys]
 
         if deleted_names:
-            _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            _write_json_atomic(_writable_taxonomy_path("canonical_skills.json"), data)
             clear_taxonomy_cache()
 
     return {"deleted_count": len(deleted_names), "deleted_names": deleted_names}
@@ -393,7 +413,7 @@ def bulk_set_skill_category(names: list[str], category: str) -> dict[str, Any]:
                 updated_names.append(entry["name"])
 
         if updated_names:
-            _writable_taxonomy_path("canonical_skills.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            _write_json_atomic(_writable_taxonomy_path("canonical_skills.json"), data)
             clear_taxonomy_cache()
 
     return {"updated_count": len(updated_names), "updated_names": updated_names}
@@ -412,7 +432,7 @@ def delete_canonical_job_title(title: str) -> dict[str, Any]:
             return {"deleted": False, "reason": "job_title_not_found"}
 
         data["titles"] = remaining
-        _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        _write_json_atomic(_writable_taxonomy_path("job_titles.json"), data)
         clear_taxonomy_cache()
 
     return {"deleted": True, "title": title}
@@ -429,7 +449,7 @@ def bulk_delete_job_titles(titles: list[str]) -> dict[str, Any]:
         data["titles"] = [e for e in data["titles"] if normalize_taxonomy_key(e.get("title")) not in wanted_keys]
 
         if deleted_titles:
-            _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            _write_json_atomic(_writable_taxonomy_path("job_titles.json"), data)
             clear_taxonomy_cache()
 
     return {"deleted_count": len(deleted_titles), "deleted_titles": deleted_titles}
@@ -482,7 +502,7 @@ def add_canonical_job_title(
                 "source": "taxonomy_candidate_approved",
             }
         )
-        _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        _write_json_atomic(_writable_taxonomy_path("job_titles.json"), data)
         clear_taxonomy_cache()
 
 
@@ -574,7 +594,7 @@ def update_canonical_job_title(
                 entry["title"], entry.get("family"), [e for e in data["titles"] if e is not entry]
             )
 
-        _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        _write_json_atomic(_writable_taxonomy_path("job_titles.json"), data)
         clear_taxonomy_cache()
 
     return {"updated": True, "title": entry["title"]}
@@ -599,7 +619,7 @@ def bulk_set_job_title_family(titles: list[str], family: str) -> dict[str, Any]:
                 updated_titles.append(entry["title"])
 
         if updated_titles:
-            _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            _write_json_atomic(_writable_taxonomy_path("job_titles.json"), data)
             clear_taxonomy_cache()
 
     return {"updated_count": len(updated_titles), "updated_titles": updated_titles}
@@ -626,7 +646,7 @@ def bulk_apply_job_title_families(family_by_title: dict[str, str]) -> dict[str, 
                 updated_titles.append(entry["title"])
 
         if updated_titles:
-            _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            _write_json_atomic(_writable_taxonomy_path("job_titles.json"), data)
             clear_taxonomy_cache()
 
     return {"updated_count": len(updated_titles), "updated_titles": updated_titles}
@@ -661,7 +681,7 @@ def bulk_backfill_related_titles() -> dict[str, Any]:
                 updated_titles.append(entry["title"])
 
         if updated_titles:
-            _writable_taxonomy_path("job_titles.json").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            _write_json_atomic(_writable_taxonomy_path("job_titles.json"), data)
             clear_taxonomy_cache()
 
     return {
