@@ -8,6 +8,7 @@ from app.understanding.parsers.basic import parse_basic_structured_data
 from app.understanding.quality.scoring import score_extraction_quality
 from app.understanding.quality.thresholds import apply_document_quality_threshold
 from app.understanding.taxonomy.signals import extract_taxonomy_signals
+from app.understanding.taxonomy.loader import get_taxonomy_cache_revision
 from app.understanding.validation import validate_structured_output
 from app.runtime.cache import build_cache_key, cache_get, cache_set
 
@@ -27,7 +28,7 @@ def build_understanding_result(
 
     if document_kind in CACHEABLE_DOCUMENT_KINDS:
         cache_key = build_cache_key(
-            "parse", extracted.text, document_kind, PARSER_VERSION, skip_llm_fallback
+            "parse", extracted.text, document_kind, PARSER_VERSION, skip_llm_fallback, get_taxonomy_cache_revision()
         )
         cached = cache_get(cache_key)
 

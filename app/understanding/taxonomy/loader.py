@@ -698,6 +698,16 @@ def get_skill_entries() -> list[dict[str, Any]]:
     return taxonomy.get("skills", [])
 
 
+def get_taxonomy_cache_revision() -> tuple:
+    """Invalidate parsed documents when either mutable taxonomy changes."""
+    revisions = []
+    for filename in ("canonical_skills.json", "job_titles.json"):
+        path = _writable_taxonomy_path(filename)
+        stat = path.stat()
+        revisions.append((filename, stat.st_mtime_ns, stat.st_size))
+    return tuple(revisions)
+
+
 def get_taxonomy_version() -> str:
     taxonomy = load_skills_taxonomy()
     return taxonomy.get("version", "unknown")
