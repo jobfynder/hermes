@@ -86,23 +86,11 @@ export function PaginationControls({
           ))}
         </select>
         <div className="flex items-center gap-1.5">
-          <button
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-            className="rounded border border-line px-2 py-1 text-xs text-ink-soft transition hover:text-ink disabled:opacity-40"
-          >
-            Prev
-          </button>
-          <span>
-            Page {page} of {pageCount}
-          </span>
-          <button
-            disabled={page >= pageCount}
-            onClick={() => onPageChange(page + 1)}
-            className="rounded border border-line px-2 py-1 text-xs text-ink-soft transition hover:text-ink disabled:opacity-40"
-          >
-            Next
-          </button>
+          <button disabled={page <= 1} onClick={() => onPageChange(1)} className="rounded border border-line px-2 py-1 text-xs text-ink-soft disabled:opacity-40">First</button>
+          <button disabled={page <= 1} onClick={() => onPageChange(page - 1)} className="rounded border border-line px-2 py-1 text-xs text-ink-soft disabled:opacity-40">Prev</button>
+          <label className="flex items-center gap-1">Page <input aria-label="Page number" type="number" min={1} max={pageCount} value={page} onChange={(e) => onPageChange(Math.min(pageCount, Math.max(1, Number(e.target.value) || 1)))} className="w-14 rounded border border-line bg-paper px-2 py-1 text-xs text-ink" /> of {pageCount}</label>
+          <button disabled={page >= pageCount} onClick={() => onPageChange(page + 1)} className="rounded border border-line px-2 py-1 text-xs text-ink-soft disabled:opacity-40">Next</button>
+          <button disabled={page >= pageCount} onClick={() => onPageChange(pageCount)} className="rounded border border-line px-2 py-1 text-xs text-ink-soft disabled:opacity-40">Last</button>
         </div>
       </div>
     </div>
