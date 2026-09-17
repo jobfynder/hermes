@@ -96,7 +96,7 @@ function AppShell() {
       </nav>
 
       {view.name === 'detail' && (
-        <DraftDetailPage draftId={view.draftId} onBack={() => setView({ name: view.returnToCompanies ? 'companies' : 'list' })} />
+        <DraftDetailPage draftId={view.draftId} onBack={() => setView(view.returnToCompanies ? { name: 'companies' } : { name: 'list' })} />
       )}
       {view.name === 'moderation' && <ModerationPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'accuracy' && <AccuracyPage onBack={() => setView({ name: 'list' })} />}
