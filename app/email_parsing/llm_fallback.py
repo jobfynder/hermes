@@ -33,6 +33,7 @@ import json
 from typing import Any
 
 from app.prompt_runtime.extraction_fallback import run_llm_fallback
+from app.config import HERMES_EMAIL_LLM_FALLBACK_ENABLED
 from app.email_parsing.parsers import _score_requirement_record, _hotlist_record_confidence
 
 # Matches parse_requirement_email/parse_hotlist_email's own requires_review
@@ -114,7 +115,8 @@ def apply_job_requirement_fallback(clean_text: str, email_parsing: dict[str, Any
     else in the record stays attributed to the deterministic parser,
     because it was.
     """
-    if not clean_text.strip():
+    if not clean_text.strip() or not HERMES_EMAIL_LLM_FALLBACK_ENABLED:
+        email_parsing["llm_fallback"] = {"used": False, "prompt_id": JOB_FALLBACK_PROMPT_ID, "reason": "email_llm_fallback_not_explicitly_enabled"}
         return email_parsing, set()
 
     records = email_parsing.get("records") or []
@@ -196,7 +198,8 @@ def apply_hotlist_fallback(clean_text: str, email_parsing: dict[str, Any]) -> tu
     LLM path actually produced a usable replacement, so the caller can
     tag every field in every resulting record as llm_fallback.
     """
-    if not clean_text.strip():
+    if not clean_text.strip() or not HERMES_EMAIL_LLM_FALLBACK_ENABLED:
+        email_parsing["llm_fallback"] = {"used": False, "prompt_id": HOTLIST_FALLBACK_PROMPT_ID, "reason": "email_llm_fallback_not_explicitly_enabled"}
         return email_parsing, False
 
     if email_parsing.get("confidence", 0.0) >= FALLBACK_CONFIDENCE_THRESHOLD:

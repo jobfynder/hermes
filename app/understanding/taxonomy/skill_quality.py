@@ -14,6 +14,8 @@ NON_SKILL_TERMS = frozenset({
     'include','includes','including','must','should','please','candidate','candidates',
     'resume','resumes','recruiter','recruiters','location','compensation','availability',
     'onsite','remote','hybrid','rate','salary','contact','email','phone','unsubscribe',
+    'https','process','scalable','access','developer','architect','microsoft','program',
+    'delivery','integrations','governance','dashboards','routing','status','site',
 })
 
 def skill_noise_reason(name: str) -> str | None:
@@ -28,6 +30,19 @@ def skill_noise_reason(name: str) -> str | None:
         return 'nontechnical_professional_skill'
     if value.lower() in NON_SKILL_TERMS:
         return 'standalone_prose_or_metadata'
+    words=re.findall(r"[A-Za-z0-9+#.]+",value)
+    if len(words)>5 or len(value)>60:
+        return 'prose_or_composite_term'
+    if re.match(r'(?i)^(?:and|or|with|including|such as|prior knowledge of|experience with|familiarity with|ability to|expertise with|background in|certification such as)\s+',value):
+        return 'sentence_fragment'
+    if re.match(r'(?i)^(?:analyze|build|collaborate|configure|create|define|deliver|develop|document|drive|ensure|establish|implement|improve|lead|maintain|manage|monitor|oversee|perform|provide|review|support|troubleshoot|validate|write)\b',value):
+        return 'responsibility_statement'
+    if re.search(r'(?i)\b(?:is|required|preferred|years? of experience|client site|status updates?|latest .* updates?)\b',value):
+        return 'requirement_or_prose'
+    if re.search(r'(?i)(?:\s+or\s+|\b(?:and|or|etc)\.?$)',value):
+        return 'incomplete_or_composite_term'
+    if re.search(r'(?i)^(?:(?:senior|sr\.?|junior|jr\.?)\s+.*(?:engineer|architect|consultant|manager|team lead|developer)|(?:program|account|project|business development|delivery|bench sales) manager|data architect|architect)$',value):
+        return 'job_title_not_skill'
     if re.match(r'(?i)^(?:and|or|including|prior knowledge of|experience with|familiarity with)\s+',value):
         return 'sentence_fragment'
     if value.count('(')!=value.count(')'):

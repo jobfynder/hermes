@@ -53,6 +53,8 @@ export function DraftListPage({
   const [query, setQuery] = useState('')
   const [refresh, setRefresh] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [resolving, setResolving] = useState(false)
+  const [resolveMessage, setResolveMessage] = useState<string | null>(null)
   const pageCount = Math.max(1, Math.ceil(totalCount / pageSize))
   const pageItems = drafts ?? []
   const load = () => setRefresh((n) => n + 1)
@@ -139,6 +141,23 @@ export function DraftListPage({
             Auto-refresh
           </label>
           <button
+            onClick={async () => {
+              setResolving(true); setResolveMessage(null)
+              try {
+                let total = 0
+                for (let batch = 0; batch < 30; batch += 1) {
+                  const result = await api.reconcileReadyReviews(false, 500)
+                  total += result.resolved_count
+                  if (result.resolved_count === 0) break
+                }
+                setResolveMessage(`${total.toLocaleString()} review-ready records resolved deterministically`); load()
+              } catch (err) { setResolveMessage(err instanceof Error ? err.message : 'Resolution failed') }
+              finally { setResolving(false) }
+            }}
+            disabled={resolving || loading}
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft disabled:opacity-40"
+          >{resolving ? 'Resolving…' : 'Resolve ready'}</button>
+          <button
             onClick={load}
             disabled={loading}
             className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
@@ -147,6 +166,7 @@ export function DraftListPage({
           </button>
         </div>
       </header>
+      {resolveMessage && <p className="mb-3 text-sm text-ink-soft">{resolveMessage}</p>}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <input

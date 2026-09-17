@@ -355,7 +355,7 @@ CREATE TABLE IF NOT EXISTS hermes_companies (
 );
 CREATE TABLE IF NOT EXISTS company_observations (
     draft_id UUID PRIMARY KEY REFERENCES drafts(draft_id) ON DELETE CASCADE,
-    company_id UUID NOT NULL REFERENCES hermes_companies(company_id),
+    company_id UUID NOT NULL REFERENCES hermes_companies(company_id) ON DELETE CASCADE,
     company_label TEXT NOT NULL,
     contact_email TEXT,
     contact_name TEXT,
@@ -369,6 +369,21 @@ CREATE TABLE IF NOT EXISTS company_observations (
     jobs JSONB NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_company_observations_company ON company_observations(company_id, observed_at DESC);
+CREATE TABLE IF NOT EXISTS company_import_sources (
+    company_id UUID NOT NULL REFERENCES hermes_companies(company_id) ON DELETE CASCADE,
+    source TEXT NOT NULL, source_url TEXT NOT NULL DEFAULT '',
+    imported_name TEXT NOT NULL, location TEXT, careers_url TEXT,
+    imported_by TEXT, imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY(company_id,source,source_url)
+);
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname='company_import_sources_company_id_fkey'
+        AND confdeltype <> 'c') THEN
+        ALTER TABLE company_import_sources DROP CONSTRAINT company_import_sources_company_id_fkey;
+        ALTER TABLE company_import_sources ADD CONSTRAINT company_import_sources_company_id_fkey
+            FOREIGN KEY(company_id) REFERENCES hermes_companies(company_id) ON DELETE CASCADE;
+    END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS company_projection_state (
     draft_id UUID PRIMARY KEY REFERENCES drafts(draft_id) ON DELETE CASCADE,
     source_updated_at TIMESTAMPTZ NOT NULL,

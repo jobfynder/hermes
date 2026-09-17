@@ -25,6 +25,11 @@ def reconcile_review_status(*,dry_run=True,limit=100):
             d.payload->'structured_data'->'email_parsing' AS parsing
             FROM drafts d WHERE d.status='needs_review' AND d.confidence>=0.7
             AND d.draft_type IN ('draft_job_requirement','draft_hotlist')
+            AND COALESCE((d.payload->'structured_data'->'email_parsing'->>'requires_review')::boolean,true)=false
+            AND COALESCE(jsonb_array_length(d.payload->'structured_data'->'email_parsing'->'warnings'),0)=0
+            AND jsonb_array_length(COALESCE(d.payload->'structured_data'->'email_parsing'->'records','[]'::jsonb))>0
+            AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(d.payload->'structured_data'->'email_parsing'->'records') r
+                WHERE COALESCE((r->>'requires_review')::boolean,true) OR COALESCE(jsonb_array_length(r->'warnings'),0)>0 OR COALESCE((r->>'parse_confidence')::float,0)<0.7)
             AND NOT EXISTS(SELECT 1 FROM field_provenance f WHERE f.parse_run_id=d.draft_id::text
                 AND f.extractor IN ('reviewer_correction','recruiter_correction'))
             ORDER BY d.created_at,d.draft_id LIMIT %s FOR UPDATE OF d""",(limit,))

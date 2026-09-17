@@ -312,6 +312,8 @@ def update_canonical_skill(
     just casing) now still writes the corrected text -- previously it
     silently no-opped while still reporting updated=True.
     """
+    if new_name and skill_noise_reason(new_name):
+        return {"updated": False, "reason": "invalid_skill_name"}
     with cursor() as cur:
         cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
 

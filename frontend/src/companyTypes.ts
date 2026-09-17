@@ -6,7 +6,7 @@ export interface CompanyEntry {
   claim_status: string
   source_count: number
   contact_count: number
-  last_seen: string
+  last_seen: string | null
   avg_confidence?: number
 }
 export interface CompanySource {
@@ -24,6 +24,7 @@ export interface CompanySource {
 }
 export interface CompanyDetail extends CompanyEntry {
   observed_names: { company_label: string; sources: number }[]
+  imports: { source: string; source_url: string; imported_name: string; location: string | null; careers_url: string; imported_at: string }[]
   contacts: { email: string; name: string | null; source_count: number; last_seen: string }[]
   sources: CompanySource[]
   job_requirements: number
@@ -34,5 +35,5 @@ export interface CompanyPage {
   total_count: number
   page: number
   page_size: number
-  sync: { processed: number; linked: number; total: number; last_synced: string | null }
+  sync: { processed: number; linked: number; total: number; last_synced: string | null; reasons: {reason:string;count:number}[] }
 }

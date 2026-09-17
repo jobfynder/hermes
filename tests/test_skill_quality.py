@@ -3,12 +3,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from app.understanding.taxonomy.skill_quality import skill_noise_reason
-from app.understanding.taxonomy.loader import add_canonical_skill
+from app.understanding.taxonomy.loader import add_canonical_skill, update_canonical_skill
 from app.understanding.parsers.skills import fuzzy_match_terms
 
 class SkillQualityTests(unittest.TestCase):
     def test_noise(self):
-        for term in ['receive','Overall','Employment Type','or Microsoft Copilot','Experience with SQL','PEFT (LoRA','alex@example.com']:
+        for term in ['receive','Overall','Employment Type','or Microsoft Copilot','Experience with SQL','PEFT (LoRA','alex@example.com','Manage GitHub Actions and CI','Senior Data Engineer','CISA or CISSP','Certification such as CBAP','with UAT']:
             self.assertIsNotNone(skill_noise_reason(term),term)
 
     def test_real_tools_are_preserved(self):
@@ -24,6 +24,12 @@ class SkillQualityTests(unittest.TestCase):
     def test_invalid_addition_does_not_access_database(self):
         with patch('app.understanding.taxonomy.loader.cursor') as db:
             with self.assertRaises(ValueError):add_canonical_skill('Overall')
+            db.assert_not_called()
+
+    def test_invalid_rename_does_not_access_database(self):
+        with patch('app.understanding.taxonomy.loader.cursor') as db:
+            result=update_canonical_skill('SQL',new_name='Stakeholder Management')
+            self.assertEqual(result['reason'],'invalid_skill_name')
             db.assert_not_called()
 
     def test_learned_skills_need_exact_evidence(self):

@@ -155,7 +155,7 @@ def list_drafts(
 @router.post('/review/reconcile-ready')
 def reconcile_ready_reviews(
     dry_run: bool = True,
-    limit: int = Query(default=100, ge=1, le=200),
+    limit: int = Query(default=200, ge=1, le=500),
     _user: dict = Depends(require_permission('drafts:publish')),
 ):
     from app.drafts.review_rules import reconcile_review_status

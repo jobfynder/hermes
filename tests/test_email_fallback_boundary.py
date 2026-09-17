@@ -17,3 +17,13 @@ class EmailFallbackBoundaryTests(unittest.TestCase):
             result=service.understand_document(RawDocument(content=text,content_type='text/plain',document_kind='job_description'))
             self.assertEqual(result.extracted_text.text,text)
             self.assertEqual(result.structured_data['llm_fallback_extracted']['job_title'],'Data Engineer')
+
+
+class EmailAutomaticFallbackDisabledTests(unittest.TestCase):
+    def test_email_fallback_requires_separate_explicit_switch(self):
+        from app.email_parsing import llm_fallback
+        parsing={'confidence':0.1,'records':[]}
+        with patch.object(llm_fallback,'HERMES_EMAIL_LLM_FALLBACK_ENABLED',False), patch.object(llm_fallback,'run_llm_fallback') as call:
+            result,_=llm_fallback.apply_job_requirement_fallback('Job Title: Data Engineer',parsing)
+            call.assert_not_called()
+            self.assertEqual(result['llm_fallback']['reason'],'email_llm_fallback_not_explicitly_enabled')

@@ -30,7 +30,7 @@ def corporate_domain(value):
 def _text(value):
     return re.sub(r'\s+',' ',str(value or '')).strip()
 
-PROJECTION_VERSION = 'company_directory_v2'
+PROJECTION_VERSION = 'company_directory_v3'
 
 def normalize_company_name(value):
     name = _text(value)
@@ -59,6 +59,16 @@ def extract_company(row):
         item=contact.get(name)
         return _text(item.get('value')) if isinstance(item,dict) else ''
     name = normalize_company_name(field('company_name'))
+    if not name or not field('email'):
+        # Recheck historical stored text with the current deterministic signature parser.
+        # Never substitute the relay/transport sender for a signature contact.
+        from app.email_parsing.signature import parse_email_signature
+        recovered = parse_email_signature(text=(row.get('payload') or {}).get('text') or '', sender_email=None)
+        recovered_contact = recovered.get('contact') or {}
+        recovered_name = normalize_company_name((recovered_contact.get('company_name') or {}).get('value'))
+        if recovered_name:
+            contact = recovered_contact
+            name = recovered_name
     if not name:
         return None, 'company_name_missing_or_ambiguous'
     # Only a signature contact is company evidence; relay transport senders
@@ -72,9 +82,11 @@ def extract_company(row):
     except ValueError:
         website_domain=None
     if not domain:
-        # Website-only evidence is kept for later resolution rather than
-        # associating a freemail or relay contact with an arbitrary company.
-        return None, 'corporate_signature_email_missing'
+        if website_domain:
+            domain = website_domain
+            email = None  # A website does not establish a freemail contact's affiliation.
+        else:
+            return None, 'corporate_signature_email_missing'
     if website_domain and website_domain != domain:
         website=None
     elif not website_domain:
@@ -158,30 +170,39 @@ def sync_company_batch(limit=100):
                 AND EXISTS(SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id)""",(list(affected),))
         return len(rows)
 
-def list_companies(query='',page=1,page_size=25):
+def list_companies(query='',page=1,page_size=25,verification='all',origin='all',activity='all',location='',source='',sort='recent'):
     page=max(1,page);page_size=min(max(1,page_size),100)
-    search='%'+query.strip().replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%'
+    def like(value):
+        return '%'+value.strip().replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%'
+    conditions=["(c.canonical_name ILIKE %(q)s OR c.identity_domain ILIKE %(q)s OR EXISTS(SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id AND o.company_label ILIKE %(q)s))",
+                "(s.source_count>0 OR EXISTS(SELECT 1 FROM company_import_sources i WHERE i.company_id=c.company_id))"]
+    args={'q':like(query),'location':like(location),'source':like(source),'verification':verification}
+    if verification!='all': conditions.append('c.verification_status=%(verification)s')
+    if origin=='email': conditions.append('s.source_count>0')
+    if origin=='import': conditions.append('EXISTS(SELECT 1 FROM company_import_sources i WHERE i.company_id=c.company_id)')
+    if activity=='active': conditions.append("s.last_seen>=now()-interval '30 days'")
+    if activity=='inactive': conditions.append("s.last_seen<now()-interval '30 days'")
+    if activity=='none': conditions.append('s.source_count=0')
+    if location: conditions.append("(EXISTS(SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id AND o.location ILIKE %(location)s) OR EXISTS(SELECT 1 FROM company_import_sources i WHERE i.company_id=c.company_id AND i.location ILIKE %(location)s))")
+    if source: conditions.append("(EXISTS(SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id AND o.channel ILIKE %(source)s) OR EXISTS(SELECT 1 FROM company_import_sources i WHERE i.company_id=c.company_id AND i.source ILIKE %(source)s))")
+    order={'recent':'s.last_seen DESC NULLS LAST','name':'lower(c.canonical_name)','contacts':'s.contact_count DESC','sources':'s.source_count DESC'}.get(sort,'s.last_seen DESC NULLS LAST')
+    base=""" FROM hermes_companies c JOIN LATERAL (
+        SELECT count(*) AS source_count,count(DISTINCT contact_email) AS contact_count,
+        max(observed_at) AS last_seen,avg(confidence) AS avg_confidence
+        FROM company_observations WHERE company_id=c.company_id) s ON true WHERE """+' AND '.join(conditions)
     with cursor() as cur:
-        cur.execute('''SELECT count(*) AS total FROM hermes_companies c WHERE
-            EXISTS(SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id)
-            AND (c.canonical_name ILIKE %s OR c.identity_domain ILIKE %s OR EXISTS(
-                SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id AND o.company_label ILIKE %s))''',(search,search,search))
-        total=cur.fetchone()['total']
-        cur.execute('''SELECT c.*,s.source_count,s.contact_count,s.last_seen,s.avg_confidence
-            FROM hermes_companies c JOIN LATERAL (
-                SELECT count(*) AS source_count,count(DISTINCT contact_email) AS contact_count,
-                    max(observed_at) AS last_seen,avg(confidence) AS avg_confidence
-                FROM company_observations WHERE company_id=c.company_id
-            ) s ON s.source_count>0 WHERE c.canonical_name ILIKE %s OR c.identity_domain ILIKE %s OR EXISTS(
-                SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id AND o.company_label ILIKE %s)
-            ORDER BY s.last_seen DESC,c.company_id LIMIT %s OFFSET %s''',(search,search,search,page_size,(page-1)*page_size))
+        cur.execute('SELECT count(*) AS total'+base,args);total=cur.fetchone()['total']
+        page=min(page,max(1,(total+page_size-1)//page_size));args.update(limit=page_size,offset=(page-1)*page_size)
+        cur.execute('SELECT c.*,s.*'+base+' ORDER BY '+order+',c.company_id LIMIT %(limit)s OFFSET %(offset)s',args)
         items=cur.fetchall()
-        cur.execute('''SELECT count(*) FILTER(WHERE projection_version=%s) AS processed,max(processed_at) AS last_synced,
-            count(*) FILTER(WHERE reason='linked') AS linked FROM company_projection_state''',(PROJECTION_VERSION,))
+        cur.execute("""SELECT count(*) FILTER(WHERE p.projection_version=%s AND p.source_updated_at=d.updated_at) AS processed,
+            max(p.processed_at) AS last_synced,count(*) FILTER(WHERE p.reason='linked') AS linked,count(*) AS total
+            FROM drafts d LEFT JOIN company_projection_state p USING(draft_id)""",(PROJECTION_VERSION,))
         sync=cur.fetchone()
-        cur.execute('SELECT count(*) AS total FROM drafts')
-        sync['total']=cur.fetchone()['total']
+        cur.execute('SELECT reason,count(*) AS count FROM company_projection_state GROUP BY reason ORDER BY count(*) DESC')
+        sync['reasons']=cur.fetchall()
     return {'items':items,'total_count':total,'page':page,'page_size':page_size,'sync':sync}
+
 
 def get_company(company_id):
     with cursor() as cur:
@@ -192,6 +213,8 @@ def get_company(company_id):
         cur.execute('''SELECT company_label,count(*) AS sources FROM company_observations
             WHERE company_id=%s GROUP BY company_label ORDER BY sources DESC,company_label''',(company_id,))
         company['observed_names']=cur.fetchall()
+        cur.execute('SELECT source,source_url,imported_name,location,careers_url,imported_at FROM company_import_sources WHERE company_id=%s ORDER BY imported_at DESC',(company_id,))
+        company['imports']=cur.fetchall()
         cur.execute('''SELECT contact_email AS email,max(contact_name) AS name,count(*) AS source_count,
             max(observed_at) AS last_seen FROM company_observations WHERE company_id=%s
             GROUP BY contact_email ORDER BY last_seen DESC LIMIT 100''',(company_id,))

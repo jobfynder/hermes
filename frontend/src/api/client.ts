@@ -69,7 +69,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listCompanies: (q: string, page: number, signal?: AbortSignal) => request<CompanyPage>(`/companies?q=${encodeURIComponent(q)}&page=${page}&page_size=25`, { signal }),
+  listCompanies: (params: URLSearchParams, signal?: AbortSignal) => request<CompanyPage>(`/companies?${params}`, { signal }),
+  importCompanies: (csvText: string, dryRun: boolean) => request<{dry_run:boolean;valid_rows:number;new_companies:number;existing_companies:number;errors:{row:number;error:string}[];duplicate_rows:number}>('/companies/import', { method: 'POST', body: JSON.stringify({ csv_text: csvText, dry_run: dryRun }) }),
+  reconcileReadyReviews: (dryRun = false, limit = 500) => request<{dry_run:boolean;checked_count:number;resolved_count:number}>(`/drafts/review/reconcile-ready?dry_run=${dryRun}&limit=${limit}`, { method: 'POST' }),
   getCompany: (id: string, signal?: AbortSignal) => request<CompanyDetail>(`/companies/${encodeURIComponent(id)}`, { signal }),
   listDrafts: () => request<DraftObject[]>('/drafts'),
   listDraftSummaries: (includeDuplicates = false) =>

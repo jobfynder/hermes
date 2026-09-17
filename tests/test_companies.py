@@ -1,6 +1,7 @@
 import json, os, unittest
 from uuid import uuid4
 from app.companies.service import extract_company, normalize_company_name, corporate_domain, sync_company_batch, list_companies, get_company
+from app.companies.imports import import_companies
 from app.runtime.db import cursor, init_schema
 
 def payload(domain='agency.example', title='Data Engineer'):
@@ -37,8 +38,15 @@ class CompanyExtractionTests(unittest.TestCase):
         a,_=extract_company({'draft_id':uuid4(),'payload':payload()})
         b,_=extract_company({'draft_id':uuid4(),'payload':payload()})
         self.assertEqual(a['jobs'][0]['key'],b['jobs'][0]['key'])
-    def test_company_name_alone_does_not_establish_identity(self):
+    def test_website_can_establish_identity_without_attributing_freemail_contact(self):
         source=payload();source['structured_data']['signature']['contact'].pop('email')
+        result,reason=extract_company({'draft_id':uuid4(),'payload':source})
+        self.assertEqual(reason,'linked')
+        self.assertEqual(result['domain'],'agency.example')
+        self.assertIsNone(result['contact_email'])
+
+    def test_name_alone_does_not_establish_identity(self):
+        source=payload();contact=source['structured_data']['signature']['contact'];contact.pop('email');contact.pop('website')
         result,reason=extract_company({'draft_id':uuid4(),'payload':source})
         self.assertIsNone(result)
         self.assertEqual(reason,'corporate_signature_email_missing')
@@ -87,6 +95,22 @@ class CompanyProjectionTests(unittest.TestCase):
         draft=self.add();sync_company_batch()
         with cursor() as cur:cur.execute('DELETE FROM drafts WHERE draft_id=%s',(draft,))
         self.assertEqual(list_companies(self.domain)['total_count'],0)
+
+    def test_import_deduplicates_by_domain_and_does_not_create_activity(self):
+        text=f'company_name,domain,source,source_url,location,careers_url\nImported Co,{self.domain},dice,https://dice.com/job/1,Austin,https://{self.domain}/careers\n'
+        preview=import_companies(text,True,'test');self.assertEqual(preview['new_companies'],1)
+        applied=import_companies(text,False,'test');self.assertEqual(applied['new_companies'],1)
+        second=import_companies(text,False,'test');self.assertEqual(second['existing_companies'],1)
+        result=list_companies(self.domain,origin='import',activity='none')
+        self.assertEqual(result['total_count'],1)
+        company=get_company(result['items'][0]['company_id'])
+        self.assertEqual(company['activity']['score'],0)
+        self.assertEqual(company['imports'][0]['source'],'dice')
+
+    def test_portal_domain_cannot_be_imported_as_company(self):
+        result=import_companies('company_name,domain,source\nDice,dice.com,dice\n',True,'test')
+        self.assertEqual(result['valid_rows'],0)
+        self.assertEqual(len(result['errors']),1)
 
 class CompanyAccessTests(unittest.TestCase):
     def test_directory_requires_existing_draft_read_permission(self):
