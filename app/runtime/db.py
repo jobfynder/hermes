@@ -345,6 +345,37 @@ CREATE TABLE IF NOT EXISTS signature_corrections (
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (sender_domain, field)
 );
+CREATE TABLE IF NOT EXISTS hermes_companies (
+    company_id UUID PRIMARY KEY,
+    identity_domain TEXT NOT NULL UNIQUE,
+    canonical_name TEXT NOT NULL,
+    verification_status TEXT NOT NULL DEFAULT 'unverified',
+    claim_status TEXT NOT NULL DEFAULT 'unclaimed',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS company_observations (
+    draft_id UUID PRIMARY KEY REFERENCES drafts(draft_id) ON DELETE CASCADE,
+    company_id UUID NOT NULL REFERENCES hermes_companies(company_id),
+    company_label TEXT NOT NULL,
+    contact_email TEXT,
+    contact_name TEXT,
+    website TEXT,
+    phone TEXT,
+    location TEXT,
+    confidence DOUBLE PRECISION NOT NULL,
+    method TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL,
+    jobs JSONB NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS idx_company_observations_company ON company_observations(company_id, observed_at DESC);
+CREATE TABLE IF NOT EXISTS company_projection_state (
+    draft_id UUID PRIMARY KEY REFERENCES drafts(draft_id) ON DELETE CASCADE,
+    source_updated_at TIMESTAMPTZ NOT NULL,
+    reason TEXT NOT NULL,
+    processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 """
 
 

@@ -7,21 +7,23 @@ import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftListPage } from './pages/DraftListPage'
 import { JobTitlesTaxonomyPage } from './pages/JobTitlesTaxonomyPage'
 import { ModerationPage } from './pages/ModerationPage'
+import { CompaniesPage } from './pages/CompaniesPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { SkillsTaxonomyPage } from './pages/SkillsTaxonomyPage'
 
 type View =
   | { name: 'list' }
-  | { name: 'detail'; draftId: string }
+  | { name: 'detail'; draftId: string; returnToCompanies?: boolean }
   | { name: 'moderation' }
   | { name: 'accuracy' }
   | { name: 'skills' }
   | { name: 'job-titles' }
   | { name: 'reports' }
+  | { name: 'companies' }
   | { name: 'assistant' }
 
 function AppShell() {
-  const [view, setView] = useState<View>({ name: 'list' })
+  const [view, setView] = useState<View>(() => ({ name: new URLSearchParams(window.location.search).get('view') === 'companies' ? 'companies' : 'list' }))
 
   return (
     <div className="min-h-screen bg-paper">
@@ -30,7 +32,8 @@ function AppShell() {
           <button onClick={() => setView({ name: 'list' })} className="text-sm font-semibold text-ink">
             Hermes Email Review
           </button>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+            <button onClick={() => setView({ name: 'companies' })} className={`text-xs font-medium ${view.name === 'companies' ? 'text-accent' : 'text-ink-soft hover:text-ink'}`}>Companies</button>
             <button
               onClick={() => setView({ name: 'accuracy' })}
               className={`text-xs font-medium transition ${
@@ -93,12 +96,13 @@ function AppShell() {
       </nav>
 
       {view.name === 'detail' && (
-        <DraftDetailPage draftId={view.draftId} onBack={() => setView({ name: 'list' })} />
+        <DraftDetailPage draftId={view.draftId} onBack={() => setView({ name: view.returnToCompanies ? 'companies' : 'list' })} />
       )}
       {view.name === 'moderation' && <ModerationPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'accuracy' && <AccuracyPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'skills' && <SkillsTaxonomyPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'job-titles' && <JobTitlesTaxonomyPage onBack={() => setView({ name: 'list' })} />}
+      {view.name === 'companies' && <CompaniesPage onSelectDraft={(id) => setView({ name: 'detail', draftId: id, returnToCompanies: true })} />}
       {view.name === 'reports' && <ReportsPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'assistant' && <AssistantPage onBack={() => setView({ name: 'list' })} />}
       {view.name === 'list' && <DraftListPage onSelect={(id) => setView({ name: 'detail', draftId: id })} />}

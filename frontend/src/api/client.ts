@@ -1,3 +1,4 @@
+import type { CompanyPage, CompanyDetail } from '../companyTypes'
 import type {
   AccuracySummary,
   AssistantQueryResult,
@@ -68,6 +69,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  listCompanies: (q: string, page: number, signal?: AbortSignal) => request<CompanyPage>(`/companies?q=${encodeURIComponent(q)}&page=${page}&page_size=25`, { signal }),
+  getCompany: (id: string, signal?: AbortSignal) => request<CompanyDetail>(`/companies/${encodeURIComponent(id)}`, { signal }),
   listDrafts: () => request<DraftObject[]>('/drafts'),
   listDraftSummaries: (includeDuplicates = false) =>
     request<DraftSummaryEntry[]>(`/drafts/summary?include_duplicates=${includeDuplicates}`),

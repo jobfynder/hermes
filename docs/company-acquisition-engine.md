@@ -4,7 +4,7 @@
 
 Hermes owns source intake, normalization, provenance, company and recruiter resolution, job identity, activity scoring, and acquisition preparation. CORE receives only explicitly approved, verified records through an idempotent handoff. Discovery is not verification, a sender domain is not proof of employment, and an email requirement is not proof a job is still open.
 
-The inspected Hermes application database currently contains drafts, provenance, review, taxonomy, intake, and publishing tables, but no dedicated company master. The existing seeded staffing-company list must be located and reconciled before a second master is populated. Do not substitute an inferred company name for a verified seed match.
+The user confirmed there is no existing company list to import. The first company directory is now built from structured signature evidence in Hermes drafts. `hermes_companies` provides stable domain-grouped IDs; `company_observations` retains source-backed contacts and requirements; `company_projection_state` enables resumable deterministic discovery and correction updates. Every company starts unverified and unclaimed. Corporate domain grouping is observed evidence, not legal identity or proof of employment.
 
 ## Target data model
 
@@ -38,11 +38,11 @@ Keep activity and trust separate. Activity is an explainable weighted score over
 
 ## Delivery sequence and acceptance gates
 
-1. Locate and audit the existing seed; preserve original IDs and source references. Import idempotently into one canonical master, with ambiguous merges held for review.
-2. Add company and recruiter resolution in shadow mode against existing Hermes intake. Review match/conflict counts before enabling canonical writes. Backfill through a resumable worker with human-edit protection.
+1. Delivered: create the first source-backed directory from existing Hermes drafts. Shared email/relay domains and name-only mentions are excluded from automatic linking. The Companies page provides search, pagination, detail, activity components, and links to source drafts.
+2. Delivered: continuously project new and corrected source drafts through the supervised worker, in bounded transactions, with no LLM calls. Observed contacts remain unverified. Future verification and company merge workflows must preserve immutable IDs and source evidence.
 3. Add canonical jobs and multi-source observations; test cross-channel duplicates, changed requirements, stale observations, and separate agency/end-client identities.
 4. Add approved ATS/career adapters with bounded polling, per-source checkpoints, retries, and complete-scan closure safeguards.
 5. Add an internal acquisition queue with transparent activity/trust components and claim readiness. Invitations require an explicitly approved campaign; no outbound messaging is enabled merely by discovery.
 6. Add verified company claiming and feed management. Only then enable an approved, idempotent CORE handoff behind explicit quality gates.
 
-These engine components are a target design, not a claim that all have been implemented. Report performance and taxonomy duplicate prevention are the current delivered prerequisites.
+These engine components are a target design, not a claim that all have been implemented. Report performance, taxonomy duplicate prevention, and the source-backed Companies directory are delivered. Career/ATS connectors, invitations, verified company claims, canonical job lifecycle management, and CORE handoffs remain future stages.

@@ -41,6 +41,7 @@ from app.routers.draft_review import router as draft_review_router
 from app.routers.moderation import router as moderation_router
 from app.routers.accuracy import router as accuracy_router
 from app.routers.reporting import router as reporting_router
+from app.routers.companies import router as companies_router
 from app.routers.assistant import router as assistant_router
 
 app = FastAPI(
@@ -89,6 +90,7 @@ app.include_router(draft_review_router)
 app.include_router(moderation_router)
 app.include_router(accuracy_router)
 app.include_router(reporting_router)
+app.include_router(companies_router)
 app.include_router(assistant_router)
 app.include_router(claim_router)
 app.include_router(access_router)

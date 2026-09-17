@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.runtime.db import cursor, get_pool, init_schema
 from app.drafts.backfill import run_batch
+from app.companies.service import sync_company_batch
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 stopping = False
@@ -33,7 +34,14 @@ def main():
                     cur.execute("SELECT job_id FROM draft_backfill_jobs WHERE status IN ('queued','running') ORDER BY created_at LIMIT 1")
                     job = cur.fetchone()
                 if not job:
-                    time.sleep(2)
+                    try:
+                        processed = sync_company_batch(100)
+                        if processed:
+                            logging.info('Company discovery batch committed count=%s', processed)
+                    except Exception as exc:
+                        logging.error('Company discovery batch retry error=%s', type(exc).__name__)
+                        processed = 0
+                    time.sleep(0.25 if processed else 5)
                     continue
                 try:
                     run_batch(job['job_id'])
