@@ -41,6 +41,7 @@ export function DraftListPage({
   const [error, setError] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<DraftObjectType | 'all'>('all')
   const [statusFilter, setStatusFilter] = useState<DraftStatus | 'all'>('all')
+  const [warningFilter, setWarningFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null)
@@ -70,6 +71,7 @@ export function DraftListPage({
     if (typeFilter !== 'all') params.set('draft_type', typeFilter)
     if (statusFilter !== 'all') params.set('status', statusFilter)
     if (query) params.set('search', query)
+    if (warningFilter !== 'all') params.set('review_warning', warningFilter)
     setError(null)
     setLoading(true)
     api.listDraftPage(params, controller.signal).then((result) => {
@@ -85,7 +87,7 @@ export function DraftListPage({
       if (!controller.signal.aborted) setLoading(false)
     })
     return () => controller.abort()
-  }, [page, pageSize, typeFilter, statusFilter, query, showDuplicates, refresh])
+  }, [page, pageSize, typeFilter, statusFilter, warningFilter, query, showDuplicates, refresh])
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -197,6 +199,15 @@ export function DraftListPage({
               {s === 'all' ? 'All statuses' : s.replace('_', ' ')}
             </option>
           ))}
+        </select>
+        <select aria-label="Review reason" value={warningFilter} onChange={(e) => {setWarningFilter(e.target.value);setStatusFilter('needs_review');setPage(1)}} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent">
+          <option value="all">All review reasons</option>
+          <option value="company_missing">Company missing</option>
+          <option value="job_title_missing">Job title missing</option>
+          <option value="required_skills_not_identified">Skills missing</option>
+          <option value="candidate_name_missing">Candidate name missing</option>
+          <option value="candidate_title_or_skills_missing">Candidate role or skills missing</option>
+          <option value="primary_role_or_skills_missing">Primary role or skills missing</option>
         </select>
       </div>
 

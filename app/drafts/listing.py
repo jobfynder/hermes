@@ -11,7 +11,7 @@ TITLE = f"""CASE
     ELSE COALESCE(title,'(untitled)') END"""
 
 
-def list_draft_page(page=1, page_size=50, status=None, draft_type=None, search='', include_duplicates=False):
+def list_draft_page(page=1, page_size=50, status=None, draft_type=None, search='', include_duplicates=False, review_warning=None):
     if page < 1 or not 1 <= page_size <= 200:
         raise ValueError('Invalid pagination')
     base = 'TRUE' if include_duplicates else "COALESCE(metadata->>'exact_content_duplicate_of','')=''"
@@ -23,6 +23,9 @@ def list_draft_page(page=1, page_size=50, status=None, draft_type=None, search='
     if draft_type:
         conditions.append('draft_type=%s')
         params.append(draft_type)
+    if review_warning:
+        conditions.append("EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(payload->'structured_data'->'email_parsing'->'records','[]'::jsonb)) r WHERE COALESCE(r->'warnings','[]'::jsonb) ? %s)")
+        params.append(review_warning)
     search = search.strip()
     if search:
         literal = search.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')

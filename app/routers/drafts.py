@@ -169,11 +169,12 @@ def list_drafts_page(
     status: Literal['draft','needs_review','published','rejected','spam'] | None = None,
     draft_type: DraftObjectType | None = None,
     search: str = Query(default='', max_length=200),
+    review_warning: Literal['company_missing','job_title_missing','required_skills_not_identified','candidate_name_missing','candidate_title_or_skills_missing','primary_role_or_skills_missing'] | None = None,
     include_duplicates: bool = False,
     _user: dict = Depends(require_permission('drafts:read')),
 ):
     from app.drafts.listing import list_draft_page
-    return list_draft_page(page, page_size, status, draft_type, search, include_duplicates)
+    return list_draft_page(page, page_size, status, draft_type, search, include_duplicates, review_warning)
 
 
 @router.get("/summary", response_model=list[DraftSummaryEntry])
