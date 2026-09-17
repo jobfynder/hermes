@@ -388,18 +388,23 @@ def find_unknown_job_title(job_title: str | None) -> str | None:
     return cleaned
 
 
+def candidate_identity(term: str) -> str:
+    # Keep language-defining punctuation (C / C++ / C# are different).
+    return re.sub(r"[^a-z0-9+#]", "", normalize_taxonomy_key(term))
+
+
+def _lock_candidate_identity(cur, signal_type: str, term: str) -> None:
+    cur.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                ("taxonomy-candidate:" + signal_type + ":" + candidate_identity(term),))
+
+
 def _find_loosely_matching_pending_candidate(cur, signal_type: str, term: str) -> dict | None:
-    """A second-chance lookup for _upsert_candidate: no PENDING candidate
-    has this exact normalized_term, but does one match on the loose,
-    punctuation-blind key ("NodeJS" arriving while "Node.js" is already
-    sitting in the queue as a separate pending row)? Only considers
-    pending rows -- an already-approved or -rejected term is handled by
-    find_unknown_skill_terms/find_unknown_job_title's own loose-index
-    check before this function is ever called, so this is purely about
-    not splitting one real term into two pending review rows. Uses a partial expression index so lookup cost does not grow with
-    the full pending queue, including high-volume boilerplate lines.
+    """Find the existing identity, including prior review decisions.
+
+    Retired duplicate rows remain available for audit, but never compete
+    with the retained row. Language-defining +/# punctuation is preserved.
     """
-    loose = _loose_key(term)
+    loose = candidate_identity(term)
     if not loose:
         return None
 
@@ -408,9 +413,9 @@ def _find_loosely_matching_pending_candidate(cur, signal_type: str, term: str) -
     # JSON fields instead of decoding every pending candidate for every line.
     cur.execute(
         "SELECT id, term, normalized_term, distinct_senders, sample_draft_ids FROM taxonomy_candidates "
-        "WHERE signal_type = %s AND status = 'pending' "
-        "AND regexp_replace(normalized_term, '[^a-z0-9]', '', 'g') = %s "
-        "ORDER BY id LIMIT 1",
+        "WHERE signal_type = %s AND coalesce(reviewed_by, '') NOT LIKE 'hermes-dedup:%%' "
+        "AND regexp_replace(normalized_term, '[^a-z0-9+#]', '', 'g') = %s "
+        "ORDER BY CASE status WHEN 'approved' THEN 0 WHEN 'rejected' THEN 1 ELSE 2 END, id LIMIT 1 FOR UPDATE",
         (signal_type, loose),
     )
     return cur.fetchone()
@@ -435,9 +440,10 @@ def _upsert_candidate(
     normalized_term = normalize_taxonomy_key(term)
 
     with cursor() as cur:
+        _lock_candidate_identity(cur, signal_type, term)
         cur.execute(
             "SELECT id, distinct_senders, sample_draft_ids FROM taxonomy_candidates "
-            "WHERE signal_type = %s AND normalized_term = %s",
+            "WHERE signal_type = %s AND normalized_term = %s AND coalesce(reviewed_by, '') NOT LIKE 'hermes-dedup:%%' FOR UPDATE",
             (signal_type, normalized_term),
         )
         existing = cur.fetchone() or _find_loosely_matching_pending_candidate(cur, signal_type, term)
@@ -646,6 +652,15 @@ def edit_taxonomy_candidate(candidate_id: int, term: str) -> dict:
         return {"edited": False, "reason": "term_too_long"}
 
     with cursor() as cur:
+        cur.execute("SELECT signal_type FROM taxonomy_candidates WHERE id=%s AND status='pending'", (candidate_id,))
+        candidate = cur.fetchone()
+        if not candidate:
+            return {"edited": False, "reason": "candidate_not_found_or_already_reviewed"}
+        _lock_candidate_identity(cur, candidate["signal_type"], cleaned)
+        cur.execute("SELECT id FROM taxonomy_candidates WHERE signal_type=%s AND regexp_replace(normalized_term, '[^a-z0-9+#]', '', 'g')=%s AND id<>%s LIMIT 1",
+                    (candidate["signal_type"],candidate_identity(cleaned),candidate_id))
+        if cur.fetchone():
+            return {"edited": False, "reason": "duplicate_candidate"}
         cur.execute(
             "UPDATE taxonomy_candidates SET term = %s, normalized_term = %s "
             "WHERE id = %s AND status = 'pending' RETURNING term",

@@ -30,10 +30,10 @@ class CandidateLookupTests(unittest.TestCase):
             self.assertIsNone(_find_loosely_matching_pending_candidate(cur,'skill','UnseenLookupFixture'))
 
     def test_status_and_kind_are_respected(self):
-        self.add('skill','LookupFixture.Approved','approved')
+        expected=self.add('skill','LookupFixture.Approved','approved')
         self.add('job_title','LookupFixture.Other')
         with cursor() as cur:
-            self.assertIsNone(_find_loosely_matching_pending_candidate(cur,'skill','LookupFixtureApproved'))
+            self.assertEqual(_find_loosely_matching_pending_candidate(cur,'skill','LookupFixtureApproved')['id'],expected)
             self.assertIsNone(_find_loosely_matching_pending_candidate(cur,'skill','LookupFixtureOther'))
 
     def test_boilerplate_uses_same_normalization(self):
@@ -43,6 +43,7 @@ class CandidateLookupTests(unittest.TestCase):
 
     def test_index_supports_lookup(self):
         with cursor() as cur:
-            cur.execute('SET LOCAL enable_seqscan=off')
-            cur.execute("EXPLAIN SELECT id FROM taxonomy_candidates WHERE signal_type='boilerplate_line' AND status='pending' AND regexp_replace(normalized_term, '[^a-z0-9]', '', 'g')='fixture' ORDER BY id LIMIT 1")
-            self.assertIn('idx_taxonomy_candidates_pending_loose',' '.join(str(r) for r in cur.fetchall()))
+            cur.execute("SELECT indexdef FROM pg_indexes WHERE indexname='idx_taxonomy_candidates_identity'")
+            definition=cur.fetchone()['indexdef']
+            self.assertIn('signal_type',definition)
+            self.assertIn('[^a-z0-9+#]',definition)

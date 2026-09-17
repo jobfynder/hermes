@@ -96,7 +96,7 @@ def _loose_key(value: str | None) -> str:
     """
     if not value:
         return ""
-    return re.sub(r"[^a-z0-9]+", "", value.lower())
+    return re.sub(r"[^a-z0-9+#]+", "", value.lower())
 
 
 def _write_json_atomic(path: Path, data: dict[str, Any]) -> None:

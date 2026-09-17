@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.reporting.service import (
     get_ai_dependency_report,
@@ -49,7 +49,7 @@ def queue_health(
 
 @router.get("/triage-activity")
 def triage_activity(
-    days: int = 14,
+    days: int = Query(14, ge=1, le=90),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> list[dict[str, Any]]:
     return get_triage_activity(days=days)
@@ -57,7 +57,7 @@ def triage_activity(
 
 @router.get("/llm-cost")
 def llm_cost(
-    days: int = 30,
+    days: int = Query(30, ge=1, le=90),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_llm_cost_trend(days=days)
@@ -65,7 +65,7 @@ def llm_cost(
 
 @router.get("/parsing-quality")
 def parsing_quality(
-    days: int = 7,
+    days: int = Query(7, ge=1, le=90),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_parsing_quality(days=days)
@@ -73,7 +73,7 @@ def parsing_quality(
 
 @router.get("/ingestion-health")
 def ingestion_health(
-    days: int = 7,
+    days: int = Query(7, ge=1, le=90),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_ingestion_health(days=days)
@@ -81,7 +81,7 @@ def ingestion_health(
 
 @router.get("/classification")
 def classification_report(
-    days: int = 7,
+    days: int = Query(7, ge=1, le=90),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_classification_report(days=days)
@@ -89,7 +89,7 @@ def classification_report(
 
 @router.get("/ai-dependency")
 def ai_dependency_report(
-    days: int = 7,
+    days: int = Query(7, ge=1, le=90),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_ai_dependency_report(days=days)
@@ -97,7 +97,7 @@ def ai_dependency_report(
 
 @router.get("/review-queue")
 def review_queue_report(
-    days: int = 7,
+    days: int = Query(7, ge=1, le=90),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_review_queue_report(days=days)
@@ -105,7 +105,7 @@ def review_queue_report(
 
 @router.get("/signature-quality")
 def signature_quality_report(
-    days: int = 30,
+    days: int = Query(30, ge=1, le=90),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_signature_quality_report(days=days)
@@ -113,8 +113,8 @@ def signature_quality_report(
 
 @router.get("/recruitment-intelligence")
 def recruitment_intelligence(
-    days: int = 30,
-    limit: int = 15,
+    days: int = Query(30, ge=1, le=90),
+    limit: int = Query(15, ge=1, le=100),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_recruitment_intelligence(days=days, limit=limit)
@@ -122,8 +122,8 @@ def recruitment_intelligence(
 
 @router.get("/sender-intelligence")
 def sender_intelligence(
-    days: int = 30,
-    limit: int = 15,
+    days: int = Query(30, ge=1, le=90),
+    limit: int = Query(15, ge=1, le=100),
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> dict[str, Any]:
     return get_sender_intelligence(days=days, limit=limit)

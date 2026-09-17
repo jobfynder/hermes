@@ -115,61 +115,34 @@ def _field_accuracy_for_type(
             )
         total_drafts = cur.fetchone()["n"]
 
-        if draft_type is None:
-            cur.execute(
-                """
-                SELECT fp.field_path, fp.extractor, fp.value_kind, fp.raw_value, fp.confidence
-                FROM field_provenance fp
-                JOIN drafts d ON d.draft_id::text = fp.parse_run_id
-                WHERE fp.field_path LIKE %s
-                  AND fp.recorded_at > now() - (%s || ' days')::interval
-                """,
-                (f"{field_path_prefix}%", days),
-            )
-        else:
-            cur.execute(
-                """
-                SELECT fp.field_path, fp.extractor, fp.value_kind, fp.raw_value, fp.confidence
-                FROM field_provenance fp
-                JOIN drafts d ON d.draft_id::text = fp.parse_run_id
-                WHERE d.draft_type = %s
-                  AND fp.field_path LIKE %s
-                  AND fp.recorded_at > now() - (%s || ' days')::interval
-                """,
-                (draft_type, f"{field_path_prefix}%", days),
-            )
+        # Aggregate in PostgreSQL instead of decoding every provenance row.
+        # Preserve correction and UNKNOWN semantics of the original report.
+        cur.execute(
+            """SELECT fp.field_path,
+                count(*) FILTER (WHERE fp.extractor = ANY(%s) AND coalesce(fp.raw_value,'') = '') AS corrected_missing,
+                count(*) FILTER (WHERE fp.extractor = ANY(%s) AND coalesce(fp.raw_value,'') <> '') AS corrected_wrong,
+                count(*) FILTER (WHERE NOT (fp.extractor = ANY(%s)) AND fp.value_kind <> 'UNKNOWN') AS filled,
+                coalesce(sum(fp.confidence) FILTER (WHERE NOT (fp.extractor = ANY(%s)) AND fp.value_kind <> 'UNKNOWN'),0) AS confidence_sum
+            FROM field_provenance fp JOIN drafts d ON d.draft_id::text = fp.parse_run_id
+            WHERE (%s::text IS NULL OR d.draft_type = %s)
+              AND fp.field_path LIKE %s
+              AND fp.recorded_at > now() - (%s || ' days')::interval
+            GROUP BY fp.field_path""",
+            (list(CORRECTION_EXTRACTORS),) * 4 + (draft_type,draft_type,f"{field_path_prefix}%",days),
+        )
         rows = cur.fetchall()
 
     per_field = {
         field: {"filled": 0, "corrected_wrong": 0, "corrected_missing": 0, "confidence_sum": 0.0}
         for field in fields
     }
-
     for row in rows:
         suffix = row["field_path"][len(field_path_prefix):]
-        if strip_ordinal:
-            # "consultant.<ordinal>.<field>" -- the ordinal already served
-            # its purpose (keeping distinct consultants' rows from
-            # colliding); accuracy groups across all consultants by field
-            # name alone.
-            parts = suffix.split(".", 1)
-            field = parts[1] if len(parts) == 2 else None
-        else:
-            field = suffix
-
-        if field not in per_field:
-            continue
-
-        bucket = per_field[field]
-
-        if row["extractor"] in CORRECTION_EXTRACTORS:
-            if _is_empty(row["raw_value"]):
-                bucket["corrected_missing"] += 1
-            else:
-                bucket["corrected_wrong"] += 1
-        elif row["value_kind"] != "UNKNOWN":
-            bucket["filled"] += 1
-            bucket["confidence_sum"] += row["confidence"] or 0.0
+        parts = suffix.split(".", 1) if strip_ordinal else [suffix]
+        field = parts[1] if strip_ordinal and len(parts) == 2 else None if strip_ordinal else suffix
+        if field in per_field:
+            for key in per_field[field]:
+                per_field[field][key] += row[key]
 
     results: dict[str, dict] = {}
 

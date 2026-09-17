@@ -11,6 +11,11 @@ over the full history).
 from __future__ import annotations
 
 import base64
+from copy import deepcopy
+from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
+from threading import RLock
+from time import monotonic
 import json
 import os
 import urllib.error
@@ -32,6 +37,40 @@ from app.understanding.taxonomy.loader import get_canonical_skill_entries, get_j
 # reviewer name doesn't need this list updated to be recognized as
 # automated, as long as it follows the same "hermes-"/"claude-" naming.
 _AUTOMATED_REVIEWER_PREFIXES = ("hermes-", "claude-")
+
+
+def _cached_report(seconds):
+    """Bounded freshness and a single refresh per process under concurrent reads."""
+    def decorate(fn):
+        entries = {}
+        lock = RLock()
+        @wraps(fn)
+        def wrapped(*args, **kwargs):
+            key = (args, tuple(sorted(kwargs.items())))
+            with lock:
+                now = monotonic()
+                cached = entries.get(key)
+                if cached and cached[0] > now:
+                    return deepcopy(cached[1])
+                result = fn(*args, **kwargs)
+                if len(entries) >= 128:
+                    entries.clear()
+                entries[key] = (monotonic() + seconds, deepcopy(result))
+                return result
+        return wrapped
+    return decorate
+
+@_cached_report(300)
+def _fetch_cost_metrics(base, auth):
+    req = urllib.request.Request(
+        f"{base}/api/public/metrics/daily?limit=100",
+        headers={"Authorization": f"Basic {auth}", "User-Agent": "Mozilla/5.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            return json.loads(resp.read().decode())
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return None
 
 
 def _is_automated_reviewer(reviewed_by: str | None) -> bool:
@@ -163,18 +202,12 @@ def get_llm_cost_trend(days: int = 30) -> dict[str, Any]:
         return {"available": False, "days": []}
 
     auth = base64.b64encode(f"{pub}:{sec}".encode()).decode()
-    # Langfuse sits behind Cloudflare here, which blocks requests with
-    # no browser-shaped User-Agent (observed directly: identical request
-    # minus this header gets a bare Cloudflare 403, error code 1010).
-    req = urllib.request.Request(
-        f"{base}/api/public/metrics/daily?limit=100",
-        headers={"Authorization": f"Basic {auth}", "User-Agent": "Mozilla/5.0"},
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
+        data = _fetch_cost_metrics(base, auth)
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return {"available": False, "days": []}
+
+    if data is None:
         return {"available": False, "days": []}
 
     cutoff = (datetime.now(UTC) - timedelta(days=days)).date().isoformat()
@@ -415,10 +448,10 @@ def get_signature_quality_report(days: int = 30) -> dict[str, Any]:
     is the pattern worth a manual spot-check rather than trusting the
     100% at face value.
     """
-    from app.drafts.accuracy import compute_accuracy_summary
+    from app.drafts.accuracy import _field_accuracy_for_type, SIGNATURE_FIELDS
 
-    summary = compute_accuracy_summary(days=days)
-    fields = summary["signature_fields"]
+    fields = sorted(_field_accuracy_for_type(None, "signature.", SIGNATURE_FIELDS, days, False).values(),
+                    key=lambda f: (f["precision"] is None, f["precision"] or 0))
 
     for f in fields:
         f["needs_spot_check"] = (
@@ -634,21 +667,26 @@ def get_today_summary() -> dict[str, Any]:
     }
 
 
+@_cached_report(30)
 def get_dashboard_overview() -> dict[str, Any]:
     """Everything the dashboard page needs in one call."""
-    return {
-        "today": get_today_summary(),
-        "taxonomy": get_taxonomy_overview(),
-        "queue_health": get_candidate_queue_health(),
-        "triage_activity": get_triage_activity(days=14),
-        "llm_cost": get_llm_cost_trend(days=30),
-        "parsing_quality": get_parsing_quality(days=7),
-        "ingestion_health": get_ingestion_health(days=7),
-        "classification": get_classification_report(days=7),
-        "ai_dependency": get_ai_dependency_report(days=7),
-        "review_queue": get_review_queue_report(days=7),
-        "signature_quality": get_signature_quality_report(days=30),
-        "recruitment_intelligence": get_recruitment_intelligence(days=30),
-        "sender_intelligence": get_sender_intelligence(days=30),
-        "generated_at": datetime.now(UTC).isoformat(),
+    sections = {
+        "today": (get_today_summary, {}),
+        "taxonomy": (get_taxonomy_overview, {}),
+        "queue_health": (get_candidate_queue_health, {}),
+        "triage_activity": (get_triage_activity, {"days":14}),
+        "llm_cost": (get_llm_cost_trend, {"days":30}),
+        "parsing_quality": (get_parsing_quality, {"days":7}),
+        "ingestion_health": (get_ingestion_health, {"days":7}),
+        "classification": (get_classification_report, {"days":7}),
+        "ai_dependency": (get_ai_dependency_report, {"days":7}),
+        "review_queue": (get_review_queue_report, {"days":7}),
+        "signature_quality": (get_signature_quality_report, {"days":30}),
+        "recruitment_intelligence": (get_recruitment_intelligence, {"days":30}),
+        "sender_intelligence": (get_sender_intelligence, {"days":30}),
     }
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="hermes-reports") as pool:
+        futures = {key: pool.submit(fn, **kwargs) for key, (fn, kwargs) in sections.items()}
+        result = {key: future.result() for key, future in futures.items()}
+    result["generated_at"] = datetime.now(UTC).isoformat()
+    return result
