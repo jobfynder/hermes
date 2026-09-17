@@ -17,7 +17,7 @@ def parser_is_ready(row):
 
 
 def reconcile_review_status(*,dry_run=True,limit=100):
-    if not 1<=limit<=200:
+    if not 1<=limit<=500:
         raise ValueError('limit must be between 1 and 200')
     resolved=[]
     with cursor() as cur:
