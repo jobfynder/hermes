@@ -176,8 +176,8 @@ def list_companies(query='',page=1,page_size=25):
                 SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id AND o.company_label ILIKE %s)
             ORDER BY s.last_seen DESC,c.company_id LIMIT %s OFFSET %s''',(search,search,search,page_size,(page-1)*page_size))
         items=cur.fetchall()
-        cur.execute('''SELECT count(*) AS processed,max(processed_at) AS last_synced,
-            count(*) FILTER(WHERE reason='linked') AS linked FROM company_projection_state''')
+        cur.execute('''SELECT count(*) FILTER(WHERE projection_version=%s) AS processed,max(processed_at) AS last_synced,
+            count(*) FILTER(WHERE reason='linked') AS linked FROM company_projection_state''',(PROJECTION_VERSION,))
         sync=cur.fetchone()
         cur.execute('SELECT count(*) AS total FROM drafts')
         sync['total']=cur.fetchone()['total']
