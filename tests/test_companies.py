@@ -1,6 +1,6 @@
 import json, os, unittest
 from uuid import uuid4
-from app.companies.service import extract_company, corporate_domain, sync_company_batch, list_companies, get_company
+from app.companies.service import extract_company, normalize_company_name, corporate_domain, sync_company_batch, list_companies, get_company
 from app.runtime.db import cursor, init_schema
 
 def payload(domain='agency.example', title='Data Engineer'):
@@ -13,6 +13,12 @@ def payload(domain='agency.example', title='Data Engineer'):
         'requires_review':False}]}}}
 
 class CompanyExtractionTests(unittest.TestCase):
+    def test_company_name_excludes_keywords_and_address_suffix(self):
+        self.assertIsNone(normalize_company_name('Keywords: information technology golang Idaho'))
+        self.assertEqual(normalize_company_name('Avance Consulting |1170 Rt 22 | Bridgewater'),'Avance Consulting')
+        self.assertEqual(normalize_company_name('Example Staffing, 123 Main Street'),'Example Staffing')
+        self.assertEqual(normalize_company_name('Delta System & Software Inc.'),'Delta System & Software Inc.')
+
     def test_signature_company_is_distinct_from_end_client(self):
         result,reason=extract_company({'draft_id':uuid4(),'status':'draft','payload':payload()})
         self.assertEqual(reason,'linked')

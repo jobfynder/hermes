@@ -376,6 +376,7 @@ CREATE TABLE IF NOT EXISTS company_projection_state (
     processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE company_projection_state ADD COLUMN IF NOT EXISTS projection_version TEXT NOT NULL DEFAULT 'company_directory_v1';
 """
 
 

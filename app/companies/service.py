@@ -30,6 +30,22 @@ def corporate_domain(value):
 def _text(value):
     return re.sub(r'\s+',' ',str(value or '')).strip()
 
+PROJECTION_VERSION = 'company_directory_v2'
+
+def normalize_company_name(value):
+    name = _text(value)
+    if re.search(r"(?i)^(?:keywords?|subject|from|to|location|job title|required skills|disclaimer|confidentiality|please|dear|hello|regards|thanks)\b", name):
+        return None
+    if re.search(r"(?i)unsubscribe|years of experience|we are looking|click here|all rights reserved", name):
+        return None
+    name = name.split('|', 1)[0].strip(' ,;:-')
+    name = re.split(r",\s*\d{1,6}\s", name, maxsplit=1)[0].strip()
+    if not 2 <= len(name) <= 100 or len(name.split()) > 12 or '@' in name or 'http' in name.lower():
+        return None
+    if name.lower() in {'unknown','confidential','client','company','n/a','na'}:
+        return None
+    return name
+
 def extract_company(row):
     if row.get('status') in ('spam','rejected'):
         return None, 'excluded_status'
@@ -42,8 +58,8 @@ def extract_company(row):
     def field(name):
         item=contact.get(name)
         return _text(item.get('value')) if isinstance(item,dict) else ''
-    name = field('company_name')
-    if not 2 <= len(name) <= 120 or '@' in name or 'http' in name.lower() or name.lower() in {'unknown','confidential','client','company','n/a','na'}:
+    name = normalize_company_name(field('company_name'))
+    if not name:
         return None, 'company_name_missing_or_ambiguous'
     # Only a signature contact is company evidence; relay transport senders
     # and job-record company fields can identify a different end client.
@@ -95,10 +111,15 @@ def sync_company_batch(limit=100):
         if not cur.fetchone()['acquired']:
             return 0
         cur.execute('''SELECT d.* FROM drafts d LEFT JOIN company_projection_state p USING(draft_id)
-            WHERE p.source_updated_at IS DISTINCT FROM d.updated_at
-            ORDER BY d.created_at,d.draft_id LIMIT %s FOR UPDATE OF d SKIP LOCKED''',(min(max(limit,1),200),))
+            WHERE p.source_updated_at IS DISTINCT FROM d.updated_at OR p.projection_version IS DISTINCT FROM %s
+            ORDER BY d.created_at,d.draft_id LIMIT %s FOR UPDATE OF d SKIP LOCKED''',(PROJECTION_VERSION,min(max(limit,1),200)))
         rows=cur.fetchall()
+        affected = set()
         for row in rows:
+            cur.execute('SELECT company_id FROM company_observations WHERE draft_id=%s',(row['draft_id'],))
+            previous=cur.fetchone()
+            if previous:
+                affected.add(previous['company_id'])
             try:
                 observation,reason=extract_company(row)
             except (TypeError,ValueError,AttributeError):
@@ -109,6 +130,7 @@ def sync_company_batch(limit=100):
                     SET identity_domain=EXCLUDED.identity_domain RETURNING company_id''',
                     (uuid4(),observation['domain'],observation['name']))
                 company_id=cur.fetchone()['company_id']
+                affected.add(company_id)
                 cur.execute('''INSERT INTO company_observations(draft_id,company_id,company_label,contact_email,
                     contact_name,website,phone,location,confidence,method,channel,observed_at,jobs)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
@@ -122,10 +144,18 @@ def sync_company_batch(limit=100):
                      observation['confidence'],observation['method'],row['channel'] or 'unknown',row['created_at'],json.dumps(observation['jobs'])))
             else:
                 cur.execute('DELETE FROM company_observations WHERE draft_id=%s',(row['draft_id'],))
-            cur.execute('''INSERT INTO company_projection_state(draft_id,source_updated_at,reason)
-                VALUES (%s,%s,%s) ON CONFLICT(draft_id) DO UPDATE SET
-                source_updated_at=EXCLUDED.source_updated_at,reason=EXCLUDED.reason,processed_at=now()''',
-                (row['draft_id'],row['updated_at'],reason))
+            cur.execute('''INSERT INTO company_projection_state(draft_id,source_updated_at,reason,projection_version)
+                VALUES (%s,%s,%s,%s) ON CONFLICT(draft_id) DO UPDATE SET
+                source_updated_at=EXCLUDED.source_updated_at,reason=EXCLUDED.reason,projection_version=EXCLUDED.projection_version,processed_at=now()''',
+                (row['draft_id'],row['updated_at'],reason,PROJECTION_VERSION))
+        if affected:
+            cur.execute("""UPDATE hermes_companies c SET canonical_name=(
+                SELECT company_label FROM company_observations o WHERE o.company_id=c.company_id
+                GROUP BY company_label
+                ORDER BY bool_or(method IN ('human_edited','reviewer_correction','recruiter_correction')) DESC,
+                    count(*) DESC,max(observed_at) DESC,company_label LIMIT 1)
+                WHERE c.company_id=ANY(%s) AND c.verification_status='unverified'
+                AND EXISTS(SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id)""",(list(affected),))
         return len(rows)
 
 def list_companies(query='',page=1,page_size=25):
