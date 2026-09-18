@@ -16,7 +16,9 @@
         "Flask"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_2277d9ec919f5826b580b4be2bbf7d57",
+      "status": "active"
     },
     {
       "name": "Java",
@@ -32,7 +34,9 @@
         "Spring Boot"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_1285be7832e2539eadffd8c9bb4f2de4",
+      "status": "active"
     },
     {
       "name": "JavaScript",
@@ -48,7 +52,9 @@
         "TypeScript"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_164de2a6a9b557e683a7df82ff36feb4",
+      "status": "active"
     },
     {
       "name": "TypeScript",
@@ -63,7 +69,9 @@
         "Node.js"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_40b77292d64f58b99bf5b8d4007c25fe",
+      "status": "active"
     },
     {
       "name": "React",
@@ -79,7 +87,17 @@
         "Next.js"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_de4c10152ca3546fb1eafa7a04d3369a",
+      "subcategory": "Web UI Library",
+      "short_definition": "JavaScript library for building component-based user interfaces.",
+      "recruiter_explanation": "A common frontend requirement, frequently paired with JavaScript or TypeScript, state management, and modern web tooling.",
+      "related_roles": [
+        "Frontend Developer",
+        "Full Stack Developer",
+        "UI Engineer"
+      ],
+      "status": "active"
     },
     {
       "name": "Next.js",
@@ -95,7 +113,9 @@
         "TypeScript"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_934e51855b5c509987be46c1503eaff8",
+      "status": "active"
     },
     {
       "name": "Node.js",
@@ -111,7 +131,17 @@
         "TypeScript"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_ef2b347d8f00529f86964c5fd9316ac1",
+      "subcategory": "JavaScript Runtime",
+      "short_definition": "Server-side JavaScript runtime built on the V8 engine.",
+      "recruiter_explanation": "Common for backend and full-stack JavaScript roles, often paired with TypeScript, REST APIs, and cloud services.",
+      "related_roles": [
+        "Backend Engineer",
+        "Full Stack Developer",
+        "JavaScript Developer"
+      ],
+      "status": "active"
     },
     {
       "name": "FastAPI",
@@ -124,7 +154,9 @@
         "Python"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_eabe49aa85c95e0d8a7f0deefeceb3ad",
+      "status": "active"
     },
     {
       "name": "Django",
@@ -135,7 +167,9 @@
         "Python"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_0d514a596c625853a2eeb3ea8c5bdb7d",
+      "status": "active"
     },
     {
       "name": "Flask",
@@ -146,7 +180,9 @@
         "Python"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_082528689e84575cab97da12d5cebf9d",
+      "status": "active"
     },
     {
       "name": "Spring Boot",
@@ -160,7 +196,23 @@
         "Java"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_5443a55ce8885a5a9f9aa24d3befd72d",
+      "subcategory": "Backend Framework",
+      "short_definition": "Java framework for building production-ready web services and applications.",
+      "recruiter_explanation": "A core backend skill for Java developers, commonly paired with microservices, REST APIs, SQL databases, and cloud platforms.",
+      "related_roles": [
+        "Java Developer",
+        "Backend Engineer",
+        "Software Engineer"
+      ],
+      "relationships": [
+        {
+          "type": "framework_for",
+          "skill": "Java"
+        }
+      ],
+      "status": "active"
     },
     {
       "name": "PostgreSQL",
@@ -172,7 +224,17 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_47c9df5f55cd5c049f287eb44ccab505",
+      "subcategory": "Relational Database",
+      "short_definition": "Open-source relational database known for standards compliance and extensibility.",
+      "recruiter_explanation": "Requested across backend, data, and platform roles where production SQL and relational data modeling matter.",
+      "related_roles": [
+        "Backend Engineer",
+        "Data Engineer",
+        "Database Administrator"
+      ],
+      "status": "active"
     },
     {
       "name": "MySQL",
@@ -181,7 +243,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_cab28465e89c5074a506300b8e39c13e",
+      "status": "active"
     },
     {
       "name": "MongoDB",
@@ -192,7 +256,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_10e5c24b7a3d5cf090634f59ef4eb358",
+      "status": "active"
     },
     {
       "name": "Redis",
@@ -201,7 +267,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_69222b7cecf65177a05d6fff02d2b081",
+      "status": "active"
     },
     {
       "name": "Elasticsearch",
@@ -215,7 +283,9 @@
         "Typesense"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_fd30e8f46f235e19b8efc88cfc1be215",
+      "status": "active"
     },
     {
       "name": "Typesense",
@@ -226,7 +296,9 @@
         "Elasticsearch"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_40d244a8ebee5a159e61779485b4dc65",
+      "status": "active"
     },
     {
       "name": "AWS",
@@ -241,7 +313,17 @@
         "Terraform"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_86401a74800a5005a3534af0cb1a5fa0",
+      "subcategory": "Cloud Platform",
+      "short_definition": "Amazon Web Services cloud platform for compute, storage, networking, data, and managed services.",
+      "recruiter_explanation": "Broad cloud experience signal; confirm which AWS services and whether the role expects architecture, development, operations, or security depth.",
+      "related_roles": [
+        "Cloud Engineer",
+        "DevOps Engineer",
+        "Solutions Architect"
+      ],
+      "status": "active"
     },
     {
       "name": "Azure",
@@ -256,7 +338,9 @@
         "Terraform"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_91095faa2a1f595393fac2ab0c5f2107",
+      "status": "active"
     },
     {
       "name": "GCP",
@@ -272,7 +356,9 @@
         "Terraform"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_ad4b38c8162d534a9ec603ba1e874ec2",
+      "status": "active"
     },
     {
       "name": "Docker",
@@ -283,7 +369,17 @@
         "Kubernetes"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_f2ad95255396572bb7ba335b68895ffa",
+      "subcategory": "Containers",
+      "short_definition": "Platform and tooling for packaging and running applications in containers.",
+      "recruiter_explanation": "Common across software, DevOps, and platform roles and frequently paired with Kubernetes and CI/CD.",
+      "related_roles": [
+        "DevOps Engineer",
+        "Platform Engineer",
+        "Software Engineer"
+      ],
+      "status": "active"
     },
     {
       "name": "Kubernetes",
@@ -296,7 +392,32 @@
         "Docker"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_b2f5aef788005c69aa96a165a28afec9",
+      "subcategory": "Container Orchestration",
+      "short_definition": "Container orchestration platform for deploying, scaling, and operating containerized applications.",
+      "recruiter_explanation": "Common in DevOps, SRE, cloud, and platform roles; often requested with Docker, Helm, Terraform, and a cloud provider.",
+      "related_roles": [
+        "DevOps Engineer",
+        "Site Reliability Engineer",
+        "Platform Engineer",
+        "Cloud Engineer"
+      ],
+      "relationships": [
+        {
+          "type": "commonly_used_with",
+          "skill": "Docker"
+        },
+        {
+          "type": "commonly_used_with",
+          "skill": "Helm"
+        },
+        {
+          "type": "commonly_used_with",
+          "skill": "Terraform"
+        }
+      ],
+      "status": "active"
     },
     {
       "name": "Kafka",
@@ -307,7 +428,17 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_e855a47b0db25b978664c1eeb5e6457a",
+      "subcategory": "Event Streaming",
+      "short_definition": "Distributed event-streaming platform for high-throughput data pipelines and real-time applications.",
+      "recruiter_explanation": "Often required in backend and data roles involving event-driven architecture, messaging, and streaming systems.",
+      "related_roles": [
+        "Backend Engineer",
+        "Data Engineer",
+        "Streaming Engineer"
+      ],
+      "status": "active"
     },
     {
       "name": "RabbitMQ",
@@ -318,7 +449,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_51ec9a30d13d5098829fd48cc65d7e80",
+      "status": "active"
     },
     {
       "name": "Terraform",
@@ -333,7 +466,9 @@
         "GCP"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_666b9c2b1dbe5cd8854a91f6d49af5b8",
+      "status": "active"
     },
     {
       "name": "Jenkins",
@@ -344,7 +479,9 @@
         "GitHub Actions"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_2b298be0e65154ea9ecfb4c231fd5688",
+      "status": "active"
     },
     {
       "name": "GitHub Actions",
@@ -358,7 +495,9 @@
         "Jenkins"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_f6bb3a0ba16f59ed86e8527b4fad57a9",
+      "status": "active"
     },
     {
       "name": "REST API",
@@ -372,7 +511,9 @@
         "GraphQL"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_8aef153ac22a5c7ba93d9147dffe39b1",
+      "status": "active"
     },
     {
       "name": "GraphQL",
@@ -383,7 +524,9 @@
         "REST API"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_e847e940c58555c59da306fdac0fb482",
+      "status": "active"
     },
     {
       "name": "NLP",
@@ -397,7 +540,9 @@
         "LLM"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_22adf83b070c5a90bcbb74269c5d7d2a",
+      "status": "active"
     },
     {
       "name": "spaCy",
@@ -410,7 +555,9 @@
         "NLP"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_4fbeb6c11cb65e3d85862e45ba163837",
+      "status": "active"
     },
     {
       "name": "LLM",
@@ -425,7 +572,9 @@
         "Generative AI"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_bbd04c1628ae53debfd9b94c155d834b",
+      "status": "active"
     },
     {
       "name": "Generative AI",
@@ -440,7 +589,9 @@
         "NLP"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_48dd781994415e249d966855a9ff7bed",
+      "status": "active"
     },
     {
       "name": "Resume Parsing",
@@ -454,7 +605,9 @@
         "NLP"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_f658a9e6b3aa5d60bb000b8c4e47c3cf",
+      "status": "active"
     },
     {
       "name": "Job Matching",
@@ -468,7 +621,9 @@
         "Resume Parsing"
       ],
       "confidence": "high",
-      "source": "seed"
+      "source": "seed",
+      "skill_id": "skill_e159b9cdb1325ee8808343efcabfc441",
+      "status": "active"
     },
     {
       "name": "C#",
@@ -483,7 +638,9 @@
         "ASP.NET"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_202e9cf1349b5579bdb115275b5725b5",
+      "status": "active"
     },
     {
       "name": ".NET",
@@ -500,7 +657,9 @@
         ".NET Core"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_45b84e058db1581ba6334cad51764ab3",
+      "status": "active"
     },
     {
       "name": ".NET Core",
@@ -517,7 +676,9 @@
         "C#"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_868c58add7f654ca9dbbc74403b3e470",
+      "status": "active"
     },
     {
       "name": "ASP.NET",
@@ -531,7 +692,9 @@
         "C#"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_d8e08861fa7f567883f2782c7e9b4b31",
+      "status": "active"
     },
     {
       "name": "ASP.NET Core",
@@ -545,7 +708,9 @@
         "C#"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_cee0222c959352c4b7defc071856117a",
+      "status": "active"
     },
     {
       "name": "VB.NET",
@@ -558,7 +723,9 @@
         ".NET"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_94edcf9287345ce6a2a3dd983d1f1abe",
+      "status": "active"
     },
     {
       "name": "PL/SQL",
@@ -571,7 +738,9 @@
         "Oracle Database"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_3fff847af8385665a22545c8b6bfe54a",
+      "status": "active"
     },
     {
       "name": "T-SQL",
@@ -584,7 +753,9 @@
         "SQL Server"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_3e72ddd36eae5195bfea65cdee3d4802",
+      "status": "active"
     },
     {
       "name": "COBOL",
@@ -595,7 +766,9 @@
         "JCL"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_7b8e8c817aeb59c99b05e47cdfb76e23",
+      "status": "active"
     },
     {
       "name": "PowerShell",
@@ -606,7 +779,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_07408be78f35593187b0269518e92271",
+      "status": "active"
     },
     {
       "name": "Go",
@@ -617,7 +792,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_77a5d745b0d3567aa59f024b71f5c2d0",
+      "status": "active"
     },
     {
       "name": "Scala",
@@ -628,7 +805,9 @@
         "Apache Spark"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_aea48bfc2c4c579dbac9ff903b0d67c0",
+      "status": "active"
     },
     {
       "name": "Ruby",
@@ -639,7 +818,9 @@
         "Ruby on Rails"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_1a450d6cf2e05b63a29faeedf9274b10",
+      "status": "active"
     },
     {
       "name": "PHP",
@@ -650,7 +831,9 @@
         "Laravel"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_aea6900c71fe508596a135ae7f06b238",
+      "status": "active"
     },
     {
       "name": "Perl",
@@ -659,7 +842,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_bc2a97c151e45041970a95bc38d91e08",
+      "status": "active"
     },
     {
       "name": "Swift",
@@ -670,7 +855,9 @@
         "iOS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_87fd64b3083f5c6a9587b5fcff4a7ca2",
+      "status": "active"
     },
     {
       "name": "Kotlin",
@@ -681,7 +868,9 @@
         "Android"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_64e19877deb55bf79faab84db0facd60",
+      "status": "active"
     },
     {
       "name": "C++",
@@ -692,7 +881,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_57cb14e51fa25ad8bb3140f33c8e7d76",
+      "status": "active"
     },
     {
       "name": "C",
@@ -701,7 +892,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_cfdfc079998053ed9873900b694b1634",
+      "status": "active"
     },
     {
       "name": "Angular",
@@ -715,7 +908,9 @@
         "TypeScript"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_c511ace6ee605e0e83cc30c67db2084f",
+      "status": "active"
     },
     {
       "name": "Vue.js",
@@ -729,7 +924,9 @@
         "JavaScript"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_301922113a23565b9058469c1ca1521e",
+      "status": "active"
     },
     {
       "name": "jQuery",
@@ -740,7 +937,9 @@
         "JavaScript"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_b8de1cb904b35a38a6f48a04bb769449",
+      "status": "active"
     },
     {
       "name": "HTML",
@@ -753,7 +952,9 @@
         "CSS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_ab1c8826a7a553cd88eccb06afb68782",
+      "status": "active"
     },
     {
       "name": "CSS",
@@ -766,7 +967,9 @@
         "HTML"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_7c86103a62dc5ee7a66869ab69db91b1",
+      "status": "active"
     },
     {
       "name": "Express.js",
@@ -780,7 +983,9 @@
         "Node.js"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_920e1fc1cb815291bbdb30f9dd1c34f0",
+      "status": "active"
     },
     {
       "name": "Ruby on Rails",
@@ -793,7 +998,9 @@
         "Ruby"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_c2118195fa1e5751896c3b85c0b6a4ad",
+      "status": "active"
     },
     {
       "name": "Laravel",
@@ -804,7 +1011,9 @@
         "PHP"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_b52a78f1328b5efbab712a04bf18d66c",
+      "status": "active"
     },
     {
       "name": "Microservices",
@@ -815,7 +1024,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_1ccdea24448352b89f52dd4432599a09",
+      "status": "active"
     },
     {
       "name": "Oracle Database",
@@ -830,7 +1041,9 @@
         "PL/SQL"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_9c39b08d1a665a4f8300a376208f9fc9",
+      "status": "active"
     },
     {
       "name": "SQL Server",
@@ -845,7 +1058,9 @@
         "T-SQL"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_03ca2fd379825bbc814b0a4f5534b3b4",
+      "status": "active"
     },
     {
       "name": "DB2",
@@ -856,7 +1071,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_46fcbf782a705f56aa66831b23f3ffc7",
+      "status": "active"
     },
     {
       "name": "Snowflake",
@@ -865,7 +1082,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_5ed28742bf5e516b94d9c7511c73635c",
+      "status": "active"
     },
     {
       "name": "Cassandra",
@@ -876,7 +1095,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_5234d36559e553988c98cab6d1673fe5",
+      "status": "active"
     },
     {
       "name": "DynamoDB",
@@ -890,7 +1111,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_b69274f73216542ba0eda82284891022",
+      "status": "active"
     },
     {
       "name": "Databricks",
@@ -901,7 +1124,9 @@
         "Apache Spark"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_569cdc7e8fff56c98f8cc7c10ed75e38",
+      "status": "active"
     },
     {
       "name": "Teradata",
@@ -910,7 +1135,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_9905316234cf5f5781049373894efced",
+      "status": "active"
     },
     {
       "name": "Sybase",
@@ -919,7 +1146,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_8c62a91c16b2541c92f14340108880be",
+      "status": "active"
     },
     {
       "name": "AWS Lambda",
@@ -932,7 +1161,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4b4dd69a9e75532282cb8118b596d358",
+      "status": "active"
     },
     {
       "name": "Amazon Connect",
@@ -945,7 +1176,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_7b06dbddb98e5a38ae9cdc63ec70c0d8",
+      "status": "active"
     },
     {
       "name": "Amazon Lex",
@@ -958,7 +1191,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_6d9728afed7e5c789c5e062b1cc440c4",
+      "status": "active"
     },
     {
       "name": "Amazon S3",
@@ -972,7 +1207,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_5282665b198758d3aa1c990ae6ce25f8",
+      "status": "active"
     },
     {
       "name": "Amazon EC2",
@@ -986,7 +1223,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_c41c21e668755d16930d52864f7d0375",
+      "status": "active"
     },
     {
       "name": "Amazon RDS",
@@ -1000,7 +1239,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_9a029fdd28925e0680f6b00902d5e12c",
+      "status": "active"
     },
     {
       "name": "AWS CloudFormation",
@@ -1013,7 +1254,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_56d22d70950c5e2e8d5ded78eb7775a2",
+      "status": "active"
     },
     {
       "name": "AWS IAM",
@@ -1026,7 +1269,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_5ef9061195945f3ab9fbc90d02b37071",
+      "status": "active"
     },
     {
       "name": "Amazon SNS",
@@ -1040,7 +1285,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_855e50968d5a5102bb172dd860d9aa5c",
+      "status": "active"
     },
     {
       "name": "Amazon SQS",
@@ -1054,7 +1301,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_738f53ba19c854f1987754ee43750078",
+      "status": "active"
     },
     {
       "name": "AWS Glue",
@@ -1065,7 +1314,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_da0273ebb0355858bddc81f6997c2433",
+      "status": "active"
     },
     {
       "name": "Amazon Redshift",
@@ -1078,7 +1329,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_0675caff040552c8918ca591ba712265",
+      "status": "active"
     },
     {
       "name": "AWS CloudWatch",
@@ -1091,7 +1344,9 @@
         "AWS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_127c097fc6635cf5a5ca43a4bef1bdbd",
+      "status": "active"
     },
     {
       "name": "Azure Logic Apps",
@@ -1104,7 +1359,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_b077e3fcfa0353b3a351d1c58b5727be",
+      "status": "active"
     },
     {
       "name": "Azure Service Bus",
@@ -1117,7 +1374,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_d89a8ce9427c50d7ad2f8acb362544bf",
+      "status": "active"
     },
     {
       "name": "Azure Functions",
@@ -1128,7 +1387,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_c2ac10c8c8c65db2bbb19597d27d8dbf",
+      "status": "active"
     },
     {
       "name": "Azure API Management",
@@ -1141,7 +1402,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_16266a3142565f78ad3b1fb3db009be8",
+      "status": "active"
     },
     {
       "name": "Azure DevOps",
@@ -1155,7 +1418,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_f27ec9d205825094a857d513d09e100e",
+      "status": "active"
     },
     {
       "name": "Azure Data Factory",
@@ -1168,7 +1433,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_0c1e192694a95441b18e2959217e0000",
+      "status": "active"
     },
     {
       "name": "Azure Synapse",
@@ -1181,7 +1448,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_1cc10a39eb4a575eb854f0f9b1c67c3b",
+      "status": "active"
     },
     {
       "name": "Azure Active Directory",
@@ -1195,7 +1464,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_fb7aedcf92b95149ac4982c2de7be3f4",
+      "status": "active"
     },
     {
       "name": "Azure Integration Services",
@@ -1209,7 +1480,9 @@
         "Azure Logic Apps"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_c133010a18d35013a310255a416f0cc5",
+      "status": "active"
     },
     {
       "name": "Ansible",
@@ -1218,7 +1491,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_f1b14d002af551388e168de29fb41bb4",
+      "status": "active"
     },
     {
       "name": "Chef",
@@ -1227,7 +1502,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_28a0bb1d92605e31b3070991a9402d02",
+      "status": "active"
     },
     {
       "name": "Puppet",
@@ -1236,7 +1513,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_6234c12d99a95e1cbbb9fa9a1b506cd6",
+      "status": "active"
     },
     {
       "name": "GitLab CI",
@@ -1247,7 +1526,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_613bcc15ea7c5b2fbb1615c3568dc00b",
+      "status": "active"
     },
     {
       "name": "CircleCI",
@@ -1256,7 +1537,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_6f653547f6bd5945ba1303fbb71b2ec3",
+      "status": "active"
     },
     {
       "name": "Bamboo",
@@ -1265,7 +1548,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_8a6ffea3eed154229e1367025a8b32fe",
+      "status": "active"
     },
     {
       "name": "Bicep",
@@ -1276,7 +1561,9 @@
         "Azure"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_f9fac72de5c35dc4a73d64d185bae033",
+      "status": "active"
     },
     {
       "name": "Helm",
@@ -1287,7 +1574,9 @@
         "Kubernetes"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_445e689611ea53e3b56bf6ecd1d6b132",
+      "status": "active"
     },
     {
       "name": "TIBCO BusinessWorks",
@@ -1302,7 +1591,9 @@
         "TIBCO EMS"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_9f2d965cfd185acc968b2dd232c621fb",
+      "status": "active"
     },
     {
       "name": "TIBCO EMS",
@@ -1313,7 +1604,9 @@
         "TIBCO BusinessWorks"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4884cb074e9c5fcab80103f704988365",
+      "status": "active"
     },
     {
       "name": "MuleSoft",
@@ -1325,7 +1618,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_5dd9c871483556babbf91a02a318633c",
+      "status": "active"
     },
     {
       "name": "Informatica",
@@ -1336,7 +1631,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_7296138de2465643aa05aa97ba35e13e",
+      "status": "active"
     },
     {
       "name": "Dell Boomi",
@@ -1347,7 +1644,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_16be1cc973925e39961201ae4cf0cb5b",
+      "status": "active"
     },
     {
       "name": "IBM WebSphere MQ",
@@ -1359,7 +1658,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4cf795a2d2c75a8a88180f9bbefaeb4a",
+      "status": "active"
     },
     {
       "name": "Apache Camel",
@@ -1368,7 +1669,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_e5cab1e29ad556798d2b8fc4824fec26",
+      "status": "active"
     },
     {
       "name": "BizTalk",
@@ -1379,7 +1682,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_18e9df7c20795f1d9a10e3e3af963655",
+      "status": "active"
     },
     {
       "name": "SAP",
@@ -1388,7 +1693,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_7d901de58b685e12b32615ca5817d584",
+      "status": "active"
     },
     {
       "name": "SAP ABAP",
@@ -1401,7 +1708,9 @@
         "SAP"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_1fdeea51a57b57eab971feb97afd674b",
+      "status": "active"
     },
     {
       "name": "SAP HANA",
@@ -1412,7 +1721,9 @@
         "SAP"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_1619f850d9405ecb88638e0b70fffc0e",
+      "status": "active"
     },
     {
       "name": "SAP FICO",
@@ -1426,7 +1737,9 @@
         "SAP"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_8eceb802e3025e5c80cf808a513c48cf",
+      "status": "active"
     },
     {
       "name": "SAP MM",
@@ -1437,7 +1750,9 @@
         "SAP"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_393e968aaa765494878e0d89ead21f66",
+      "status": "active"
     },
     {
       "name": "SAP SD",
@@ -1448,7 +1763,9 @@
         "SAP"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_60aeae16c69f5a789d013ab27b80e61e",
+      "status": "active"
     },
     {
       "name": "SAP BASIS",
@@ -1459,7 +1776,9 @@
         "SAP"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_73d929b5f3d7528c965b5f96b76e555c",
+      "status": "active"
     },
     {
       "name": "Salesforce",
@@ -1468,7 +1787,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_485987fab1925f9f9175058d416a4c8f",
+      "status": "active"
     },
     {
       "name": "Salesforce Apex",
@@ -1481,7 +1802,9 @@
         "Salesforce"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_cf4469ef006454b6832e076403169a5f",
+      "status": "active"
     },
     {
       "name": "Salesforce Lightning",
@@ -1492,7 +1815,9 @@
         "Salesforce"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_d99bb36373c45afc8958fdc249fa980b",
+      "status": "active"
     },
     {
       "name": "Oracle EBS",
@@ -1503,7 +1828,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_ba7c81b9be605f74a4af2aedacd6faf7",
+      "status": "active"
     },
     {
       "name": "Oracle EPM",
@@ -1514,7 +1841,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_a3b469318f765704b8e5ff99d01ee33b",
+      "status": "active"
     },
     {
       "name": "Oracle Hyperion",
@@ -1527,7 +1856,9 @@
         "Oracle EPM"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_7fe354a85c975cb4b5b03600aa40d2c1",
+      "status": "active"
     },
     {
       "name": "Workday",
@@ -1536,7 +1867,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4f1d316474205c389cb0708e32610add",
+      "status": "active"
     },
     {
       "name": "ServiceNow",
@@ -1545,7 +1878,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_f8cb1c59b9eb560eb560fb0b8390d0bc",
+      "status": "active"
     },
     {
       "name": "PeopleSoft",
@@ -1554,7 +1889,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_6ea80408872c5eb2bcd5e56b2b3d495f",
+      "status": "active"
     },
     {
       "name": "Guidewire",
@@ -1563,7 +1900,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_43bdcd4b00cc547ca5b68772e147a932",
+      "status": "active"
     },
     {
       "name": "Microsoft Dynamics 365",
@@ -1575,7 +1914,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_560664af70f453bb99fd286e6ce1d5fe",
+      "status": "active"
     },
     {
       "name": "NetSuite",
@@ -1584,7 +1925,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_a8d5b7edafce57dfbcbc68af8163b096",
+      "status": "active"
     },
     {
       "name": "Tableau",
@@ -1593,7 +1936,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_3f6e70d1b9c856fabb1753d52b5fee2f",
+      "status": "active"
     },
     {
       "name": "Power BI",
@@ -1604,7 +1949,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_f27afc2d17a752c6b1b3345813ef6548",
+      "status": "active"
     },
     {
       "name": "SSRS",
@@ -1617,7 +1964,9 @@
         "SQL Server"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_92b9a20832395a2190aa24564c83945c",
+      "status": "active"
     },
     {
       "name": "SSIS",
@@ -1630,7 +1979,9 @@
         "SQL Server"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_7943b1b68133595aad0907fa76faa757",
+      "status": "active"
     },
     {
       "name": "SSAS",
@@ -1643,7 +1994,9 @@
         "SQL Server"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_538b4a02f13b57d39991ab27d542f7cf",
+      "status": "active"
     },
     {
       "name": "Cognos",
@@ -1654,7 +2007,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_52a6e40cd1105976ab11ccfa2482da6d",
+      "status": "active"
     },
     {
       "name": "QlikView",
@@ -1663,7 +2018,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_58bbdbd252a55ce8a377b0bf924e7390",
+      "status": "active"
     },
     {
       "name": "Qlik Sense",
@@ -1672,7 +2029,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_dde74736dc5f509fbab9117d4ba5a48e",
+      "status": "active"
     },
     {
       "name": "Looker",
@@ -1681,7 +2040,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_e8da2eb0f21555f6bda491a56be34733",
+      "status": "active"
     },
     {
       "name": "Apache Spark",
@@ -1693,7 +2054,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_c6b9bad1aae05a5abb3ab8a018f5d8ac",
+      "status": "active"
     },
     {
       "name": "Hadoop",
@@ -1702,7 +2065,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_24ed6ed10d0059eb85ba75c93461d25b",
+      "status": "active"
     },
     {
       "name": "Apache Airflow",
@@ -1713,7 +2078,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_19da4f7d066a5e7b804befdc1fe7548d",
+      "status": "active"
     },
     {
       "name": "Talend",
@@ -1722,7 +2089,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_5104bcd3945b59c0ada6b3461a958f90",
+      "status": "active"
     },
     {
       "name": "Selenium",
@@ -1731,7 +2100,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_f030e3c91b005887923210d4feb36f9e",
+      "status": "active"
     },
     {
       "name": "TestNG",
@@ -1740,7 +2111,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_1b3a650a97fb586bba0bb557393da43e",
+      "status": "active"
     },
     {
       "name": "Cucumber",
@@ -1751,7 +2124,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_e71838d924b65c07a8a5e43dc28e1475",
+      "status": "active"
     },
     {
       "name": "JUnit",
@@ -1762,7 +2137,9 @@
         "Java"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_ce63eba0a0fc5f978ea2c244f2cdcb78",
+      "status": "active"
     },
     {
       "name": "Postman",
@@ -1771,7 +2148,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_fa4d60f0777056648967158de5010dff",
+      "status": "active"
     },
     {
       "name": "JMeter",
@@ -1782,7 +2161,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_ffc5fd2260e5523bb45e3fc30453d222",
+      "status": "active"
     },
     {
       "name": "LoadRunner",
@@ -1791,7 +2172,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_8456ac95f6595dcc9847f52a2c09b3cf",
+      "status": "active"
     },
     {
       "name": "Cypress",
@@ -1800,7 +2183,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_7d81aab3c60159a28315f172d7539c7d",
+      "status": "active"
     },
     {
       "name": "Appium",
@@ -1809,7 +2194,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4e380ccf35085f88bc92beddfb200f0f",
+      "status": "active"
     },
     {
       "name": "SoapUI",
@@ -1818,7 +2205,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_8e50974f58765740b1e4a00557285864",
+      "status": "active"
     },
     {
       "name": "JIRA",
@@ -1827,7 +2216,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_235da99309475ffc80923b25c619581b",
+      "status": "active"
     },
     {
       "name": "Confluence",
@@ -1836,7 +2227,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_d40c9cf54ace54b9bc9b6627fe240803",
+      "status": "active"
     },
     {
       "name": "Agile",
@@ -1847,7 +2240,9 @@
         "Scrum"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_a02193db15e8592db583517080279638",
+      "status": "active"
     },
     {
       "name": "Scrum",
@@ -1858,7 +2253,9 @@
         "Agile"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_2f2978a561a25da69fcbb161f83f0cb3",
+      "status": "active"
     },
     {
       "name": "SAFe",
@@ -1871,7 +2268,9 @@
         "Agile"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4fb96da7eda05d27bc71e59f0afb1fb0",
+      "status": "active"
     },
     {
       "name": "Kanban",
@@ -1882,7 +2281,9 @@
         "Agile"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4b3045f98daf56289d2243d5268b350e",
+      "status": "active"
     },
     {
       "name": "ITIL",
@@ -1893,7 +2294,9 @@
         "ServiceNow"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_aecbd3157c195439820e53f338489bb8",
+      "status": "active"
     },
     {
       "name": "JCL",
@@ -1906,7 +2309,9 @@
         "COBOL"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4ce6774d7c335f32b78c63c8d360193b",
+      "status": "active"
     },
     {
       "name": "CICS",
@@ -1915,7 +2320,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_1b4c21c18255523f94ab0360b7bf202e",
+      "status": "active"
     },
     {
       "name": "VSAM",
@@ -1924,7 +2331,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_8160039a6acd5aeda650d1552815de94",
+      "status": "active"
     },
     {
       "name": "OAuth2",
@@ -1936,7 +2345,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_688cf7ce7acd51ab86bf1f9a7293ec06",
+      "status": "active"
     },
     {
       "name": "OpenID Connect",
@@ -1949,7 +2360,9 @@
         "OAuth2"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_0a337a32ea515cd8b4aff9297d75f846",
+      "status": "active"
     },
     {
       "name": "SSO",
@@ -1960,7 +2373,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_985726e896685adb8af5ac7e01613b87",
+      "status": "active"
     },
     {
       "name": "Okta",
@@ -1969,7 +2384,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_85ff14afcf1457ab94d301719d097318",
+      "status": "active"
     },
     {
       "name": "Active Directory",
@@ -1980,7 +2397,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_abf217f2c497507494272377355d4b28",
+      "status": "active"
     },
     {
       "name": "Cisco",
@@ -1989,7 +2408,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_193ad6e3eac659f582a0ccb7ea95bbe1",
+      "status": "active"
     },
     {
       "name": "VPN",
@@ -1998,7 +2419,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_44792142b0f8598b9dfbc97fc4c897a0",
+      "status": "active"
     },
     {
       "name": "Firewall",
@@ -2007,7 +2430,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_42a5ee9a26d0584882edd8dd90621d2b",
+      "status": "active"
     },
     {
       "name": "ActiveMQ",
@@ -2018,7 +2443,9 @@
       ],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_3c2ba6e5b17e5cb0b1fc1ee7075541f8",
+      "status": "active"
     },
     {
       "name": "iOS",
@@ -2029,7 +2456,9 @@
         "Swift"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_ba1b71681e475b34a6ed118369e8f616",
+      "status": "active"
     },
     {
       "name": "Android",
@@ -2040,7 +2469,9 @@
         "Kotlin"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_747d2d68355156469215c8f543f67637",
+      "status": "active"
     },
     {
       "name": "React Native",
@@ -2051,7 +2482,9 @@
         "React"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_4be0229ac8915c7b8ac71bfd4a28059c",
+      "status": "active"
     },
     {
       "name": "Flutter",
@@ -2060,7 +2493,9 @@
       "aliases": [],
       "related_skills": [],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_a7398122e32a51f38ce256ca11986063",
+      "status": "active"
     },
     {
       "name": "Machine Learning",
@@ -2073,7 +2508,9 @@
         "NLP"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_3273aade681b5e02b1e42cd3a06e85e1",
+      "status": "active"
     },
     {
       "name": "TensorFlow",
@@ -2084,7 +2521,9 @@
         "Machine Learning"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_8146359a969f5e3c9733bc7f4b11f50d",
+      "status": "active"
     },
     {
       "name": "PyTorch",
@@ -2095,7 +2534,9 @@
         "Machine Learning"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_49d4192b780e58728b2aafda56204dba",
+      "status": "active"
     },
     {
       "name": "scikit-learn",
@@ -2108,7 +2549,9 @@
         "Machine Learning"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_d122032efdd4510ab3cb0ddcb673a800",
+      "status": "active"
     },
     {
       "name": "Pandas",
@@ -2119,7 +2562,9 @@
         "Python"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_0e5df672f24a5cd98fdbf9fcd89deb40",
+      "status": "active"
     },
     {
       "name": "NumPy",
@@ -2130,7 +2575,9 @@
         "Python"
       ],
       "confidence": "high",
-      "source": "hermes-850-it-staffing-expansion"
+      "source": "hermes-850-it-staffing-expansion",
+      "skill_id": "skill_9c6a763c8a2059e2acae46555d92f726",
+      "status": "active"
     }
   ]
 }

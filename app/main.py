@@ -43,6 +43,7 @@ from app.routers.accuracy import router as accuracy_router
 from app.routers.reporting import router as reporting_router
 from app.routers.companies import router as companies_router
 from app.routers.assistant import router as assistant_router
+from app.routers.skill_intelligence import router as skill_intelligence_router
 
 app = FastAPI(
     title=HERMES_SERVICE_NAME,
@@ -80,6 +81,7 @@ app.include_router(actions_router)
 app.include_router(workspace_router)
 app.include_router(security_router)
 app.include_router(understanding_router)
+app.include_router(skill_intelligence_router)
 app.include_router(matching_router)
 app.include_router(context_router)
 app.include_router(broadcast_router)

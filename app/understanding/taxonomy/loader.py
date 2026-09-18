@@ -12,6 +12,7 @@ from typing import Any
 
 from app.runtime.db import cursor
 from app.understanding.taxonomy.title_family_classifier import compute_related_job_titles
+from app.understanding.taxonomy.identity import stable_skill_id
 
 
 def _utc_now_iso() -> str:
@@ -223,6 +224,7 @@ def add_canonical_skill(
 
         data["skills"].append(
             {
+                "skill_id": stable_skill_id(name),
                 "name": name,
                 "category": category,
                 "skill_type": skill_type,
@@ -230,6 +232,7 @@ def add_canonical_skill(
                 "related_skills": [],
                 "confidence": "medium",
                 "source": "taxonomy_candidate_approved",
+                "status": "active",
                 "description": description,
                 "description_source": "ai_generated" if description else None,
             }
@@ -326,6 +329,10 @@ def update_canonical_skill(
         )
         if entry is None:
             return {"updated": False, "reason": "skill_not_found"}
+
+        # Materialize a legacy row's deterministic ID before any rename so
+        # its external identity remains immutable after the display name changes.
+        entry.setdefault("skill_id", stable_skill_id(entry["name"]))
 
         if new_name and new_name != entry["name"]:
             new_key = normalize_taxonomy_key(new_name)
