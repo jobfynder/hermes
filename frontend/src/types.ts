@@ -244,6 +244,15 @@ export interface CanonicalSkillEntry {
   last_seen_at: string | null
 }
 
+export interface SkillsTaxonomyPageResult {
+  items: CanonicalSkillEntry[]
+  total_count: number
+  taxonomy_count: number
+  page: number
+  page_size: number
+  categories: string[]
+}
+
 export interface JobTitleEntry {
   title: string
   family: string | null

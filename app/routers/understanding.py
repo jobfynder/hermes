@@ -1,7 +1,9 @@
 from pathlib import Path
+import math
 import tempfile
+from typing import Literal
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from app.security.rbac import require_permission
@@ -80,6 +82,39 @@ def get_skills_taxonomy(user: dict = Depends(require_permission("understanding:r
 @router.get("/taxonomy/skills/canonical")
 def get_canonical_skills_taxonomy(user: dict = Depends(require_permission("understanding:read"))):
     return load_canonical_skills_taxonomy()
+
+
+@router.get("/taxonomy/skills/page")
+def browse_canonical_skills_page(
+    q: str = Query(default='', max_length=120),
+    category: str = Query(default='all', max_length=100),
+    sort: Literal['name','times_seen','last_seen_at'] = 'times_seen',
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=10, le=100),
+    _user: dict = Depends(require_permission("understanding:read")),
+):
+    """Bounded taxonomy management response; the browser never receives
+    thousands of rows or treats a filtered result set as one selection."""
+    entries=load_canonical_skills_taxonomy().get('skills',[])
+    usage=get_skill_usage_stats()
+    categories=sorted({entry.get('category') or 'Uncategorized' for entry in entries})
+    query=q.strip().casefold()
+    rows=[]
+    for entry in entries:
+        entry_category=entry.get('category') or 'Uncategorized'
+        if category!='all' and entry_category!=category: continue
+        if query:
+            text=' '.join([entry.get('name') or '',*(entry.get('aliases') or []),entry.get('description') or '']).casefold()
+            if query not in text: continue
+        stats=usage.get(entry.get('name'),{})
+        rows.append({**entry,'times_seen':stats.get('times_seen',0),'last_seen_at':stats.get('last_seen_at')})
+    if sort=='name': rows.sort(key=lambda item:(item.get('name') or '').casefold())
+    elif sort=='last_seen_at': rows.sort(key=lambda item:(item.get('last_seen_at') is None,item.get('last_seen_at') or ''),reverse=False)
+    else: rows.sort(key=lambda item:(-item['times_seen'],(item.get('name') or '').casefold()))
+    total=len(rows);page=min(page,max(1,math.ceil(total/page_size)))
+    start=(page-1)*page_size
+    return {'items':rows[start:start+page_size],'total_count':total,'taxonomy_count':len(entries),
+            'page':page,'page_size':page_size,'categories':categories}
 
 
 @router.get("/taxonomy/skills/browse")

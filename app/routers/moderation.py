@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -269,7 +269,7 @@ def delete_skill_endpoint(
 
 
 class BulkDeleteSkillsRequest(BaseModel):
-    names: list[str]
+    names: list[str] = Field(min_length=1, max_length=100)
 
 
 class BulkDeleteSkillsResult(BaseModel):
@@ -287,8 +287,8 @@ def bulk_delete_skills_endpoint(
 
 
 class BulkSetSkillCategoryRequest(BaseModel):
-    names: list[str]
-    category: str
+    names: list[str] = Field(min_length=1, max_length=100)
+    category: str = Field(min_length=1, max_length=100)
 
 
 class BulkSetSkillCategoryResult(BaseModel):

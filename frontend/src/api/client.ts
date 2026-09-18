@@ -4,6 +4,7 @@ import type {
   AssistantQueryResult,
   BlocklistEntry,
   CanonicalSkillEntry,
+  SkillsTaxonomyPageResult,
   ClaimPrepareResult,
   DashboardOverview,
   DeleteDraftResult,
@@ -154,6 +155,7 @@ export const api = {
     }),
   getAccuracySummary: (days = 30) => request<AccuracySummary>(`/accuracy/summary?days=${days}`),
   browseSkillsTaxonomy: () => request<CanonicalSkillEntry[]>('/understanding/taxonomy/skills/browse'),
+  browseSkillsTaxonomyPage: (params: URLSearchParams, signal?: AbortSignal) => request<SkillsTaxonomyPageResult>(`/understanding/taxonomy/skills/page?${params}`, { signal }),
   browseJobTitlesTaxonomy: () =>
     request<{ titles: JobTitleEntry[] }>('/understanding/taxonomy/job-titles').then((r) => r.titles),
   updateSkillDescription: (name: string, description: string) =>

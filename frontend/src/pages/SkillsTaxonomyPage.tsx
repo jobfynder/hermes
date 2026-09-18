@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import { PaginationControls, usePagination } from '../components/Pagination'
+import { PaginationControls } from '../components/Pagination'
 import type { CanonicalSkillEntry } from '../types'
 
 type SortKey = 'name' | 'times_seen' | 'last_seen_at'
@@ -207,350 +207,51 @@ function EditRow({
 }
 
 export function SkillsTaxonomyPage({ onBack }: { onBack: () => void }) {
-  const [skills, setSkills] = useState<CanonicalSkillEntry[] | null>(null)
+  const [items, setItems] = useState<CanonicalSkillEntry[]>([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [taxonomyCount, setTaxonomyCount] = useState(0)
+  const [categories, setCategories] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('all')
   const [sortKey, setSortKey] = useState<SortKey>('times_seen')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
   const [editingName, setEditingName] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkCategory, setBulkCategory] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [revision, setRevision] = useState(0)
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize))
 
-  function load() {
-    api
-      .browseSkillsTaxonomy()
-      .then((list) => {
-        setSkills(list)
-        setSelected((prev) => {
-          const stillPresent = new Set(list.map((s) => s.name))
-          return new Set([...prev].filter((n) => stillPresent.has(n)))
-        })
-      })
-      .catch((err) => setError(err.message))
-  }
-
-  useEffect(load, [])
-
-  async function handleSaveDescription(name: string, description: string) {
-    const result = await api.updateSkillDescription(name, description)
-    if (!result.updated) {
-      throw new Error(result.reason || 'Update failed')
-    }
-    // Update in place rather than a full reload, so the rest of the
-    // table (scroll position, other rows) doesn't jump.
-    setSkills((prev) =>
-      prev
-        ? prev.map((s) =>
-            s.name === name
-              ? { ...s, description, description_source: 'human_edited' }
-              : s,
-          )
-        : prev,
-    )
-  }
-
-  async function handleEditSave(entry: CanonicalSkillEntry, changes: { newName?: string; category?: string }) {
-    if (!changes.newName && !changes.category) {
-      setEditingName(null)
-      return
-    }
-    const result = await api.updateSkill(entry.name, changes)
-    if (!result.updated) {
-      throw new Error(
-        result.reason === 'duplicate_skill'
-          ? 'That skill already exists — pick a different name.'
-          : result.reason || 'Update failed',
-      )
-    }
-    setEditingName(null)
-    load()
-  }
-
-  async function handleDelete(name: string) {
-    if (!window.confirm(`Delete "${name}" from the skills taxonomy? This can't be undone.`)) return
-    setBusy(true)
-    try {
-      const result = await api.deleteSkill(name)
-      if (!result.deleted) {
-        setError(result.reason || 'Failed to delete skill')
-        return
-      }
-      setEditingName(null)
-      load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete skill')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  function toggleSelected(name: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }
-
-  function toggleSelectAll() {
-    const ids = filtered.map((s) => s.name)
-    setSelected((prev) => (ids.every((id) => prev.has(id)) ? new Set() : new Set(ids)))
-  }
-
-  async function handleBulkSetCategory() {
-    if (selected.size === 0 || !bulkCategory.trim()) return
-    setBusy(true)
-    try {
-      const result = await api.bulkSetSkillCategory([...selected], bulkCategory.trim())
-      setActionMessage(`Set category to "${bulkCategory.trim()}" for ${result.updated_count} skills.`)
-      setSelected(new Set())
-      setBulkCategory('')
-      load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bulk update failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleBulkDelete() {
-    if (selected.size === 0) return
-    if (!window.confirm(`Delete ${selected.size} selected skills? This can't be undone.`)) return
-    setBusy(true)
-    try {
-      const result = await api.bulkDeleteSkills([...selected])
-      setActionMessage(`Deleted ${result.deleted_count} skills.`)
-      setSelected(new Set())
-      load()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bulk delete failed')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const categories = useMemo(() => {
-    if (!skills) return []
-    return Array.from(new Set(skills.map((s) => s.category || 'Uncategorized'))).sort()
-  }, [skills])
-
-  const filtered = useMemo(() => {
-    if (!skills) return []
-    const q = search.trim().toLowerCase()
-
-    let rows = skills.filter((s) => {
-      if (category !== 'all' && (s.category || 'Uncategorized') !== category) return false
-      if (q) {
-        const haystack = `${s.name} ${s.aliases.join(' ')} ${s.description || ''}`.toLowerCase()
-        if (!haystack.includes(q)) return false
-      }
-      return true
-    })
-
-    rows = [...rows].sort((a, b) => {
-      if (sortKey === 'name') return a.name.localeCompare(b.name)
-      if (sortKey === 'times_seen') return b.times_seen - a.times_seen
-      // last_seen_at, most recent first, nulls last
-      if (!a.last_seen_at) return 1
-      if (!b.last_seen_at) return -1
-      return new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime()
-    })
-
-    return rows
-  }, [skills, search, category, sortKey])
-
-  const { pageItems, page, pageCount, pageSize, setPage, setPageSize } = usePagination(
-    filtered,
-    `${search}|${category}|${sortKey}`,
-  )
-
-  return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
-      <header className="mb-6 flex items-baseline justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">Skills taxonomy</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {skills ? `${skills.length} canonical skills` : 'Loading…'} — new terms are approved from{' '}
-            <span className="font-medium">Blocklist &amp; taxonomy</span>, not added here.
-          </p>
-        </div>
-        <button
-          onClick={onBack}
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
-        >
-          Back to drafts
-        </button>
-      </header>
-
-      {error && <div className="mb-4 rounded-lg bg-fail-soft px-4 py-3 text-sm text-fail">{error}</div>}
-      {actionMessage && (
-        <div className="mb-4 rounded-lg border border-line bg-paper px-4 py-3 text-sm text-ink-soft">
-          {actionMessage}
-        </div>
-      )}
-
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search skill or alias…"
-          className="min-w-56 flex-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
-        />
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
-        >
-          <option value="all">All categories</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sortKey}
-          onChange={(e) => setSortKey(e.target.value as SortKey)}
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
-        >
-          <option value="times_seen">Sort: most used</option>
-          <option value="last_seen_at">Sort: recently seen</option>
-          <option value="name">Sort: name</option>
-        </select>
-      </div>
-
-      {skills && skills.length > 0 && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-paper px-3 py-2">
-          <span className="text-xs text-ink-soft">
-            {selected.size > 0 ? `${selected.size} selected` : `Showing ${filtered.length} of ${skills.length}`}
-          </span>
-          {selected.size > 0 && (
-            <div className="flex items-center gap-2">
-              <input
-                value={bulkCategory}
-                onChange={(e) => setBulkCategory(e.target.value)}
-                placeholder="Set category to…"
-                className="min-w-40 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm text-ink outline-none focus:border-accent"
-              />
-              <button
-                disabled={busy || !bulkCategory.trim()}
-                onClick={handleBulkSetCategory}
-                className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
-              >
-                Apply to selected
-              </button>
-              <button
-                disabled={busy}
-                onClick={handleBulkDelete}
-                className="rounded-lg border border-fail px-3 py-1.5 text-xs font-semibold text-fail transition hover:bg-fail-soft disabled:opacity-40"
-              >
-                Delete selected
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="overflow-hidden rounded-xl border border-line bg-surface">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
-              <th className="w-8 px-4 py-3">
-                {filtered.length > 0 && (
-                  <input
-                    type="checkbox"
-                    checked={filtered.length > 0 && filtered.every((s) => selected.has(s.name))}
-                    onChange={toggleSelectAll}
-                    className="accent-accent"
-                    aria-label="Select all"
-                  />
-                )}
-              </th>
-              <th className="px-4 py-3 font-medium">Skill</th>
-              <th className="px-4 py-3 font-medium">Category</th>
-              <th className="px-4 py-3 font-medium">Times seen</th>
-              <th className="px-4 py-3 font-medium">Last seen</th>
-              <th className="px-4 py-3 font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageItems.map((s) =>
-              editingName === s.name ? (
-                <EditRow
-                  key={s.name}
-                  entry={s}
-                  categories={categories}
-                  onSave={(changes) => handleEditSave(s, changes)}
-                  onCancel={() => setEditingName(null)}
-                  onDelete={() => handleDelete(s.name)}
-                />
-              ) : (
-              <tr key={s.name} className="border-b border-line last:border-0 align-top">
-                <td className="px-4 py-2.5">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(s.name)}
-                    onChange={() => toggleSelected(s.name)}
-                    className="accent-accent"
-                    aria-label={`Select ${s.name}`}
-                  />
-                </td>
-                <td className="max-w-xl px-4 py-2.5">
-                  <div className="group flex items-center gap-2">
-                    <span className="font-medium text-ink" title={s.aliases.length ? `Aliases: ${s.aliases.join(', ')}` : undefined}>
-                      {s.name}
-                    </span>
-                    <button
-                      onClick={() => setEditingName(s.name)}
-                      className="text-xs font-normal text-ink-soft opacity-0 transition group-hover:opacity-100 hover:text-accent hover:underline"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                  <DescriptionCell skill={s} onSave={handleSaveDescription} />
-                </td>
-                <td className="px-4 py-2.5 text-ink-soft">{s.category || '—'}</td>
-                <td className="px-4 py-2.5 text-ink-soft">{s.times_seen}</td>
-                <td className="px-4 py-2.5 text-ink-soft">{timeAgo(s.last_seen_at)}</td>
-                <td className="px-4 py-2.5 text-right">
-                  <button
-                    onClick={() => handleDelete(s.name)}
-                    className="text-xs font-medium text-fail hover:underline"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-              ),
-            )}
-            {skills && filtered.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-ink-soft">
-                  No skills match these filters.
-                </td>
-              </tr>
-            )}
-            {!skills && !error && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-ink-soft">
-                  Loading…
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        <PaginationControls
-          page={page}
-          pageCount={pageCount}
-          pageSize={pageSize}
-          totalCount={filtered.length}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-        />
-      </div>
-    </div>
-  )
+  useEffect(() => { const timer=window.setTimeout(()=>{setSearch(searchInput.trim());setPage(1)},300); return()=>window.clearTimeout(timer) }, [searchInput])
+  useEffect(() => { setSelected(new Set()); setEditingName(null) }, [search,category,sortKey,page,pageSize])
+  useEffect(() => {
+    const controller=new AbortController();setLoading(true);setError(null)
+    const params=new URLSearchParams({q:search,category,sort:sortKey,page:String(page),page_size:String(pageSize)})
+    api.browseSkillsTaxonomyPage(params,controller.signal).then(result=>{if(controller.signal.aborted)return;setItems(result.items);setTotalCount(result.total_count);setTaxonomyCount(result.taxonomy_count);setCategories(result.categories);if(result.page!==page)setPage(result.page)}).catch(err=>{if(!controller.signal.aborted)setError(err.message)}).finally(()=>{if(!controller.signal.aborted)setLoading(false)})
+    return()=>controller.abort()
+  },[search,category,sortKey,page,pageSize,revision])
+  const reload=()=>setRevision(v=>v+1)
+  async function handleSaveDescription(name:string,description:string){const r=await api.updateSkillDescription(name,description);if(!r.updated)throw new Error(r.reason||'Update failed');setItems(prev=>prev.map(s=>s.name===name?{...s,description,description_source:'human_edited'}:s))}
+  async function handleEditSave(entry:CanonicalSkillEntry,changes:{newName?:string;category?:string}){if(!changes.newName&&!changes.category){setEditingName(null);return}const r=await api.updateSkill(entry.name,changes);if(!r.updated)throw new Error(r.reason==='duplicate_skill'?'That skill already exists.':r.reason||'Update failed');setEditingName(null);reload()}
+  async function handleDelete(name:string){if(!window.confirm(`Delete "${name}" from the skills taxonomy? This can't be undone.`))return;setBusy(true);try{const r=await api.deleteSkill(name);if(!r.deleted)throw new Error(r.reason||'Delete failed');setSelected(new Set());reload()}catch(err){setError(err instanceof Error?err.message:'Delete failed')}finally{setBusy(false)}}
+  function toggleSelected(name:string){setSelected(prev=>{const next=new Set(prev);next.has(name)?next.delete(name):next.add(name);return next})}
+  function togglePage(){setSelected(items.length>0&&items.every(s=>selected.has(s.name))?new Set():new Set(items.map(s=>s.name)))}
+  async function handleBulkSetCategory(){if(!selected.size||!bulkCategory.trim())return;setBusy(true);try{const r=await api.bulkSetSkillCategory([...selected],bulkCategory.trim());setActionMessage(`Updated ${r.updated_count} selected skills.`);setSelected(new Set());setBulkCategory('');reload()}catch(err){setError(err instanceof Error?err.message:'Bulk update failed')}finally{setBusy(false)}}
+  async function handleBulkDelete(){if(!selected.size)return;if(!window.confirm(`Delete ${selected.size} skills selected on this page? This can't be undone.`))return;setBusy(true);try{const r=await api.bulkDeleteSkills([...selected]);setActionMessage(`Deleted ${r.deleted_count} skills.`);setSelected(new Set());reload()}catch(err){setError(err instanceof Error?err.message:'Bulk delete failed')}finally{setBusy(false)}}
+  const pageAllSelected=items.length>0&&items.every(s=>selected.has(s.name))
+  return <div className="mx-auto max-w-6xl px-6 py-8">
+    <header className="mb-6 flex flex-wrap items-baseline justify-between gap-3"><div><h1 className="text-xl font-semibold text-ink">Skills taxonomy</h1><p className="mt-1 text-sm text-ink-soft">{taxonomyCount?`${taxonomyCount.toLocaleString()} canonical skills`:'Loading…'} · server-side search and page-level selection</p></div><button onClick={onBack} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink-soft">Back to drafts</button></header>
+    {error&&<div role="alert" className="mb-4 rounded-lg bg-fail-soft px-4 py-3 text-sm text-fail">{error}</div>}{actionMessage&&<div className="mb-4 rounded-lg border border-line bg-paper px-4 py-3 text-sm text-ink-soft">{actionMessage}</div>}
+    <div className="mb-4 flex flex-wrap gap-3"><input aria-label="Search skills" value={searchInput} onChange={e=>setSearchInput(e.target.value)} placeholder="Search skill or alias…" className="min-w-56 flex-1 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"/><select aria-label="Skill category" value={category} onChange={e=>{setCategory(e.target.value);setPage(1)}} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"><option value="all">All categories</option>{categories.map(c=><option key={c}>{c}</option>)}</select><select aria-label="Skill sort" value={sortKey} onChange={e=>{setSortKey(e.target.value as SortKey);setPage(1)}} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"><option value="times_seen">Most used</option><option value="last_seen_at">Recently seen</option><option value="name">Name</option></select></div>
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-paper px-3 py-2"><span className="text-xs text-ink-soft">{selected.size?`${selected.size} selected on this page`:`${totalCount.toLocaleString()} matching skills`}</span>{selected.size>0&&<div className="flex flex-wrap items-center gap-2"><button onClick={()=>setSelected(new Set())} className="text-xs text-ink-soft hover:underline">Clear selection</button><input list="skill-categories" value={bulkCategory} onChange={e=>setBulkCategory(e.target.value)} placeholder="Set category to…" className="min-w-40 rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm"/><datalist id="skill-categories">{categories.map(c=><option key={c} value={c}/>)}</datalist><button disabled={busy||!bulkCategory.trim()} onClick={handleBulkSetCategory} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40">Apply to selected</button><button disabled={busy} onClick={handleBulkDelete} className="rounded-lg border border-fail px-3 py-1.5 text-xs font-semibold text-fail disabled:opacity-40">Delete selected</button></div>}</div>
+    <div className="overflow-hidden rounded-xl border border-line bg-surface"><table className="w-full text-left text-sm"><thead><tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft"><th className="w-8 px-4 py-3"><input type="checkbox" checked={pageAllSelected} onChange={togglePage} disabled={!items.length||loading} aria-label="Select this page" title={`Select the ${items.length} skills on this page only`} className="accent-accent"/></th><th className="px-4 py-3">Skill</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Times seen</th><th className="px-4 py-3">Last seen</th><th></th></tr></thead><tbody>
+      {items.map(s=>editingName===s.name?<EditRow key={s.name} entry={s} categories={categories} onSave={changes=>handleEditSave(s,changes)} onCancel={()=>setEditingName(null)} onDelete={()=>handleDelete(s.name)}/>:<tr key={s.name} className="border-b border-line last:border-0 align-top"><td className="px-4 py-2.5"><input type="checkbox" checked={selected.has(s.name)} onChange={()=>toggleSelected(s.name)} aria-label={`Select ${s.name}`} className="accent-accent"/></td><td className="max-w-xl px-4 py-2.5"><div className="group flex items-center gap-2"><span className="font-medium text-ink" title={s.aliases.length?`Aliases: ${s.aliases.join(', ')}`:undefined}>{s.name}</span><button onClick={()=>setEditingName(s.name)} className="text-xs text-ink-soft opacity-0 group-hover:opacity-100">Edit</button></div><DescriptionCell skill={s} onSave={handleSaveDescription}/></td><td className="px-4 py-2.5 text-ink-soft">{s.category||'—'}</td><td className="px-4 py-2.5 text-ink-soft">{s.times_seen}</td><td className="px-4 py-2.5 text-ink-soft">{timeAgo(s.last_seen_at)}</td><td className="px-4 py-2.5 text-right"><button onClick={()=>handleDelete(s.name)} className="text-xs font-medium text-fail">Delete</button></td></tr>)}
+      {!loading&&!items.length&&<tr><td colSpan={6} className="px-4 py-10 text-center text-ink-soft">No skills match these filters.</td></tr>}{loading&&!items.length&&<tr><td colSpan={6} className="px-4 py-10 text-center text-ink-soft">Loading…</td></tr>}
+    </tbody></table><PaginationControls page={page} pageCount={pageCount} pageSize={pageSize} totalCount={totalCount} onPageChange={setPage} onPageSizeChange={size=>{setPageSize(Math.min(100,size));setPage(1)}}/></div>
+  </div>
 }
