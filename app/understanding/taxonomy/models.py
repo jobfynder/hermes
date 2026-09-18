@@ -8,14 +8,36 @@ from pydantic import BaseModel, Field
 TaxonomyConfidence = Literal["high", "medium", "low"]
 TaxonomySource = Literal["seed", "manual", "observed", "system"]
 ReviewStatus = Literal["approved", "review_required", "rejected"]
+SkillRelationshipType = Literal[
+    "commonly_used_with",
+    "framework_for",
+    "managed_service_for",
+    "implementation_of",
+    "alternative_to",
+]
+
+
+class SkillRelationship(BaseModel):
+    type: SkillRelationshipType = "commonly_used_with"
+    skill: str = Field(..., min_length=1)
 
 
 class CanonicalSkill(BaseModel):
+    # Stable external identity. Older runtime taxonomies may not have this
+    # field yet; Skill Intelligence derives the same deterministic value
+    # until the backfill is materialized.
+    skill_id: str | None = None
     name: str = Field(..., min_length=1)
     category: str = Field(..., min_length=1)
+    subcategory: str | None = None
     skill_type: str = Field(..., min_length=1)
     aliases: list[str] = Field(default_factory=list)
     related_skills: list[str] = Field(default_factory=list)
+    relationships: list[SkillRelationship] = Field(default_factory=list)
+    related_roles: list[str] = Field(default_factory=list)
+    short_definition: str | None = None
+    recruiter_explanation: str | None = None
+    status: Literal["active", "deprecated"] = "active"
     confidence: TaxonomyConfidence = "high"
     source: TaxonomySource = "seed"
 

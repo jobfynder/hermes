@@ -34,6 +34,7 @@ jobs:
       HERMES_REQUIREMENTS_MAILBOX: jobs@jobfynder.com
       HERMES_HOTLIST_MAILBOX: hotlists@jobfynder.com
       HERMES_LLM_FALLBACK_ENABLED: "true"
+      HERMES_EMAIL_LLM_FALLBACK_ENABLED: "true"
       HERMES_PROMPT_RUNTIME_DRY_RUN: "true"
       CORE_API_BASE_URL: https://uat.jobfynder.com/api
       HERMES_SERVICE_TOKEN: ci-test-token
