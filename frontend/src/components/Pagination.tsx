@@ -55,6 +55,7 @@ export function PaginationControls({
   totalCount,
   onPageChange,
   onPageSizeChange,
+  pageSizeOptions = PAGE_SIZE_OPTIONS,
 }: {
   page: number
   pageCount: number
@@ -62,6 +63,7 @@ export function PaginationControls({
   totalCount: number
   onPageChange: (page: number) => void
   onPageSizeChange: (size: number) => void
+  pageSizeOptions?: readonly number[]
 }) {
   if (totalCount === 0) return null
 
@@ -79,7 +81,7 @@ export function PaginationControls({
           onChange={(e) => onPageSizeChange(Number(e.target.value))}
           className="rounded border border-line bg-paper px-2 py-1 text-xs text-ink outline-none focus:border-accent"
         >
-          {PAGE_SIZE_OPTIONS.map((n) => (
+          {pageSizeOptions.map((n) => (
             <option key={n} value={n}>
               {n} / page
             </option>
