@@ -25,6 +25,7 @@ from app.understanding.taxonomy.identity import stable_skill_id
 
 _FUZZY_THRESHOLD = 94
 _MAX_SEARCH_RESULTS = 50
+_MAX_UNKNOWN_TERMS = 20
 _CONTEXT_ORDER = ("required", "preferred", "excluded", "mentioned")
 
 
@@ -284,11 +285,15 @@ def extract_requirement_intelligence(text: str, include_unknown_terms: bool = Fa
             stack.setdefault(category_key, []).append(row)
     stack = {key: stack[key] for key in sorted(stack)}
 
-    # Arbitrary page prose must never enter the controlled learning queue.
-    # Unknown terms are only returned by explicit batch resolution today.
+    # Unknown terms are returned for display only. This never writes to the
+    # learning queue, so arbitrary page text cannot create or promote skills;
+    # promotion stays with the reviewed taxonomy pipeline.
     unknown_terms: list[str] = []
     if include_unknown_terms:
-        unknown_terms = []
+        # Imported here so plain extraction never depends on the candidate module (which reaches the database layer).
+        from app.understanding.taxonomy.candidates import find_unknown_skill_terms
+
+        unknown_terms = find_unknown_skill_terms(text)[:_MAX_UNKNOWN_TERMS]
     return {
         "result_version": "hermes_requirement_skill_intelligence_v1",
         "taxonomy_version": taxonomy_revision(),
