@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.matching.models import MatchScoreBreakdown, ResumeToJobMatchRequest, ResumeToJobMatchResult
+from app.understanding.taxonomy.normalizer import normalize_skill
 from app.matching.policy import (
     LOCATION_WEIGHT,
     PREFERRED_SKILL_WEIGHT,
@@ -33,13 +34,25 @@ def _normalize_text(value: str | None) -> str:
     return " ".join(value.lower().replace("_", " ").replace("-", " ").split())
 
 
+def _skill_identity(name: str) -> str:
+    """The key two spellings of one skill share.
+
+    A term the taxonomy knows (canonical name or alias) is keyed by its canonical name, which is also what the
+    skill id is derived from, so "K8s" and "Kubernetes" are the same skill here just as they are in the glossary.
+    An unknown term keeps its plain normalized text. Related skills are never merged: Docker is not Kubernetes.
+    """
+    resolved = normalize_skill(name)
+    canonical = str(resolved.get("normalized") or "") if resolved.get("matched") else ""
+    return _normalize_text(canonical or name)
+
+
 def _skill_map(values: list[Any]) -> dict[str, str]:
     result: dict[str, str] = {}
     for value in values:
         name = _skill_name(value).strip()
-        normalized = _normalize_text(name)
-        if normalized and normalized not in result:
-            result[normalized] = name
+        identity = _skill_identity(name)
+        if identity and identity not in result:
+            result[identity] = name
     return result
 
 
