@@ -65,7 +65,7 @@ jobs:
         run: python3 -c "from app.runtime.db import init_schema; init_schema()"
 
       - name: Backfill and consumer reliability
-        run: python3 -m unittest tests.test_production_reliability tests.test_dashboard_listing tests.test_review_rules tests.test_email_review_regressions tests.test_candidate_lookup tests.test_relay_spacing tests.test_skill_quality tests.test_email_fallback_boundary tests.test_deterministic_taxonomy tests.test_taxonomy_parse_cache tests.test_fallback_completion tests.test_atomic_taxonomy tests.test_candidate_concurrency tests.test_report_cache tests.test_taxonomy_cleanup tests.test_taxonomy_pagination tests.test_companies -v
+        run: python3 -m unittest tests.test_production_reliability tests.test_dashboard_listing tests.test_review_rules tests.test_email_review_regressions tests.test_candidate_lookup tests.test_relay_spacing tests.test_skill_quality tests.test_email_fallback_boundary tests.test_deterministic_taxonomy tests.test_taxonomy_parse_cache tests.test_fallback_completion tests.test_atomic_taxonomy tests.test_candidate_concurrency tests.test_report_cache tests.test_taxonomy_cleanup tests.test_taxonomy_pagination tests.test_companies tests.test_skill_intelligence tests.test_skill_enrichment -v
 
       - name: Run regression suite
         run: |
