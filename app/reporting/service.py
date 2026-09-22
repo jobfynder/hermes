@@ -435,6 +435,69 @@ def get_review_queue_report(days: int = 7) -> dict[str, Any]:
     }
 
 
+def get_filtered_analysis(
+    days: int = 7,
+    draft_type: str | None = None,
+    status: str | None = None,
+    channel: str | None = None,
+) -> dict[str, Any]:
+    """Operational report slice with explicit, index-friendly dimensions."""
+    since = datetime.now(UTC) - timedelta(days=days)
+    clauses = ["d.created_at >= %s"]
+    params: list[Any] = [since]
+    for column, value in (("draft_type", draft_type), ("status", status), ("channel", channel)):
+        if value:
+            clauses.append(f"d.{column} = %s")
+            params.append(value)
+    where = " AND ".join(clauses)
+
+    with cursor() as cur:
+        cur.execute(
+            f"SELECT d.status,d.draft_type,COALESCE(d.channel,'unknown') AS channel,d.confidence,"
+            f"d.requires_review,(d.metadata->>'exact_content_duplicate_of') IS NOT NULL AS duplicate "
+            f"FROM drafts d WHERE {where}",
+            params,
+        )
+        rows = cur.fetchall()
+        cur.execute("SELECT DISTINCT COALESCE(channel,'unknown') AS channel FROM drafts "
+                    "WHERE created_at >= %s ORDER BY channel", (since,))
+        available_channels = [row["channel"] for row in cur.fetchall()]
+        cur.execute(
+            f"SELECT warning.value AS reason,COUNT(*) AS n FROM drafts d "
+            f"CROSS JOIN LATERAL jsonb_array_elements(COALESCE(d.payload->'structured_data'->'email_parsing'->'records','[]'::jsonb)) rec "
+            f"CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(rec->'warnings','[]'::jsonb)) warning(value) "
+            f"WHERE {where} GROUP BY warning.value ORDER BY n DESC LIMIT 20",
+            params,
+        )
+        reasons = [{"reason": row["reason"], "count": row["n"]} for row in cur.fetchall()]
+
+    total = len(rows)
+    needs_review = sum(1 for row in rows if row["requires_review"])
+    duplicates = sum(1 for row in rows if row["duplicate"])
+    by_status: dict[str, int] = {}
+    by_type: dict[str, int] = {}
+    by_channel: dict[str, int] = {}
+    for row in rows:
+        by_status[row["status"]] = by_status.get(row["status"], 0) + 1
+        by_type[row["draft_type"]] = by_type.get(row["draft_type"], 0) + 1
+        by_channel[row["channel"]] = by_channel.get(row["channel"], 0) + 1
+    return {
+        "days": days,
+        "filters": {"draft_type": draft_type, "status": status, "channel": channel},
+        "total": total,
+        "needs_review_count": needs_review,
+        "needs_review_pct": round(100 * needs_review / total, 1) if total else None,
+        "avg_confidence": round(sum((row["confidence"] or 0.0) for row in rows) / total, 3) if total else None,
+        "duplicate_count": duplicates,
+        "duplicate_pct": round(100 * duplicates / total, 1) if total else None,
+        "by_status": by_status,
+        "by_type": by_type,
+        "by_channel": by_channel,
+        "review_reasons": reasons,
+        "available_channels": available_channels,
+    }
+
+
 def get_signature_quality_report(days: int = 30) -> dict[str, Any]:
     """Per-signature-field fill rate, precision (measured from actual
     reviewer corrections, not just stated confidence), false-positive

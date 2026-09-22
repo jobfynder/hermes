@@ -17,6 +17,8 @@ from app.email_parsing.provenance import (
 )
 from app.understanding.taxonomy.candidates import get_approved_boilerplate_lines
 
+REVIEW_REPARSE_VERSION = 'deterministic_review_reparse_v2'
+
 
 def get_job(job_id):
     with cursor() as cur:
@@ -47,11 +49,15 @@ def create_job(job_id, kind, dry_run=True, batch_size=10, limit=None):
                     (job_id, kind, dry_run, batch_size, limit))
         cur.execute('''INSERT INTO draft_backfill_items(job_id,draft_id)
             SELECT %s, d.draft_id FROM drafts d
-            WHERE d.draft_type='draft_job_requirement' AND d.status IN ('draft','needs_review')
+            WHERE ((%s='review-reparse' AND d.draft_type IN ('draft_job_requirement','draft_hotlist'))
+                   OR (%s<>'review-reparse' AND d.draft_type='draft_job_requirement'))
+            AND d.status IN ('draft','needs_review')
             AND (%s <> 'review-reparse' OR d.status='needs_review')
+            AND (%s <> 'review-reparse' OR COALESCE(d.metadata->>'review_reparse_version','') <> %s)
             AND NOT EXISTS (SELECT 1 FROM field_provenance fp
                 WHERE fp.parse_run_id=d.draft_id::text AND fp.extractor=ANY(%s))
-            ORDER BY d.created_at,d.draft_id LIMIT %s''', (job_id, kind, list(CORRECTION_EXTRACTORS), limit))
+            ORDER BY d.created_at,d.draft_id LIMIT %s''',
+            (job_id, kind, kind, kind, kind, REVIEW_REPARSE_VERSION, list(CORRECTION_EXTRACTORS), limit))
         total = cur.rowcount
         cur.execute("UPDATE draft_backfill_jobs SET total_count=%s,status=%s WHERE job_id=%s RETURNING *",
                     (total, 'queued' if total else 'completed', job_id))
@@ -81,7 +87,8 @@ def prepare_row(row, kind, boilerplate):
         if not text.strip():
             return None
         sender = ((row.get('metadata') or {}).get('sender') or {}).get('email')
-        parsing = parse_email_business_records(text, 'job_description', boilerplate)
+        document_kind = 'hotlist' if row.get('draft_type') == 'draft_hotlist' else 'job_description'
+        parsing = parse_email_business_records(text, document_kind, boilerplate)
         signature = parse_email_signature(text=text, sender_email=sender)
         domain = sender.rsplit('@', 1)[-1].lower() if sender and '@' in sender else None
         apply_learned_signature_patterns(signature.get('contact', {}), domain)
@@ -117,7 +124,7 @@ def run_batch(job_id):
         job = cur.fetchone()
         if not job:
             return False
-        cur.execute('''SELECT i.draft_id,d.payload,d.metadata,d.status,d.updated_at,d.confidence,d.requires_review
+        cur.execute('''SELECT i.draft_id,d.payload,d.metadata,d.status,d.draft_type,d.updated_at,d.confidence,d.requires_review
             FROM draft_backfill_items i LEFT JOIN drafts d ON d.draft_id=i.draft_id
             WHERE i.job_id=%s AND i.status='pending' ORDER BY i.draft_id LIMIT %s''', (job_id, job['batch_size']))
         rows = cur.fetchall()
@@ -155,17 +162,29 @@ def run_batch(job_id):
                     EXISTS(SELECT 1 FROM field_provenance fp WHERE fp.parse_run_id=d.draft_id::text AND fp.extractor=ANY(%s)) AS corrected
                     FROM drafts d WHERE d.draft_id=%s FOR UPDATE''', (list(CORRECTION_EXTRACTORS), row['draft_id']))
                 current = cur.fetchone()
+                allowed_types = ('draft_job_requirement', 'draft_hotlist') if job['kind'] == 'review-reparse' else ('draft_job_requirement',)
                 if (not current or current['updated_at'] != row['updated_at'] or current['corrected'] or
-                    current['draft_type'] != 'draft_job_requirement' or current['status'] not in ('draft','needs_review')):
+                    current['draft_type'] not in allowed_types or current['status'] not in ('draft','needs_review')):
                     outcome = 'skipped'
-                elif result['changed']:
-                    outcome = 'changed'
-                    if not job['dry_run']:
+                else:
+                    if result['changed']:
+                        outcome = 'changed'
+                    if not job['dry_run'] and result['changed']:
                         parsing = result['parsing']
                         cur.execute('''UPDATE drafts SET payload=%s,confidence=%s,requires_review=%s,status=%s,updated_at=now()
                             WHERE draft_id=%s''', (json.dumps(result['payload'], default=str), parsing.get('confidence', 0.0),
                             bool(parsing.get('requires_review')), result['status'], row['draft_id']))
                         record_field_provenance(str(row['draft_id']), result['entries'], transaction_cursor=cur)
+                    if not job['dry_run'] and job['kind'] == 'review-reparse':
+                        audit = {'review_reparse_version': REVIEW_REPARSE_VERSION,
+                                 'review_reparse_attempted_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+                        cur.execute('UPDATE drafts SET metadata=metadata || %s::jsonb WHERE draft_id=%s',
+                                    (json.dumps(audit), row['draft_id']))
+            elif not error and not job['dry_run'] and job['kind'] == 'review-reparse':
+                audit = {'review_reparse_version': REVIEW_REPARSE_VERSION,
+                         'review_reparse_attempted_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
+                cur.execute('UPDATE drafts SET metadata=metadata || %s::jsonb WHERE draft_id=%s',
+                            (json.dumps(audit), row['draft_id']))
             if outcome in counts:
                 counts[outcome] += 1
             cur.execute('UPDATE draft_backfill_items SET status=%s,error=%s WHERE job_id=%s AND draft_id=%s',

@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import { PaginationControls, usePagination } from '../components/Pagination'
 import type { JobTitleEntry } from '../types'
 
-type SortKey = 'title' | 'family' | 'seniority'
+type SortKey = 'title' | 'family' | 'seniority' | 'added_at'
 
 const SENIORITY_OPTIONS = ['unspecified', 'junior', 'mid', 'senior', 'lead', 'principal', 'director']
 
@@ -153,6 +153,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [family, setFamily] = useState('all')
+  const [recency, setRecency] = useState('all')
   const [sortKey, setSortKey] = useState<SortKey>('title')
   const [editingTitle, setEditingTitle] = useState<string | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -173,6 +174,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
   }
 
   useEffect(load, [])
+  useEffect(() => setSelected(new Set()), [search, family, recency, sortKey])
 
   const families = useMemo(() => {
     if (!titles) return []
@@ -185,6 +187,11 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
 
     let rows = titles.filter((t) => {
       if (family !== 'all' && (t.family || 'Unclassified') !== family) return false
+      if (recency !== 'all') {
+        if (!t.added_at) return false
+        const days = recency === 'today' ? 1 : recency === '7d' ? 7 : 30
+        if (new Date(t.added_at).getTime() < Date.now() - days * 86400000) return false
+      }
       if (q) {
         const haystack = `${t.title} ${t.aliases.join(' ')} ${t.related_titles.join(' ')}`.toLowerCase()
         if (!haystack.includes(q)) return false
@@ -195,15 +202,16 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
     rows = [...rows].sort((a, b) => {
       if (sortKey === 'family') return (a.family || '').localeCompare(b.family || '')
       if (sortKey === 'seniority') return (a.seniority || '').localeCompare(b.seniority || '')
+      if (sortKey === 'added_at') return (b.added_at || '').localeCompare(a.added_at || '')
       return a.title.localeCompare(b.title)
     })
 
     return rows
-  }, [titles, search, family, sortKey])
+  }, [titles, search, family, recency, sortKey])
 
   const { pageItems, page, pageCount, pageSize, setPage, setPageSize } = usePagination(
     filtered,
-    `${search}|${family}|${sortKey}`,
+    `${search}|${family}|${recency}|${sortKey}`,
   )
 
   function toggleSelected(title: string) {
@@ -216,7 +224,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
   }
 
   function toggleSelectAll() {
-    const ids = filtered.map((t) => t.title)
+    const ids = pageItems.map((t) => t.title)
     setSelected((prev) => (ids.every((id) => prev.has(id)) ? new Set() : new Set(ids)))
   }
 
@@ -398,6 +406,17 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
           ))}
         </select>
         <select
+          aria-label="Added date"
+          value={recency}
+          onChange={(e) => setRecency(e.target.value)}
+          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
+        >
+          <option value="all">Added: any time</option>
+          <option value="today">Added today</option>
+          <option value="7d">Added this week</option>
+          <option value="30d">Added this month</option>
+        </select>
+        <select
           value={sortKey}
           onChange={(e) => setSortKey(e.target.value as SortKey)}
           className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-accent"
@@ -405,6 +424,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
           <option value="title">Sort: title</option>
           <option value="family">Sort: family</option>
           <option value="seniority">Sort: seniority</option>
+          <option value="added_at">Sort: recently added</option>
         </select>
       </div>
 
@@ -449,10 +469,10 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
                 {filtered.length > 0 && (
                   <input
                     type="checkbox"
-                    checked={filtered.length > 0 && filtered.every((t) => selected.has(t.title))}
+                    checked={pageItems.length > 0 && pageItems.every((t) => selected.has(t.title))}
                     onChange={toggleSelectAll}
                     className="accent-accent"
-                    aria-label="Select all"
+                    aria-label="Select this page"
                   />
                 )}
               </th>

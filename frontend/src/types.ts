@@ -242,6 +242,7 @@ export interface CanonicalSkillEntry {
   description_edited_at: string | null
   times_seen: number
   last_seen_at: string | null
+  added_at: string | null
 }
 
 export interface SkillsTaxonomyPageResult {
@@ -251,6 +252,7 @@ export interface SkillsTaxonomyPageResult {
   page: number
   page_size: number
   categories: string[]
+  missing_description_count: number
 }
 
 export interface JobTitleEntry {
@@ -261,6 +263,23 @@ export interface JobTitleEntry {
   related_titles: string[]
   confidence: string | null
   source: string | null
+  added_at: string | null
+}
+
+export interface FilteredReportAnalysis {
+  days: number
+  filters: { draft_type: string | null; status: string | null; channel: string | null }
+  total: number
+  needs_review_count: number
+  needs_review_pct: number | null
+  avg_confidence: number | null
+  duplicate_count: number
+  duplicate_pct: number | null
+  by_status: Record<string, number>
+  by_type: Record<string, number>
+  by_channel: Record<string, number>
+  review_reasons: { reason: string; count: number }[]
+  available_channels: string[]
 }
 
 export interface QueueHealthEntry {

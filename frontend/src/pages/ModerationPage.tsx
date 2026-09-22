@@ -82,13 +82,14 @@ function CandidateSection({
     return rows
   }, [candidates, search, sortKey, minOccurrences, typeFilter, showTypeColumn])
 
-  const ids = visible.map((c) => c.id)
-  const selectedInSection = ids.filter((id) => selectedIds.has(id))
-
   const { pageItems, page, pageCount, pageSize, setPage, setPageSize } = usePagination(
     visible,
     `${search}|${sortKey}|${minOccurrences}|${typeFilter}|${groupAlpha}`,
   )
+  const visibleIds = visible.map((c) => c.id)
+  const pageIds = pageItems.map((c) => c.id)
+  const selectedInSection = visibleIds.filter((id) => selectedIds.has(id))
+  const selectedOnPage = pageIds.filter((id) => selectedIds.has(id))
 
   let previousGroupLetter = ''
 
@@ -184,10 +185,10 @@ function CandidateSection({
                 {visible.length > 0 && (
                   <input
                     type="checkbox"
-                    checked={selectedInSection.length === ids.length}
-                    onChange={() => onToggleSelectAll(ids)}
+                    checked={pageIds.length > 0 && selectedOnPage.length === pageIds.length}
+                    onChange={() => onToggleSelectAll(pageIds)}
                     className="accent-accent"
-                    aria-label="Select all"
+                    aria-label="Select this page"
                   />
                 )}
               </th>

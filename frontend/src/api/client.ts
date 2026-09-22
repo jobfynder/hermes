@@ -14,6 +14,7 @@ import type {
   DraftSummaryEntry,
   EmailClaim,
   FieldProvenanceEntry,
+  FilteredReportAnalysis,
   JobTitleEntry,
   TaxonomyCandidateEntry,
 } from '../types'
@@ -234,6 +235,8 @@ export const api = {
       backfilled_titles: string[]
     }>('/taxonomy/job-titles/backfill-related-titles', { method: 'POST' }),
   getDashboardOverview: () => request<DashboardOverview>('/reports/overview'),
+  getFilteredReportAnalysis: (params: URLSearchParams, signal?: AbortSignal) =>
+    request<FilteredReportAnalysis>(`/reports/analysis?${params.toString()}`, { signal }),
   assistantQuery: (question: string, history: { role: string; content: string }[]) =>
     request<AssistantQueryResult>('/assistant/query', {
       method: 'POST',
