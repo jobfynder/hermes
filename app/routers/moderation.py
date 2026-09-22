@@ -411,9 +411,9 @@ def auto_classify_job_titles_endpoint(
     _user: dict = Depends(require_permission("drafts:publish")),
 ) -> AutoClassifyJobTitlesResult:
     """The Job titles page's "Auto-classify unclassified" bulk action --
-    runs every family="Unclassified" title through classify_job_title_family
-    (deterministic keyword rules first, LLM only as a fallback) and
-    applies whatever it could place in one write.
+    runs every family="Unclassified" title through deterministic family
+    rules and applies whatever it can place in one write. Ambiguous titles
+    remain unclassified for review; this endpoint never calls an LLM.
     """
     result = auto_classify_unclassified_job_titles()
     return AutoClassifyJobTitlesResult(**result)

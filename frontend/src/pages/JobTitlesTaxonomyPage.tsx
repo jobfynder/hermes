@@ -354,7 +354,7 @@ export function JobTitlesTaxonomyPage({ onBack }: { onBack: () => void }) {
             <button
               disabled={busy}
               onClick={handleAutoClassify}
-              title="Classifies each unclassified title by keyword rules first, LLM only if no rule matches"
+              title="Classifies high-confidence titles with deterministic keyword rules; ambiguous titles stay unclassified for review. No LLM is used."
               className="rounded-lg bg-accent px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
             >
               {busy ? 'Classifying…' : `Auto-classify ${unclassifiedCount} unclassified`}
