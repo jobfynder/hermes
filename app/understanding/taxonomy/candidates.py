@@ -40,7 +40,7 @@ from app.understanding.taxonomy.loader import (
     normalize_taxonomy_key,
     set_skill_description,
 )
-from app.understanding.taxonomy.title_family_classifier import classify_job_title_family
+from app.understanding.taxonomy.title_family_classifier import classify_job_title_family, looks_like_non_title
 
 # Common non-skill filler that shows up inside skills lists but is not
 # itself a skill -- "Java, Spring, and more", "SQL, etc.", "AWS (required)".
@@ -230,6 +230,8 @@ def _is_noise_job_title(term: str) -> bool:
     genuinely can end in a word skills don't, e.g. "...Team Lead").
     """
     stripped = term.strip()
+    if looks_like_non_title(stripped):
+        return True
     words = _NOISE_WORD_RE.findall(stripped)
     word_lc = [w.lower() for w in words]
 
@@ -814,8 +816,9 @@ def auto_classify_unclassified_job_titles() -> dict:
     """Runs every currently family="Unclassified" canonical title through
     classify_job_title_family and applies whatever it could place in one
     write -- the Job titles page's "Auto-classify unclassified" bulk
-    action. Never blocks on a single title's LLM call failing; that
-    title just stays unclassified, same as it already was.
+    action. This bulk maintenance path is deliberately deterministic:
+    unmatched titles stay unclassified for review instead of spending
+    model tokens or guessing.
     """
     entries = get_job_title_entries()
     known_families = sorted({(e.get("family") or "Unclassified") for e in entries} - {"Unclassified"})
@@ -826,7 +829,7 @@ def auto_classify_unclassified_job_titles() -> dict:
 
     for title in unclassified_titles:
         try:
-            family, method = classify_job_title_family(title, known_families)
+            family, method = classify_job_title_family(title, known_families, allow_llm=False)
         except Exception:  # noqa: BLE001
             family, method = "Unclassified", "none"
 

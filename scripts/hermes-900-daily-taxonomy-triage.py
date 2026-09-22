@@ -40,6 +40,7 @@ import time
 from app.prompt_runtime.models import PromptRenderedMessage
 from app.prompt_runtime.service import _call_litellm_with_model, litellm_configured
 from app.understanding.taxonomy.candidates import (
+    auto_classify_unclassified_job_titles,
     bulk_approve_taxonomy_candidates,
     bulk_reject_taxonomy_candidates,
     list_taxonomy_candidates,
@@ -317,6 +318,11 @@ def main() -> int:
     print(f"TITLES: processed={title_summary['processed']} "
           f"approved={title_summary['approved']} rejected={title_summary['rejected']} "
           f"left_for_review={title_summary['left_for_review']}")
+
+    family_summary = auto_classify_unclassified_job_titles()
+    print(f"TITLE FAMILIES: checked={family_summary['checked_count']} "
+          f"classified={family_summary['classified_count']} "
+          f"still_unclassified={family_summary['still_unclassified_count']} method=deterministic")
 
     boilerplate_summary = triage_boilerplate_deterministically()
     print(f"BOILERPLATE: processed={boilerplate_summary['processed']} "
