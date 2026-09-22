@@ -8,7 +8,8 @@ with the current review-reparse version are excluded from future jobs.
 import os
 from uuid import uuid4
 
-from app.drafts.backfill import create_job
+from app.drafts.backfill import REVIEW_REPARSE_VERSION, create_job
+from app.email_parsing.provenance import CORRECTION_EXTRACTORS
 from app.drafts.review_rules import reconcile_review_status
 from app.runtime.db import cursor, init_schema
 
@@ -24,6 +25,20 @@ def main() -> int:
         existing = cur.fetchone()
     if existing:
         print(f"review_reparse_not_queued active_job={existing['job_id']} status={existing['status']}")
+        return 0
+
+    with cursor() as cur:
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM drafts d WHERE d.status='needs_review' "
+            "AND d.draft_type IN ('draft_job_requirement','draft_hotlist') "
+            "AND COALESCE(d.metadata->>'review_reparse_version','') <> %s "
+            "AND NOT EXISTS (SELECT 1 FROM field_provenance fp WHERE fp.parse_run_id=d.draft_id::text "
+            "AND fp.extractor=ANY(%s))",
+            (REVIEW_REPARSE_VERSION, list(CORRECTION_EXTRACTORS)),
+        )
+        eligible = cur.fetchone()['n']
+    if not eligible:
+        print('review_reparse_not_queued eligible=0')
         return 0
 
     limit = int(os.getenv('HERMES_DAILY_REVIEW_REPARSE_LIMIT', '2000'))
