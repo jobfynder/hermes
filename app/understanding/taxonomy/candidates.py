@@ -136,7 +136,8 @@ _NOISE_VERB_START_RE = re.compile(
     r"improve|support|provide|maintain|coordinate|design|implement|"
     r"conduct|perform|monitor|assist|lead|work|collaborate|deliver|"
     r"analyze|analyse|troubleshoot|configure|deploy|write|document|"
-    r"partner|engage|own|define|establish|execute|oversee)\b"
+    r"partner|engage|own|define|establish|execute|oversee|install|"
+    r"validated?|tracks?|documents?|follows?|managing|evaluate|remain)\b"
 )
 
 _NOISE_TABLE_ROW_RE = re.compile(
@@ -206,6 +207,16 @@ def _is_noise_skill_term(term: str) -> bool:
 
     if "\xa0" in stripped or "@" in stripped or "http" in stripped.lower():
         return True
+    if "\n" in stripped or "\r" in stripped or re.match(r"^[•●▪⦁]", stripped):
+        return True
+    if re.fullmatch(r"\d+(?:\.\d+)?x?|\d+\+?\s*(?:y|yr|yrs|years?)", stripped, re.I):
+        return True
+    if re.search(r"(?i)\b[a-z0-9-]+\.(?:com|net|org|io)\b|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b", stripped):
+        return True
+    if re.match(r"(?i)^(?:working )?knowledge of\b|^experience (?:applying|with|in)\b|"
+                r"^bachelor(?:'s|’s)? degree\b|^company locations?\b|^industries?\s*:|"
+                r"^looking for\b|^be able to\b|^day to day job duties\b", stripped):
+        return True
     if stripped.count("(") != stripped.count(")"):
         return True
     if _NOISE_TABLE_ROW_RE.match(stripped):
@@ -236,7 +247,7 @@ def _is_noise_job_title(term: str) -> bool:
     words = _NOISE_WORD_RE.findall(stripped)
     word_lc = [w.lower() for w in words]
 
-    if "\xa0" in stripped or "@" in stripped or "http" in stripped.lower():
+    if "\xa0" in stripped or "\n" in stripped or "\r" in stripped or "@" in stripped or "http" in stripped.lower():
         return True
     if _NOISE_TABLE_ROW_RE.match(stripped):
         return True

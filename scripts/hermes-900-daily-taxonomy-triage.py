@@ -219,7 +219,9 @@ def triage_taxonomy_deterministically(signal_type: str) -> dict:
     candidates.sort(key=lambda c: c["first_seen_at"])
     reject_ids = []
     for candidate in candidates:
-        term = re.sub(r"\s+", " ", candidate["term"] or "").strip()
+        # Preserve embedded newlines/non-breaking spaces: those are themselves
+        # deterministic evidence that an old queued value is a parser artifact.
+        term = (candidate["term"] or "").strip()
         if taxonomy_candidate_noise_reason(signal_type, term):
             reject_ids.append(candidate["id"])
     reject_ids = reject_ids[:MAX_PER_RUN]

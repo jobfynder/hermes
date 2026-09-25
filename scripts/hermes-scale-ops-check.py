@@ -88,10 +88,20 @@ def test_title_llm_threshold():
                 os.environ[key] = value
 
 
+def test_generic_candidate_blocking():
+    reason = candidates.taxonomy_candidate_noise_reason
+    require(reason("skill", "Knowledge of API Gateway"), "generic knowledge phrase must be blocked")
+    require(reason("skill", "⦁ Pandas 2.x"), "bullet-list artifact must be blocked")
+    require(reason("skill", "14Y"), "year-count artifact must be blocked")
+    require(not reason("skill", "AWS MSK"), "specific technology must remain eligible")
+    require(reason("job_title", "Y\nREMOTE\n19\nTABLEAU DEVELOPER"), "table title artifact must be blocked")
+
+
 def main():
     test_sender_domain_company_fallback()
     test_review_filters()
     test_title_llm_threshold()
+    test_generic_candidate_blocking()
     print("HERMES scale operations check PASSED")
 
 
