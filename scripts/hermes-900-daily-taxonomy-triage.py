@@ -217,12 +217,12 @@ def triage_taxonomy_deterministically(signal_type: str) -> dict:
     candidates = [c for c in list_taxonomy_candidates(status="pending")
                   if c["signal_type"] == signal_type]
     candidates.sort(key=lambda c: c["first_seen_at"])
-    candidates = candidates[:MAX_PER_RUN]
     reject_ids = []
     for candidate in candidates:
         term = re.sub(r"\s+", " ", candidate["term"] or "").strip()
         if taxonomy_candidate_noise_reason(signal_type, term):
             reject_ids.append(candidate["id"])
+    reject_ids = reject_ids[:MAX_PER_RUN]
     rejected = 0
     if reject_ids:
         result = bulk_reject_taxonomy_candidates(reject_ids, reviewed_by="hermes-daily-deterministic")

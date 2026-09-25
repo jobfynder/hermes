@@ -209,6 +209,7 @@ def sync_company_batch(limit=100):
                 SELECT company_label FROM company_observations o WHERE o.company_id=c.company_id
                 GROUP BY company_label
                 ORDER BY bool_or(method IN ('human_edited','reviewer_correction','recruiter_correction')) DESC,
+                    bool_or(method <> 'sender_domain') DESC,
                     count(*) DESC,max(observed_at) DESC,company_label LIMIT 1)
                 WHERE c.company_id=ANY(%s) AND c.verification_status='unverified'
                 AND EXISTS(SELECT 1 FROM company_observations o WHERE o.company_id=c.company_id)""",(list(affected),))
