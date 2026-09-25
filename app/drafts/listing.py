@@ -11,7 +11,9 @@ TITLE = f"""CASE
     ELSE COALESCE(title,'(untitled)') END"""
 
 
-def list_draft_page(page=1, page_size=50, status=None, draft_type=None, search='', include_duplicates=False, review_warning=None):
+def list_draft_page(page=1, page_size=50, status=None, draft_type=None, search='', include_duplicates=False,
+                    review_warning=None, date_window=None, channel=None, sender_domain='',
+                    confidence_min=None, confidence_max=None, sort='recent'):
     if page < 1 or not 1 <= page_size <= 200:
         raise ValueError('Invalid pagination')
     base = 'TRUE' if include_duplicates else "COALESCE(metadata->>'exact_content_duplicate_of','')=''"
@@ -26,6 +28,26 @@ def list_draft_page(page=1, page_size=50, status=None, draft_type=None, search='
     if review_warning:
         conditions.append("EXISTS(SELECT 1 FROM jsonb_array_elements(COALESCE(payload->'structured_data'->'email_parsing'->'records','[]'::jsonb)) r WHERE COALESCE(r->'warnings','[]'::jsonb) ? %s)")
         params.append(review_warning)
+    if date_window == 'today':
+        conditions.append("created_at >= date_trunc('day', now())")
+    elif date_window in ('7d', '30d'):
+        conditions.append("created_at >= now() - (%s * interval '1 day')")
+        params.append(int(date_window[:-1]))
+    elif date_window == 'older30':
+        conditions.append("created_at < now() - interval '30 days'")
+    if channel:
+        conditions.append('channel=%s')
+        params.append(channel)
+    sender_domain = sender_domain.strip().lower()
+    if sender_domain:
+        conditions.append("lower(split_part(metadata->'sender'->>'email','@',2))=%s")
+        params.append(sender_domain)
+    if confidence_min is not None:
+        conditions.append('confidence >= %s')
+        params.append(confidence_min)
+    if confidence_max is not None:
+        conditions.append('confidence <= %s')
+        params.append(confidence_max)
     search = search.strip()
     if search:
         literal = search.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')
@@ -41,15 +63,20 @@ def list_draft_page(page=1, page_size=50, status=None, draft_type=None, search='
             cur.execute(f'SELECT count(*) AS total FROM drafts WHERE {where}',params)
             total = cur.fetchone()['total']
         page = min(page, max(1, math.ceil(total/page_size)))
+        order = {
+            'recent':'created_at DESC,draft_id DESC', 'oldest':'created_at ASC,draft_id ASC',
+            'confidence_low':'confidence ASC,created_at DESC', 'confidence_high':'confidence DESC,created_at DESC',
+        }.get(sort, 'created_at DESC,draft_id DESC')
         cur.execute(f"""WITH selected AS MATERIALIZED (
-            SELECT draft_id,draft_type,status,confidence,created_at,metadata,source_message_id,title,payload
-            FROM drafts WHERE {where} ORDER BY created_at DESC,draft_id DESC LIMIT %s OFFSET %s
+            SELECT draft_id,draft_type,status,confidence,created_at,metadata,source_message_id,title,payload,channel
+            FROM drafts WHERE {where} ORDER BY {order} LIMIT %s OFFSET %s
         ) SELECT draft_id,draft_type,status,confidence,created_at,source_message_id,
+            channel,
             ({TITLE}) AS display_title,
             jsonb_build_object('sender',jsonb_build_object('email',metadata->'sender'->>'email'),
                 'original_sender_candidate',jsonb_build_object('email',metadata->'original_sender_candidate'->>'email')) AS metadata,
             COALESCE(metadata->>'exact_content_duplicate_of','')<>'' AS is_duplicate
-            FROM selected ORDER BY created_at DESC,draft_id DESC""", [*params,page_size,(page-1)*page_size])
+            FROM selected ORDER BY {order}""", [*params,page_size,(page-1)*page_size])
         items = cur.fetchall()
     for item in items:
         item['draft_id'] = str(item['draft_id'])

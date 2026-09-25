@@ -152,8 +152,8 @@ _SYSTEM_PROMPT = (
     "You classify IT/technical staffing job titles into a job family for "
     "a recruiting taxonomy. Given a job title and a list of already-used "
     "family names, pick the SINGLE best-fitting family from that list. "
-    "Only if truly none of them fit, invent a new family name of 1-3 "
-    "words (e.g. 'Cybersecurity'). Return only the family name, nothing "
+    "You must use one of the supplied family names. If none fit, return "
+    "Unclassified. Return only the family name, nothing "
     "else -- no punctuation, no explanation, no quotation marks."
 )
 
@@ -188,7 +188,9 @@ def classify_job_title_family(title: str, known_families: list[str], *, allow_ll
         return "Unclassified", "none"
 
     family = (output or "").strip().strip('"').strip(".")
-    return (family, "llm") if family else ("Unclassified", "none")
+    known_by_key = {item.casefold(): item for item in known_families}
+    resolved = known_by_key.get(family.casefold())
+    return (resolved, "llm") if resolved else ("Unclassified", "none")
 
 
 # Words that describe seniority/level rather than the role itself --

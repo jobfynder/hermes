@@ -26,7 +26,7 @@ def main() -> None:
 
     allow_llm = (os.getenv("HERMES_SKILL_DESCRIPTION_LLM_FALLBACK_ENABLED", "false").lower()
                  in {"1", "true", "yes"} and litellm_configured())
-    llm_limit = int(os.getenv("HERMES_DESCRIPTION_LLM_MAX_PER_RUN", "100"))
+    llm_limit = int(os.getenv("HERMES_DESCRIPTION_LLM_MAX_PER_RUN", "200"))
     llm_attempts = 0
 
     for entry in missing:

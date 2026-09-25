@@ -46,6 +46,7 @@ export interface DraftSummaryEntry {
   source_message_id: string | null
   display_title: string
   is_duplicate: boolean
+  channel?: string | null
 }
 
 export interface DraftMetadata {

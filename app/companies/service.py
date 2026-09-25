@@ -30,7 +30,23 @@ def corporate_domain(value):
 def _text(value):
     return re.sub(r'\s+',' ',str(value or '')).strip()
 
-PROJECTION_VERSION = 'company_directory_v3'
+PROJECTION_VERSION = 'company_directory_v4'
+
+def _sender_domain_observation(row, jobs):
+    """Represent a corporate sender when its signature has no company name."""
+    sender = ((row.get('metadata') or {}).get('sender') or {})
+    email = _text(sender.get('email')).lower()
+    if not re.fullmatch(r'[^\s@]+@[^\s@]+', email):
+        return None
+    domain = corporate_domain(email.rsplit('@', 1)[-1])
+    if not domain:
+        return None
+    return {
+        'domain': domain, 'name': domain, 'contact_email': email,
+        'contact_name': _text(sender.get('sender_name')) or None,
+        'website': None, 'phone': None, 'location': None,
+        'confidence': 0.55, 'method': 'sender_domain', 'jobs': jobs,
+    }
 
 def normalize_company_name(value):
     name = _text(value)
@@ -69,8 +85,32 @@ def extract_company(row):
         if recovered_name:
             contact = recovered_contact
             name = recovered_name
+    jobs=[]
+    for record in (structured.get('email_parsing') or {}).get('records') or []:
+        if record.get('record_type') != 'job_requirement' or not record.get('job_title'):
+            continue
+        title=_text(record.get('job_title'))
+        description=_text(record.get('job_description'))
+        jobs.append({'title':title,'location':_text(record.get('location')),
+                     'named_client':_text(record.get('company')),
+                     'requires_review':bool(record.get('requires_review')),
+                     '_identity':[title.lower(),_text(record.get('company')).lower(),
+                                  _text(record.get('location')).lower(),
+                                  _text(record.get('employment_type')).lower(),description.lower()],
+                     '_description_len':len(description),
+                     '_source_section':str(record.get('source_section',len(jobs)))})
     if not name:
-        return None, 'company_name_missing_or_ambiguous'
+        fallback = _sender_domain_observation(row, jobs)
+        if not fallback:
+            return None, 'company_name_missing_or_ambiguous'
+        for job in fallback['jobs']:
+            identity=[fallback['domain'], *job.pop('_identity')]
+            if job.pop('_description_len') < 40:
+                identity.extend([str(row['draft_id']), job.pop('_source_section')])
+            else:
+                job.pop('_source_section')
+            job['key']=hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+        return fallback, 'linked_sender_domain'
     # Only a signature contact is company evidence; relay transport senders
     # and job-record company fields can identify a different end client.
     email=field('email').lower()
@@ -86,25 +126,29 @@ def extract_company(row):
             domain = website_domain
             email = None  # A website does not establish a freemail contact's affiliation.
         else:
-            return None, 'corporate_signature_email_missing'
+            fallback = _sender_domain_observation(row, jobs)
+            if not fallback:
+                return None, 'corporate_signature_email_missing'
+            fallback['name'] = name
+            for job in fallback['jobs']:
+                identity=[fallback['domain'], *job.pop('_identity')]
+                if job.pop('_description_len') < 40:
+                    identity.extend([str(row['draft_id']), job.pop('_source_section')])
+                else:
+                    job.pop('_source_section')
+                job['key']=hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+            return fallback, 'linked_sender_domain'
     if website_domain and website_domain != domain:
         website=None
     elif not website_domain:
         website=None
-    jobs=[]
-    for record in (structured.get('email_parsing') or {}).get('records') or []:
-        if record.get('record_type') != 'job_requirement' or not record.get('job_title'):
-            continue
-        title=_text(record.get('job_title'))
-        description=_text(record.get('job_description'))
-        identity=[domain,title.lower(),_text(record.get('company')).lower(),_text(record.get('location')).lower(),_text(record.get('employment_type')).lower(),description.lower()]
-        # Insufficient text must not collapse unrelated same-title jobs.
-        if len(description)<40:
-            identity.extend([str(row['draft_id']),str(record.get('source_section',len(jobs)))])
-        jobs.append({'key':hashlib.sha256(json.dumps(identity).encode()).hexdigest(),
-                     'title':title,'location':_text(record.get('location')),
-                     'named_client':_text(record.get('company')),
-                     'requires_review':bool(record.get('requires_review'))})
+    for job in jobs:
+        identity=[domain, *job.pop('_identity')]
+        if job.pop('_description_len') < 40:
+            identity.extend([str(row['draft_id']), job.pop('_source_section')])
+        else:
+            job.pop('_source_section')
+        job['key']=hashlib.sha256(json.dumps(identity).encode()).hexdigest()
     company_field=contact.get('company_name') or {}
     return {'domain':domain,'name':name,'contact_email':email,'contact_name':field('full_name') or None,
             'website':website,'phone':field('phone') or field('mobile') or None,

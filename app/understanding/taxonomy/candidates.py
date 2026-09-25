@@ -17,6 +17,7 @@ taxonomy-candidates admin endpoints (app/routers/taxonomy_admin.py).
 from __future__ import annotations
 
 import json
+import os
 import re
 from functools import lru_cache
 
@@ -251,6 +252,15 @@ def _is_noise_job_title(term: str) -> bool:
         return True
 
     return _noise_looks_like_person_name(words)
+
+
+def taxonomy_candidate_noise_reason(signal_type: str, term: str) -> str | None:
+    """Public, conservative decision used by intake and scheduled cleanup."""
+    if signal_type == "skill":
+        return "invalid_skill_shape" if _is_noise_skill_term(term) else None
+    if signal_type == "job_title":
+        return "invalid_job_title_shape" if _is_noise_job_title(term) else None
+    return None
 
 
 def _candidate_terms(section_text: str | None) -> list[str]:
@@ -816,9 +826,9 @@ def auto_classify_unclassified_job_titles() -> dict:
     """Runs every currently family="Unclassified" canonical title through
     classify_job_title_family and applies whatever it could place in one
     write -- the Job titles page's "Auto-classify unclassified" bulk
-    action. This bulk maintenance path is deliberately deterministic:
-    unmatched titles stay unclassified for review instead of spending
-    model tokens or guessing.
+    action. Deterministic rules always run first. The bounded LLM fallback
+    only activates when the remaining queue exceeds the configured threshold,
+    and may only choose an existing family.
     """
     entries = get_job_title_entries()
     known_families = sorted({(e.get("family") or "Unclassified") for e in entries} - {"Unclassified"})
@@ -837,12 +847,33 @@ def auto_classify_unclassified_job_titles() -> dict:
         if method != "none":
             family_by_title[title] = family
 
+    remaining = [title for title in unclassified_titles if title not in family_by_title]
+    llm_enabled = os.getenv("HERMES_JOB_TITLE_LLM_FALLBACK_ENABLED", "false").lower() in {"1", "true", "yes"}
+    threshold = max(0, int(os.getenv("HERMES_JOB_TITLE_LLM_THRESHOLD", "100")))
+    llm_limit = max(0, int(os.getenv("HERMES_JOB_TITLE_LLM_MAX_PER_RUN", "100")))
+    llm_attempted = 0
+    llm_classified = 0
+    if llm_enabled and len(remaining) > threshold:
+        for title in remaining[:min(llm_limit, len(remaining) - threshold)]:
+            llm_attempted += 1
+            try:
+                family, method = classify_job_title_family(title, known_families, allow_llm=True)
+            except Exception:  # noqa: BLE001
+                family, method = "Unclassified", "none"
+            if method == "llm":
+                family_by_title[title] = family
+                llm_classified += 1
+
     write_result = bulk_apply_job_title_families(family_by_title) if family_by_title else {"updated_count": 0}
 
     return {
         "checked_count": len(unclassified_titles),
         "classified_count": write_result["updated_count"],
         "still_unclassified_count": len(unclassified_titles) - write_result["updated_count"],
+        "llm_enabled": llm_enabled,
+        "llm_threshold": threshold,
+        "llm_attempted": llm_attempted,
+        "llm_classified": llm_classified,
         "results": results,
     }
 

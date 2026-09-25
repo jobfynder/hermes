@@ -44,6 +44,7 @@ from app.understanding.taxonomy.candidates import (
     bulk_approve_taxonomy_candidates,
     bulk_reject_taxonomy_candidates,
     list_taxonomy_candidates,
+    taxonomy_candidate_noise_reason,
 )
 from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import get_canonical_skill_entries, set_skill_description
@@ -51,7 +52,7 @@ from app.understanding.taxonomy.loader import get_canonical_skill_entries, set_s
 MODEL = os.getenv("HERMES_PROMPT_DEFAULT_MODEL", "anthropic/claude-haiku-4-5")
 BATCH_SIZE = 40
 MAX_PER_RUN = int(os.getenv("HERMES_TAXONOMY_TRIAGE_MAX_PER_RUN", "500"))
-DESCRIPTION_LLM_LIMIT = int(os.getenv("HERMES_DESCRIPTION_LLM_MAX_PER_RUN", "100"))
+DESCRIPTION_LLM_LIMIT = int(os.getenv("HERMES_DESCRIPTION_LLM_MAX_PER_RUN", "200"))
 
 SKILL_SYSTEM_PROMPT = (
     "You are cleaning up an IT staffing recruitment platform's SKILLS taxonomy. "
@@ -161,10 +162,7 @@ def classify_batch(terms: list[str], system_prompt: str) -> list[str]:
 
 def triage(signal_type: str, system_prompt: str) -> dict:
     if signal_type in {"skill", "job_title"}:
-        # Skill additions require explicit review. No classifier or glossary
-        # model calls for automated skill promotion.
-        return {"processed": 0, "approved": 0, "rejected": 0,
-                "left_for_review": 0, "skipped_reason": "automatic_taxonomy_llm_triage_disabled"}
+        return triage_taxonomy_deterministically(signal_type)
     candidates = list_taxonomy_candidates(status="pending")
     candidates = [c for c in candidates if c["signal_type"] == signal_type]
     candidates.sort(key=lambda c: c["first_seen_at"])
@@ -212,6 +210,25 @@ def triage(signal_type: str, system_prompt: str) -> dict:
         "rejected": rejected,
         "left_for_review": review_count,
     }
+
+
+def triage_taxonomy_deterministically(signal_type: str) -> dict:
+    """Reject only provable noise. Never auto-promote an unknown term."""
+    candidates = [c for c in list_taxonomy_candidates(status="pending")
+                  if c["signal_type"] == signal_type]
+    candidates.sort(key=lambda c: c["first_seen_at"])
+    candidates = candidates[:MAX_PER_RUN]
+    reject_ids = []
+    for candidate in candidates:
+        term = re.sub(r"\s+", " ", candidate["term"] or "").strip()
+        if taxonomy_candidate_noise_reason(signal_type, term):
+            reject_ids.append(candidate["id"])
+    rejected = 0
+    if reject_ids:
+        result = bulk_reject_taxonomy_candidates(reject_ids, reviewed_by="hermes-daily-deterministic")
+        rejected = result["rejected_count"]
+    return {"processed": len(candidates), "approved": 0, "rejected": rejected,
+            "left_for_review": len(candidates) - rejected}
 
 
 _SAFE_BOILERPLATE_EXACT = {
@@ -322,7 +339,8 @@ def main() -> int:
     family_summary = auto_classify_unclassified_job_titles()
     print(f"TITLE FAMILIES: checked={family_summary['checked_count']} "
           f"classified={family_summary['classified_count']} "
-          f"still_unclassified={family_summary['still_unclassified_count']} method=deterministic")
+          f"still_unclassified={family_summary['still_unclassified_count']} "
+          f"llm_attempted={family_summary['llm_attempted']} llm_classified={family_summary['llm_classified']}")
 
     boilerplate_summary = triage_boilerplate_deterministically()
     print(f"BOILERPLATE: processed={boilerplate_summary['processed']} "
