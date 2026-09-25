@@ -12,6 +12,7 @@ from app.claim.service import get_claim_by_draft
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
 from app.drafts.service import (
     apply_field_corrections,
+    bulk_reject_draft_objects,
     backfill_full_reparse,
     backfill_signature_company_fill,
     delete_draft_object,
@@ -199,13 +200,8 @@ def bulk_manage_drafts(body: BulkDraftRequest, _user: dict = Depends(require_per
         from app.drafts.review_rules import reconcile_review_status
         result = reconcile_review_status(dry_run=False, limit=len(ids), draft_ids=ids)
         return {'action':'reconcile','processed_count':result['resolved_count'],'failed':[]}
-    processed = 0
-    failed = []
-    for draft_id in ids:
-        result = reject_draft_object(draft_id, body.reason or 'bulk_review_rejection')
-        if result.status == 'rejected': processed += 1
-        else: failed.append({'draft_id':draft_id,'errors':result.errors})
-    return {'action':'reject','processed_count':processed,'failed':failed}
+    result = bulk_reject_draft_objects(ids, body.reason or 'bulk_review_rejection')
+    return {'action':'reject', **result}
 
 
 @router.get("/summary", response_model=list[DraftSummaryEntry])

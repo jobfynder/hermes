@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from app.companies.service import extract_company
 from app.drafts.listing import list_draft_page
+from app.drafts.service import bulk_reject_draft_objects
 from app.runtime.db import cursor, init_schema
 from app.understanding.taxonomy import candidates
 
@@ -50,6 +51,8 @@ def test_review_filters():
     result = list_draft_page(channel="email", sender_domain=wanted_domain, confidence_max=0.69)
     require(result["total_count"] == 1, f"filters returned {result['total_count']} rows")
     require(result["items"][0]["draft_id"] == str(wanted), "filters returned the wrong draft")
+    rejected = bulk_reject_draft_objects([str(wanted), str(other)], "test batch")
+    require(rejected["processed_count"] == 2 and not rejected["failed"], "bulk reject did not update one batch")
 
 
 def test_title_llm_threshold():
