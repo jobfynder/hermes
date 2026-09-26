@@ -296,6 +296,29 @@ ON taxonomy_candidates (signal_type, (regexp_replace(normalized_term, '[^a-z0-9+
 -- CREATE TABLE, kept idempotent the same way (safe to run every startup).
 ALTER TABLE taxonomy_candidates ADD COLUMN IF NOT EXISTS reviewed_by TEXT;
 
+-- Requests from authenticated Jobfynder users to enrich an existing skill
+-- card. These are review inputs only: this table is never read by the runtime
+-- taxonomy loader and therefore cannot change matching or published cards.
+CREATE TABLE IF NOT EXISTS taxonomy_enrichment_requests (
+    id                  BIGSERIAL PRIMARY KEY,
+    skill_id            TEXT NOT NULL,
+    canonical_name      TEXT NOT NULL,
+    requested_fields    JSONB NOT NULL DEFAULT '[]',
+    notes               TEXT,
+    source_domain       TEXT,
+    request_refs        JSONB NOT NULL DEFAULT '[]',
+    occurrence_count    INTEGER NOT NULL DEFAULT 1,
+    status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    first_seen_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_seen_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    reviewed_at         TIMESTAMPTZ,
+    reviewed_by         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_taxonomy_enrichment_requests_status
+ON taxonomy_enrichment_requests (status, last_seen_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_taxonomy_enrichment_requests_pending_skill
+ON taxonomy_enrichment_requests (skill_id) WHERE status = 'pending';
+
 -- 'boilerplate_line' added after the table above already existed in
 -- production, so the CHECK constraint is dropped and re-added rather
 -- than part of the original CREATE TABLE -- idempotent, safe to run
