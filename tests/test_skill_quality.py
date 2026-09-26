@@ -42,4 +42,5 @@ class SkillQualityTests(unittest.TestCase):
         with patch.object(module,'classify_batch') as llm,patch.object(module,'list_taxonomy_candidates') as listing:
             result=module.triage('skill','ignored')
             self.assertEqual(result['approved'],0)
-            llm.assert_not_called();listing.assert_not_called()
+            llm.assert_not_called()
+            listing.assert_called_once_with(status='pending')
