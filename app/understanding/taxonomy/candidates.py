@@ -412,7 +412,7 @@ def _find_loosely_matching_pending_candidate(cur, signal_type: str, term: str) -
     # Match the partial expression index, fetching only the selected row's
     # JSON fields instead of decoding every pending candidate for every line.
     cur.execute(
-        "SELECT id, term, normalized_term, distinct_senders, sample_draft_ids FROM taxonomy_candidates "
+        "SELECT id, term, normalized_term, distinct_senders, sample_draft_ids, status, occurrence_count FROM taxonomy_candidates "
         "WHERE signal_type = %s AND coalesce(reviewed_by, '') NOT LIKE 'hermes-dedup:%%' "
         "AND regexp_replace(normalized_term, '[^a-z0-9+#]', '', 'g') = %s "
         "ORDER BY CASE status WHEN 'approved' THEN 0 WHEN 'rejected' THEN 1 ELSE 2 END, id LIMIT 1 FOR UPDATE",
@@ -427,7 +427,8 @@ def _upsert_candidate(
     term: str,
     draft_id: str | None,
     sender_domain: str | None,
-) -> None:
+    dedupe_request_ref: bool = False,
+) -> dict:
     """Shared upsert for both signal types -- bumps occurrence_count /
     distinct_senders / sample_draft_ids on a repeat sighting rather than
     creating a duplicate row. Matches on the exact normalized term first;
@@ -442,7 +443,7 @@ def _upsert_candidate(
     with cursor() as cur:
         _lock_candidate_identity(cur, signal_type, term)
         cur.execute(
-            "SELECT id, distinct_senders, sample_draft_ids FROM taxonomy_candidates "
+            "SELECT id, distinct_senders, sample_draft_ids, status, occurrence_count FROM taxonomy_candidates "
             "WHERE signal_type = %s AND normalized_term = %s AND coalesce(reviewed_by, '') NOT LIKE 'hermes-dedup:%%' FOR UPDATE",
             (signal_type, normalized_term),
         )
@@ -454,20 +455,27 @@ def _upsert_candidate(
                 senders.add(sender_domain)
 
             sample_ids = list(existing["sample_draft_ids"] or [])
+            if dedupe_request_ref and draft_id and draft_id in sample_ids:
+                return {
+                    "id": existing["id"],
+                    "status": existing["status"],
+                    "occurrence_count": existing["occurrence_count"],
+                }
             if draft_id and draft_id not in sample_ids and len(sample_ids) < 10:
                 sample_ids.append(draft_id)
 
             cur.execute(
                 "UPDATE taxonomy_candidates SET occurrence_count = occurrence_count + 1, "
                 "distinct_senders = %s, sample_draft_ids = %s, last_seen_at = now() "
-                "WHERE id = %s",
+                "WHERE id = %s RETURNING id, status, occurrence_count",
                 (json.dumps(sorted(senders)), json.dumps(sample_ids), existing["id"]),
             )
+            row = cur.fetchone()
         else:
             cur.execute(
                 "INSERT INTO taxonomy_candidates "
                 "(signal_type, term, normalized_term, occurrence_count, distinct_senders, sample_draft_ids) "
-                "VALUES (%s, %s, %s, 1, %s, %s)",
+                "VALUES (%s, %s, %s, 1, %s, %s) RETURNING id, status, occurrence_count",
                 (
                     signal_type,
                     term,
@@ -476,6 +484,37 @@ def _upsert_candidate(
                     json.dumps([draft_id] if draft_id else []),
                 ),
             )
+            row = cur.fetchone()
+        return dict(row)
+
+
+def queue_user_skill_candidate(
+    term: str,
+    request_ref: str | None = None,
+    source_domain: str | None = None,
+) -> dict:
+    """Queue one explicit user suggestion without publishing it.
+
+    Uses the same normalization, noise rejection, loose deduplication and
+    human moderation table as candidates learned from requirements. A browser
+    request can increase evidence for a candidate; it can never approve it.
+    """
+    cleaned = " ".join((term or "").strip().split())
+    if len(cleaned) < 2 or len(cleaned) > 100:
+        raise ValueError("Skill term must contain 2 to 100 characters")
+    if _is_noise_skill_term(cleaned):
+        raise ValueError("The suggested term does not look like a skill")
+    if normalize_skill(cleaned).get("matched") is True:
+        return {"outcome": "already_known", "candidate_id": None, "status": "approved"}
+    row = _upsert_candidate(
+        "skill", cleaned, request_ref, source_domain, dedupe_request_ref=True
+    )
+    return {
+        "outcome": "queued" if row["status"] == "pending" else "already_reviewed",
+        "candidate_id": row["id"],
+        "status": row["status"],
+        "occurrence_count": row["occurrence_count"],
+    }
 
 
 def record_taxonomy_candidates(

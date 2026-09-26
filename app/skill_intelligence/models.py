@@ -7,6 +7,14 @@ from pydantic import BaseModel, Field
 
 SkillContext = Literal["required", "preferred", "mentioned", "excluded"]
 MatchType = Literal["canonical", "alias", "normalized", "fuzzy", "unknown"]
+SkillSuggestionType = Literal["new_skill", "enrichment"]
+EnrichmentField = Literal[
+    "definition",
+    "recruiter_explanation",
+    "aliases",
+    "relationships",
+    "related_roles",
+]
 
 
 class ResolveBatchRequest(BaseModel):
@@ -16,6 +24,25 @@ class ResolveBatchRequest(BaseModel):
 class RequirementIntelligenceRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=100_000)
     include_unknown_terms: bool = False
+
+
+class SkillSuggestionRequest(BaseModel):
+    suggestion_type: SkillSuggestionType
+    term: str | None = Field(default=None, max_length=100)
+    skill_id: str | None = Field(default=None, pattern=r"^skill_[0-9a-f]{32}$")
+    requested_fields: list[EnrichmentField] = Field(default_factory=list, max_length=5)
+    notes: str | None = Field(default=None, max_length=500)
+    source_domain: str | None = Field(default=None, max_length=253)
+    request_ref: str | None = Field(default=None, max_length=128)
+
+
+class SkillSuggestionResponse(BaseModel):
+    result_version: str = "hermes_skill_suggestion_v1"
+    suggestion_type: SkillSuggestionType
+    outcome: Literal["queued", "already_known", "already_reviewed"]
+    candidate_id: int | None = None
+    status: str
+    occurrence_count: int | None = None
 
 
 class SkillRelationshipDTO(BaseModel):

@@ -7,6 +7,8 @@ from app.skill_intelligence.models import (
     ResolveBatchRequest,
     ResolveBatchResponse,
     SkillCardDTO,
+    SkillSuggestionRequest,
+    SkillSuggestionResponse,
 )
 from app.skill_intelligence.service import (
     extract_requirement_intelligence,
@@ -14,6 +16,7 @@ from app.skill_intelligence.service import (
     resolve_batch,
     search,
 )
+from app.skill_intelligence.suggestions import submit_skill_suggestion
 
 
 router = APIRouter(prefix="/skill-intelligence", tags=["Skill Intelligence"])
@@ -53,3 +56,17 @@ def extract_requirement_skills(
     user: dict = Depends(require_permission("understanding:parse")),
 ):
     return extract_requirement_intelligence(request.text, request.include_unknown_terms)
+
+
+@router.post("/suggestions", response_model=SkillSuggestionResponse)
+def create_skill_suggestion(
+    request: SkillSuggestionRequest,
+    user: dict = Depends(require_permission("understanding:parse")),
+):
+    """Add review evidence only; never mutate the canonical taxonomy."""
+    try:
+        return submit_skill_suggestion(**request.model_dump())
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
