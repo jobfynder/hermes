@@ -26,6 +26,10 @@ from app.understanding.taxonomy.loader import (
     update_canonical_job_title,
     update_canonical_skill,
 )
+from app.skill_intelligence.suggestions import (
+    list_enrichment_requests,
+    review_enrichment_request,
+)
 
 
 class BlocklistEntry(BaseModel):
@@ -78,6 +82,10 @@ class CandidateActionResult(BaseModel):
     reason: str | None = None
 
 
+class EnrichmentReviewRequest(BaseModel):
+    decision: str
+
+
 router = APIRouter(tags=["Moderation"])
 
 
@@ -113,6 +121,31 @@ def get_taxonomy_candidates(
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> list[dict]:
     return list_taxonomy_candidates(status=status)
+
+
+@router.get("/taxonomy-enrichment-requests")
+def get_taxonomy_enrichment_requests(
+    status: str = "pending",
+    _user: dict = Depends(require_permission("drafts:read")),
+):
+    try:
+        return list_enrichment_requests(status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/taxonomy-enrichment-requests/{request_id}/review")
+def review_taxonomy_enrichment(
+    request_id: int,
+    body: EnrichmentReviewRequest,
+    user: dict = Depends(require_permission("drafts:publish")),
+):
+    try:
+        return review_enrichment_request(request_id, body.decision, user.get("id"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 class EditCandidateRequest(BaseModel):
