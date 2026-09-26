@@ -19,6 +19,12 @@ class TaxonomyPaginationTests(unittest.TestCase):
   with TestClient(app) as client:
    result=client.get('/understanding/taxonomy/skills/page?q=python&page_size=10').json()
    self.assertTrue(all('python' in (' '.join([x['name'],*x.get('aliases',[]),x.get('description') or ''])).lower() for x in result['items']))
+ def test_description_and_recency_filters_are_validated(self):
+  with TestClient(app) as client:
+   missing=client.get('/understanding/taxonomy/skills/page?description=missing&page_size=10').json()
+   self.assertTrue(all(not (item.get('description') or '').strip() for item in missing['items']))
+   self.assertIn('missing_description_count',missing)
+   self.assertEqual(client.get('/understanding/taxonomy/skills/page?recency=invalid').status_code,422)
  def test_oversized_bulk_selection_is_rejected(self):
   with TestClient(app) as client:
    result=client.post('/taxonomy/skills/bulk-delete',json={'names':[f'skill-{i}' for i in range(101)]})

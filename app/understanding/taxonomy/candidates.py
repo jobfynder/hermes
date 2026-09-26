@@ -17,6 +17,7 @@ taxonomy-candidates admin endpoints (app/routers/taxonomy_admin.py).
 from __future__ import annotations
 
 import json
+import os
 import re
 from functools import lru_cache
 
@@ -40,7 +41,7 @@ from app.understanding.taxonomy.loader import (
     normalize_taxonomy_key,
     set_skill_description,
 )
-from app.understanding.taxonomy.title_family_classifier import classify_job_title_family
+from app.understanding.taxonomy.title_family_classifier import classify_job_title_family, looks_like_non_title
 
 # Common non-skill filler that shows up inside skills lists but is not
 # itself a skill -- "Java, Spring, and more", "SQL, etc.", "AWS (required)".
@@ -135,7 +136,8 @@ _NOISE_VERB_START_RE = re.compile(
     r"improve|support|provide|maintain|coordinate|design|implement|"
     r"conduct|perform|monitor|assist|lead|work|collaborate|deliver|"
     r"analyze|analyse|troubleshoot|configure|deploy|write|document|"
-    r"partner|engage|own|define|establish|execute|oversee)\b"
+    r"partner|engage|own|define|establish|execute|oversee|install|"
+    r"validated?|tracks?|documents?|follows?|managing|evaluate|remain)\b"
 )
 
 _NOISE_TABLE_ROW_RE = re.compile(
@@ -205,6 +207,16 @@ def _is_noise_skill_term(term: str) -> bool:
 
     if "\xa0" in stripped or "@" in stripped or "http" in stripped.lower():
         return True
+    if "\n" in stripped or "\r" in stripped or re.match(r"^[•●▪⦁]", stripped):
+        return True
+    if re.fullmatch(r"\d+(?:\.\d+)?x?|\d+\+?\s*(?:y|yr|yrs|years?)", stripped, re.I):
+        return True
+    if re.search(r"(?i)\b[a-z0-9-]+\.(?:com|net|org|io)\b|\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b", stripped):
+        return True
+    if re.match(r"(?i)^(?:working )?knowledge of\b|^experience (?:applying|with|in)\b|"
+                r"^bachelor(?:'s|’s)? degree\b|^company locations?\b|^industries?\s*:|"
+                r"^looking for\b|^be able to\b|^day to day job duties\b", stripped):
+        return True
     if stripped.count("(") != stripped.count(")"):
         return True
     if _NOISE_TABLE_ROW_RE.match(stripped):
@@ -230,10 +242,12 @@ def _is_noise_job_title(term: str) -> bool:
     genuinely can end in a word skills don't, e.g. "...Team Lead").
     """
     stripped = term.strip()
+    if looks_like_non_title(stripped):
+        return True
     words = _NOISE_WORD_RE.findall(stripped)
     word_lc = [w.lower() for w in words]
 
-    if "\xa0" in stripped or "@" in stripped or "http" in stripped.lower():
+    if "\xa0" in stripped or "\n" in stripped or "\r" in stripped or "@" in stripped or "http" in stripped.lower():
         return True
     if _NOISE_TABLE_ROW_RE.match(stripped):
         return True
@@ -249,6 +263,15 @@ def _is_noise_job_title(term: str) -> bool:
         return True
 
     return _noise_looks_like_person_name(words)
+
+
+def taxonomy_candidate_noise_reason(signal_type: str, term: str) -> str | None:
+    """Public, conservative decision used by intake and scheduled cleanup."""
+    if signal_type == "skill":
+        return "invalid_skill_shape" if _is_noise_skill_term(term) else None
+    if signal_type == "job_title":
+        return "invalid_job_title_shape" if _is_noise_job_title(term) else None
+    return None
 
 
 def _candidate_terms(section_text: str | None) -> list[str]:
@@ -853,8 +876,9 @@ def auto_classify_unclassified_job_titles() -> dict:
     """Runs every currently family="Unclassified" canonical title through
     classify_job_title_family and applies whatever it could place in one
     write -- the Job titles page's "Auto-classify unclassified" bulk
-    action. Never blocks on a single title's LLM call failing; that
-    title just stays unclassified, same as it already was.
+    action. Deterministic rules always run first. The bounded LLM fallback
+    only activates when the remaining queue exceeds the configured threshold,
+    and may only choose an existing family.
     """
     entries = get_job_title_entries()
     known_families = sorted({(e.get("family") or "Unclassified") for e in entries} - {"Unclassified"})
@@ -865,7 +889,7 @@ def auto_classify_unclassified_job_titles() -> dict:
 
     for title in unclassified_titles:
         try:
-            family, method = classify_job_title_family(title, known_families)
+            family, method = classify_job_title_family(title, known_families, allow_llm=False)
         except Exception:  # noqa: BLE001
             family, method = "Unclassified", "none"
 
@@ -873,12 +897,33 @@ def auto_classify_unclassified_job_titles() -> dict:
         if method != "none":
             family_by_title[title] = family
 
+    remaining = [title for title in unclassified_titles if title not in family_by_title]
+    llm_enabled = os.getenv("HERMES_JOB_TITLE_LLM_FALLBACK_ENABLED", "false").lower() in {"1", "true", "yes"}
+    threshold = max(0, int(os.getenv("HERMES_JOB_TITLE_LLM_THRESHOLD", "100")))
+    llm_limit = max(0, int(os.getenv("HERMES_JOB_TITLE_LLM_MAX_PER_RUN", "100")))
+    llm_attempted = 0
+    llm_classified = 0
+    if llm_enabled and len(remaining) > threshold:
+        for title in remaining[:min(llm_limit, len(remaining) - threshold)]:
+            llm_attempted += 1
+            try:
+                family, method = classify_job_title_family(title, known_families, allow_llm=True)
+            except Exception:  # noqa: BLE001
+                family, method = "Unclassified", "none"
+            if method == "llm":
+                family_by_title[title] = family
+                llm_classified += 1
+
     write_result = bulk_apply_job_title_families(family_by_title) if family_by_title else {"updated_count": 0}
 
     return {
         "checked_count": len(unclassified_titles),
         "classified_count": write_result["updated_count"],
         "still_unclassified_count": len(unclassified_titles) - write_result["updated_count"],
+        "llm_enabled": llm_enabled,
+        "llm_threshold": threshold,
+        "llm_attempted": llm_attempted,
+        "llm_classified": llm_classified,
         "results": results,
     }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { DashboardOverview, FieldAccuracyEntry, RankedCount, SenderIntelligenceEntry } from '../types'
+import type { DashboardOverview, FieldAccuracyEntry, FilteredReportAnalysis, RankedCount, SenderIntelligenceEntry } from '../types'
 
 type Tab = 'overview' | 'ingestion' | 'parser_quality' | 'ai_cost' | 'recruitment' | 'sender' | 'exceptions'
 
@@ -238,6 +238,11 @@ export function ReportsPage({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<Tab>('overview')
+  const [analysis, setAnalysis] = useState<FilteredReportAnalysis | null>(null)
+  const [days, setDays] = useState(7)
+  const [draftType, setDraftType] = useState('')
+  const [status, setStatus] = useState('')
+  const [channel, setChannel] = useState('')
 
   function load() {
     setLoading(true)
@@ -250,6 +255,17 @@ export function ReportsPage({ onBack }: { onBack: () => void }) {
   }
 
   useEffect(load, [])
+  useEffect(() => {
+    const controller = new AbortController()
+    const params = new URLSearchParams({ days: String(days) })
+    if (draftType) params.set('draft_type', draftType)
+    if (status) params.set('status', status)
+    if (channel) params.set('channel', channel)
+    api.getFilteredReportAnalysis(params, controller.signal).then(setAnalysis).catch((err) => {
+      if (!controller.signal.aborted) setError(err.message)
+    })
+    return () => controller.abort()
+  }, [days, draftType, status, channel])
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -274,6 +290,38 @@ export function ReportsPage({ onBack }: { onBack: () => void }) {
           </button>
         </div>
       </header>
+
+      <section className="mb-5 rounded-xl border border-line bg-paper p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-ink-soft">Analyze</span>
+          <select aria-label="Report time window" value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink">
+            <option value={1}>Today</option><option value={7}>Last 7 days</option><option value={30}>Last 30 days</option><option value={90}>Last 90 days</option>
+          </select>
+          <select aria-label="Report record type" value={draftType} onChange={(e) => setDraftType(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink">
+            <option value="">All record types</option><option value="draft_job_requirement">Job requirements</option><option value="draft_hotlist">Hotlists</option><option value="draft_consultant_profile">Consultant profiles</option><option value="draft_recruiter_profile">Recruiter profiles</option><option value="draft_vendor_list">Vendor lists</option><option value="draft_channel_note">Channel notes</option>
+          </select>
+          <select aria-label="Report status" value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink">
+            <option value="">All statuses</option><option value="needs_review">Needs review</option><option value="draft">Ready drafts</option><option value="published">Published</option><option value="spam">Spam</option><option value="rejected">Rejected</option>
+          </select>
+          <select aria-label="Report channel" value={channel} onChange={(e) => setChannel(e.target.value)} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm text-ink">
+            <option value="">All channels</option>{analysis?.available_channels.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          {(draftType || status || channel || days !== 7) && <button onClick={() => { setDays(7); setDraftType(''); setStatus(''); setChannel('') }} className="px-2 py-1 text-xs font-medium text-accent hover:underline">Reset filters</button>}
+        </div>
+        {analysis && <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard label="Matching records" value={analysis.total.toLocaleString()} />
+            <StatCard label="Needs review" value={`${analysis.needs_review_count.toLocaleString()} (${pct(analysis.needs_review_pct)})`} tone={pctTone(100 - (analysis.needs_review_pct ?? 0))} />
+            <StatCard label="Average confidence" value={analysis.avg_confidence === null ? '—' : pct(Math.round(analysis.avg_confidence * 100))} />
+            <StatCard label="Duplicates" value={`${analysis.duplicate_count.toLocaleString()} (${pct(analysis.duplicate_pct)})`} />
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+            <RankedList title="By status" items={Object.entries(analysis.by_status).map(([label,count]) => ({ label: label.replace(/_/g,' '), count }))} />
+            <RankedList title="By record type" items={Object.entries(analysis.by_type).map(([label,count]) => ({ label: label.replace(/^draft_/,'').replace(/_/g,' '), count }))} />
+            <RankedList title="Review reasons" items={analysis.review_reasons.map((item) => ({ label: item.reason.replace(/_/g,' '), count: item.count }))} />
+          </div>
+        </>}
+      </section>
 
       <div className="mb-6 flex flex-wrap gap-1 border-b border-line">
         {TABS.map((t) => (

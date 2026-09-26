@@ -46,6 +46,13 @@ export function DraftListPage({
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null)
   const [showDuplicates, setShowDuplicates] = useState(false)
+  const [dateWindow, setDateWindow] = useState('all')
+  const [channelFilter, setChannelFilter] = useState('all')
+  const [senderDomain, setSenderDomain] = useState('')
+  const [confidenceBand, setConfidenceBand] = useState('all')
+  const [sort, setSort] = useState('recent')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
@@ -72,6 +79,13 @@ export function DraftListPage({
     if (statusFilter !== 'all') params.set('status', statusFilter)
     if (query) params.set('search', query)
     if (warningFilter !== 'all') params.set('review_warning', warningFilter)
+    if (dateWindow !== 'all') params.set('date_window', dateWindow)
+    if (channelFilter !== 'all') params.set('channel', channelFilter)
+    if (senderDomain.trim()) params.set('sender_domain', senderDomain.trim())
+    if (confidenceBand === 'low') params.set('confidence_max', '0.69')
+    if (confidenceBand === 'medium') { params.set('confidence_min', '0.7'); params.set('confidence_max', '0.84') }
+    if (confidenceBand === 'high') params.set('confidence_min', '0.85')
+    params.set('sort', sort)
     setError(null)
     setLoading(true)
     api.listDraftPage(params, controller.signal).then((result) => {
@@ -81,13 +95,14 @@ export function DraftListPage({
       setCounts(result.counts)
       setPage(result.page)
       setLastLoadedAt(new Date())
+      setSelectedIds(new Set())
     }).catch((err) => {
       if (!controller.signal.aborted) setError(err.message ?? 'Failed to load drafts')
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false)
     })
     return () => controller.abort()
-  }, [page, pageSize, typeFilter, statusFilter, warningFilter, query, showDuplicates, refresh])
+  }, [page, pageSize, typeFilter, statusFilter, warningFilter, query, showDuplicates, dateWindow, channelFilter, senderDomain, confidenceBand, sort, refresh])
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -209,7 +224,19 @@ export function DraftListPage({
           <option value="candidate_title_or_skills_missing">Candidate role or skills missing</option>
           <option value="primary_role_or_skills_missing">Primary role or skills missing</option>
         </select>
+        <select aria-label="Received date" value={dateWindow} onChange={e=>{setDateWindow(e.target.value);setPage(1)}} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"><option value="all">Any date</option><option value="today">Today</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option><option value="older30">Older than 30 days</option></select>
+        <select aria-label="Channel" value={channelFilter} onChange={e=>{setChannelFilter(e.target.value);setPage(1)}} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"><option value="all">All channels</option><option value="email">Email</option><option value="api">API</option><option value="telegram">Telegram</option></select>
+        <input aria-label="Sender domain" value={senderDomain} onChange={e=>{setSenderDomain(e.target.value);setPage(1)}} placeholder="Sender domain" className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm" />
+        <select aria-label="Confidence" value={confidenceBand} onChange={e=>{setConfidenceBand(e.target.value);setPage(1)}} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"><option value="all">Any confidence</option><option value="low">Low (&lt;70%)</option><option value="medium">70–84%</option><option value="high">High (85%+)</option></select>
+        <select aria-label="Sort" value={sort} onChange={e=>{setSort(e.target.value);setPage(1)}} className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm"><option value="recent">Newest first</option><option value="oldest">Oldest first</option><option value="confidence_low">Lowest confidence</option><option value="confidence_high">Highest confidence</option></select>
       </div>
+
+      {selectedIds.size > 0 && <div className="mb-4 flex items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3 text-sm">
+        <strong>{selectedIds.size} selected</strong>
+        <button disabled={bulkBusy} onClick={async()=>{setBulkBusy(true);try{const r=await api.bulkManageDrafts([...selectedIds],'reconcile');setResolveMessage(`${r.processed_count} selected records resolved`);load()}catch(err){setResolveMessage(err instanceof Error?err.message:'Bulk action failed')}finally{setBulkBusy(false)}}} className="rounded border border-line px-3 py-1 disabled:opacity-40">Resolve selected</button>
+        <button disabled={bulkBusy} onClick={async()=>{if(!window.confirm(`Reject ${selectedIds.size} selected records?`))return;setBulkBusy(true);try{const r=await api.bulkManageDrafts([...selectedIds],'reject','bulk dashboard review');setResolveMessage(`${r.processed_count} selected records rejected`);load()}catch(err){setResolveMessage(err instanceof Error?err.message:'Bulk action failed')}finally{setBulkBusy(false)}}} className="rounded border border-fail px-3 py-1 text-fail disabled:opacity-40">Reject selected</button>
+        <button onClick={()=>setSelectedIds(new Set())} className="text-ink-soft">Clear</button>
+      </div>}
 
       {error && (
         <div className="mb-4 rounded-lg bg-fail-soft px-4 py-3 text-sm text-fail">{error}</div>
@@ -219,6 +246,7 @@ export function DraftListPage({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
+              <th className="px-4 py-3"><input aria-label="Select page" type="checkbox" checked={pageItems.length>0&&pageItems.every(d=>selectedIds.has(d.draft_id))} onChange={e=>setSelectedIds(e.target.checked?new Set(pageItems.map(d=>d.draft_id)):new Set())}/></th>
               <th className="px-4 py-3 font-medium">Title</th>
               <th className="px-4 py-3 font-medium">Type</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -234,6 +262,7 @@ export function DraftListPage({
                 onClick={() => onSelect(d.draft_id)}
                 className="cursor-pointer border-b border-line last:border-0 hover:bg-paper"
               >
+                <td className="px-4 py-3" onClick={e=>e.stopPropagation()}><input aria-label={`Select ${d.display_title}`} type="checkbox" checked={selectedIds.has(d.draft_id)} onChange={e=>setSelectedIds(current=>{const next=new Set(current);if(e.target.checked)next.add(d.draft_id);else next.delete(d.draft_id);return next})}/></td>
                 <td className="max-w-72 truncate px-4 py-3 font-medium text-ink">
                   {d.display_title}
                   {d.is_duplicate && (
@@ -257,14 +286,14 @@ export function DraftListPage({
             ))}
             {drafts && !loading && totalCount === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-ink-soft">
+                <td colSpan={7} className="px-4 py-10 text-center text-ink-soft">
                   No drafts match these filters.
                 </td>
               </tr>
             )}
             {!drafts && !error && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-ink-soft">
+                <td colSpan={7} className="px-4 py-10 text-center text-ink-soft">
                   Loading…
                 </td>
               </tr>

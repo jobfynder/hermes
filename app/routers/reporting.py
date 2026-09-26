@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
 
@@ -7,6 +7,7 @@ from app.reporting.service import (
     get_candidate_queue_health,
     get_classification_report,
     get_dashboard_overview,
+    get_filtered_analysis,
     get_ingestion_health,
     get_llm_cost_trend,
     get_parsing_quality,
@@ -20,6 +21,17 @@ from app.reporting.service import (
 from app.security.rbac import require_permission
 
 router = APIRouter(prefix="/reports", tags=["Reporting"])
+
+
+@router.get("/analysis")
+def filtered_analysis(
+    days: int = Query(7, ge=1, le=90),
+    draft_type: Literal['draft_job_requirement','draft_hotlist','draft_consultant_profile','draft_recruiter_profile','draft_bench_sales_profile','draft_vendor_list','draft_channel_note'] | None = None,
+    status: Literal['draft','needs_review','published','rejected','spam'] | None = None,
+    channel: str | None = Query(None, max_length=80),
+    _user: dict = Depends(require_permission("drafts:read")),
+) -> dict[str, Any]:
+    return get_filtered_analysis(days=days, draft_type=draft_type, status=status, channel=channel)
 
 
 @router.get("/overview")

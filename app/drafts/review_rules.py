@@ -16,11 +16,13 @@ def parser_is_ready(row):
             and float(record.get('parse_confidence',0))>=0.7 for record in records))
 
 
-def reconcile_review_status(*,dry_run=True,limit=100):
+def reconcile_review_status(*,dry_run=True,limit=100,draft_ids=None):
     if not 1<=limit<=500:
         raise ValueError('limit must be between 1 and 200')
     resolved=[]
     with cursor() as cur:
+        id_filter = " AND d.draft_id::text=ANY(%s)" if draft_ids else ""
+        params = ([str(value) for value in draft_ids], limit) if draft_ids else (limit,)
         cur.execute("""SELECT d.draft_id,d.draft_type,d.confidence,d.errors,
             d.payload->'structured_data'->'email_parsing' AS parsing
             FROM drafts d WHERE d.status='needs_review' AND d.confidence>=0.7
@@ -32,7 +34,7 @@ def reconcile_review_status(*,dry_run=True,limit=100):
                 WHERE COALESCE((r->>'requires_review')::boolean,true) OR COALESCE(jsonb_array_length(r->'warnings'),0)>0 OR COALESCE((r->>'parse_confidence')::float,0)<0.7)
             AND NOT EXISTS(SELECT 1 FROM field_provenance f WHERE f.parse_run_id=d.draft_id::text
                 AND f.extractor IN ('reviewer_correction','recruiter_correction'))
-            ORDER BY d.created_at,d.draft_id LIMIT %s FOR UPDATE OF d""",(limit,))
+            """ + id_filter + " ORDER BY d.created_at,d.draft_id LIMIT %s FOR UPDATE OF d", params)
         rows=cur.fetchall()
         for row in rows:
             if not parser_is_ready(row): continue

@@ -1,0 +1,9 @@
+[Unit]
+Description=Hermes deterministic needs-review resolver
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec hermes-api python scripts/hermes-daily-review-resolution.py
+TimeoutStartSec=120

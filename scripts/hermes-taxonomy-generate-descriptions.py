@@ -7,7 +7,7 @@ busted individually via set_skill_description, so a failure partway
 through leaves everything already written intact.
 """
 
-import sys
+import os
 import time
 
 from app.prompt_runtime.service import litellm_configured
@@ -16,10 +16,6 @@ from app.understanding.taxonomy.loader import get_canonical_skill_entries, set_s
 
 
 def main() -> None:
-    if not litellm_configured():
-        print("LITELLM_API_KEY is not set -- nothing to do.")
-        sys.exit(1)
-
     entries = get_canonical_skill_entries()
     missing = [e for e in entries if not e.get("description")]
 
@@ -28,11 +24,19 @@ def main() -> None:
     filled = 0
     failed = 0
 
+    allow_llm = (os.getenv("HERMES_SKILL_DESCRIPTION_LLM_FALLBACK_ENABLED", "false").lower()
+                 in {"1", "true", "yes"} and litellm_configured())
+    llm_limit = int(os.getenv("HERMES_DESCRIPTION_LLM_MAX_PER_RUN", "200"))
+    llm_attempts = 0
+
     for entry in missing:
         name = entry["name"]
         category = entry.get("category")
 
-        description = generate_skill_description(name, category=category)
+        description = generate_skill_description(name, category=category, allow_llm=False)
+        if not description and allow_llm and llm_attempts < llm_limit:
+            llm_attempts += 1
+            description = generate_skill_description(name, category=category, allow_llm=True)
 
         if not description:
             print(f"FAILED (no description returned): {name}")
@@ -51,7 +55,7 @@ def main() -> None:
         # request path; no need to hammer the gateway.
         time.sleep(0.2)
 
-    print(f"\nfilled={filled} failed={failed}")
+    print(f"\nfilled={filled} failed={failed} llm_enabled={allow_llm} llm_attempts={llm_attempts}")
 
 
 if __name__ == "__main__":

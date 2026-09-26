@@ -40,14 +40,19 @@ import time
 from app.prompt_runtime.models import PromptRenderedMessage
 from app.prompt_runtime.service import _call_litellm_with_model, litellm_configured
 from app.understanding.taxonomy.candidates import (
+    auto_classify_unclassified_job_titles,
     bulk_approve_taxonomy_candidates,
     bulk_reject_taxonomy_candidates,
     list_taxonomy_candidates,
+    taxonomy_candidate_noise_reason,
 )
+from app.understanding.taxonomy.descriptions import generate_skill_description
+from app.understanding.taxonomy.loader import get_canonical_skill_entries, set_skill_description
 
 MODEL = os.getenv("HERMES_PROMPT_DEFAULT_MODEL", "anthropic/claude-haiku-4-5")
 BATCH_SIZE = 40
 MAX_PER_RUN = int(os.getenv("HERMES_TAXONOMY_TRIAGE_MAX_PER_RUN", "500"))
+DESCRIPTION_LLM_LIMIT = int(os.getenv("HERMES_DESCRIPTION_LLM_MAX_PER_RUN", "200"))
 
 SKILL_SYSTEM_PROMPT = (
     "You are cleaning up an IT staffing recruitment platform's SKILLS taxonomy. "
@@ -156,11 +161,8 @@ def classify_batch(terms: list[str], system_prompt: str) -> list[str]:
 
 
 def triage(signal_type: str, system_prompt: str) -> dict:
-    if signal_type in {"skill", "job_title", "boilerplate_line"}:
-        # Skill additions require explicit review. No classifier or glossary
-        # model calls for automated skill promotion.
-        return {"processed": 0, "approved": 0, "rejected": 0,
-                "left_for_review": 0, "skipped_reason": "automatic_taxonomy_llm_triage_disabled"}
+    if signal_type in {"skill", "job_title"}:
+        return triage_taxonomy_deterministically(signal_type)
     candidates = list_taxonomy_candidates(status="pending")
     candidates = [c for c in candidates if c["signal_type"] == signal_type]
     candidates.sort(key=lambda c: c["first_seen_at"])
@@ -210,12 +212,120 @@ def triage(signal_type: str, system_prompt: str) -> dict:
     }
 
 
-def main() -> int:
-    if not litellm_configured():
-        print("LITELLM_API_KEY not configured -- skipping LLM triage this run "
-              "(deterministic pre-filter in candidates.py still applies to new mail).")
-        return 0
+def triage_taxonomy_deterministically(signal_type: str) -> dict:
+    """Reject only provable noise. Never auto-promote an unknown term."""
+    candidates = [c for c in list_taxonomy_candidates(status="pending")
+                  if c["signal_type"] == signal_type]
+    candidates.sort(key=lambda c: c["first_seen_at"])
+    reject_ids = []
+    for candidate in candidates:
+        # Preserve embedded newlines/non-breaking spaces: those are themselves
+        # deterministic evidence that an old queued value is a parser artifact.
+        term = (candidate["term"] or "").strip()
+        if taxonomy_candidate_noise_reason(signal_type, term):
+            reject_ids.append(candidate["id"])
+    reject_ids = reject_ids[:MAX_PER_RUN]
+    rejected = 0
+    if reject_ids:
+        result = bulk_reject_taxonomy_candidates(reject_ids, reviewed_by="hermes-daily-deterministic")
+        rejected = result["rejected_count"]
+    return {"processed": len(candidates), "approved": 0, "rejected": rejected,
+            "left_for_review": len(candidates) - rejected}
 
+
+_SAFE_BOILERPLATE_EXACT = {
+    "requirements", "required qualifications", "preferred qualifications",
+    "responsibilities", "roles and responsibilities", "job responsibilities",
+    "job description", "position summary", "about the role", "what you will do",
+    "what you'll do", "what we are looking for", "skills and qualifications",
+    "education and experience", "additional information", "equal opportunity employer",
+}
+_SAFE_BOILERPLATE_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    r"^to (?:apply|be considered),? please (?:send|submit|share).{0,140}(?:resume|cv)",
+    r"^please (?:send|submit|share).{0,140}(?:resume|cv).{0,80}(?:rate|availability|contact)?$",
+    r"^(?:click here|unsubscribe|manage (?:your )?preferences|view in browser)",
+    r"^(?:this email|this message).{0,180}(?:confidential|intended recipient)",
+    r"^(?:we are|our company is) an equal opportunity employer",
+    r"^equal (?:employment )?opportunity.{0,180}$",
+    r"^(?:strong|excellent) (?:written and verbal )?(?:communication|analytical|problem[- ]solving|organizational|time[- ]management|interpersonal|presentation)(?: and (?:communication|analytical|problem[- ]solving|organizational|time[- ]management|interpersonal|presentation))* (?:skills|abilities|capabilities)[.!]?$",
+    r"^ability to manage multiple priorities in a fast[- ]paced environment[.!]?$",
+    r"^perform other related duties as assigned[.!]?$",
+))
+_SPECIFIC_REQUIREMENT_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
+    r"\b\d+\+?\s*(?:years?|yrs?)\b",
+    r"^(?:job title|location|rate|skills?|technology|certification)\s*:",
+    r"\b(?:bachelor'?s|master'?s|phd|degree|certification|certified)\b",
+    r"\b(?:experience with|experience in|hands[- ]on|proficiency in|knowledge of)\b",
+    r"^(?:architect|build|configure|coordinate|create|develop|implement|lead|manage|provide|support|track|troubleshoot|work with)\b",
+))
+
+
+def deterministic_boilerplate_decision(term: str) -> str:
+    """Approve only high-precision template lines. Ambiguous lines stay pending."""
+    cleaned = re.sub(r"\s+", " ", term or "").strip()
+    normalized = cleaned.casefold().strip(" :-–—.!")
+    if normalized in _SAFE_BOILERPLATE_EXACT:
+        return "approve"
+    if any(pattern.search(cleaned) for pattern in _SAFE_BOILERPLATE_PATTERNS):
+        return "approve"
+    # Rejecting here is conservative: it only keeps genuine requirement
+    # content in job descriptions and removes it from the boilerplate queue.
+    # It never strips the line from an email.
+    if len(cleaned) > 220 or cleaned.startswith(("•", "●", "▪", "- ")):
+        return "reject"
+    if any(pattern.search(cleaned) for pattern in _SPECIFIC_REQUIREMENT_PATTERNS):
+        return "reject"
+    return "review"
+
+
+def triage_boilerplate_deterministically() -> dict:
+    candidates = [c for c in list_taxonomy_candidates(status="pending")
+                  if c["signal_type"] == "boilerplate_line"]
+    candidates.sort(key=lambda c: c["first_seen_at"])
+    candidates = candidates[:MAX_PER_RUN]
+    decisions = {c["id"]: deterministic_boilerplate_decision(c["term"]) for c in candidates}
+    approve_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "approve"]
+    reject_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "reject"]
+    approved = 0
+    if approve_ids:
+        result = bulk_approve_taxonomy_candidates(approve_ids, reviewed_by="hermes-daily-deterministic")
+        approved = result["approved_count"]
+    rejected = 0
+    if reject_ids:
+        result = bulk_reject_taxonomy_candidates(reject_ids, reviewed_by="hermes-daily-deterministic")
+        rejected = result["rejected_count"]
+    return {"processed": len(candidates), "approved": approved, "rejected": rejected,
+            "left_for_review": len(candidates) - len(approve_ids) - len(reject_ids)}
+
+
+def backfill_missing_descriptions() -> dict:
+    """Retry missing descriptions daily; deterministic first, capped LLM fallback second."""
+    missing = [entry for entry in get_canonical_skill_entries() if not (entry.get("description") or "").strip()]
+    deterministic_filled = 0
+    still_missing = []
+    for entry in missing:
+        description = generate_skill_description(entry["name"], category=entry.get("category"), allow_llm=False)
+        if description and set_skill_description(entry["name"], description, source="ai_generated"):
+            deterministic_filled += 1
+        else:
+            still_missing.append(entry)
+
+    llm_enabled = os.getenv("HERMES_SKILL_DESCRIPTION_LLM_FALLBACK_ENABLED", "false").lower() in {"1", "true", "yes"}
+    llm_filled = 0
+    llm_failed = 0
+    if llm_enabled and litellm_configured():
+        for entry in still_missing[:DESCRIPTION_LLM_LIMIT]:
+            description = generate_skill_description(entry["name"], category=entry.get("category"), allow_llm=True)
+            if description and set_skill_description(entry["name"], description, source="ai_generated"):
+                llm_filled += 1
+            else:
+                llm_failed += 1
+    return {"missing_before": len(missing), "deterministic_filled": deterministic_filled,
+            "llm_enabled": llm_enabled and litellm_configured(), "llm_filled": llm_filled,
+            "llm_failed": llm_failed, "remaining": len(missing) - deterministic_filled - llm_filled}
+
+
+def main() -> int:
     print("=== HERMES-900 daily taxonomy triage ===")
 
     skill_summary = triage("skill", SKILL_SYSTEM_PROMPT)
@@ -228,10 +338,22 @@ def main() -> int:
           f"approved={title_summary['approved']} rejected={title_summary['rejected']} "
           f"left_for_review={title_summary['left_for_review']}")
 
-    boilerplate_summary = triage("boilerplate_line", BOILERPLATE_SYSTEM_PROMPT)
+    family_summary = auto_classify_unclassified_job_titles()
+    print(f"TITLE FAMILIES: checked={family_summary['checked_count']} "
+          f"classified={family_summary['classified_count']} "
+          f"still_unclassified={family_summary['still_unclassified_count']} "
+          f"llm_attempted={family_summary['llm_attempted']} llm_classified={family_summary['llm_classified']}")
+
+    boilerplate_summary = triage_boilerplate_deterministically()
     print(f"BOILERPLATE: processed={boilerplate_summary['processed']} "
           f"approved={boilerplate_summary['approved']} rejected={boilerplate_summary['rejected']} "
           f"left_for_review={boilerplate_summary['left_for_review']}")
+
+    description_summary = backfill_missing_descriptions()
+    print(f"DESCRIPTIONS: missing_before={description_summary['missing_before']} "
+          f"deterministic_filled={description_summary['deterministic_filled']} "
+          f"llm_enabled={description_summary['llm_enabled']} llm_filled={description_summary['llm_filled']} "
+          f"llm_failed={description_summary['llm_failed']} remaining={description_summary['remaining']}")
 
     print("=== done ===")
     return 0

@@ -739,6 +739,28 @@ def reject_draft_object(draft_id: str, reason: str | None = None) -> DraftPublis
     return DraftPublishResult(status="rejected", draft_id=draft.draft_id, draft_type=draft.draft_type, errors=[])
 
 
+def bulk_reject_draft_objects(draft_ids: list[str], reason: str | None = None) -> dict:
+    """Reject a bounded selection with one commit, preserving per-row audit events."""
+    ids = list(dict.fromkeys(draft_ids))
+    extra_metadata = {"rejection_reason": reason} if reason else {}
+    with cursor() as cur:
+        cur.execute(
+            """UPDATE drafts SET status='rejected', metadata=metadata || %s::jsonb, updated_at=now()
+               WHERE draft_id::text=ANY(%s) RETURNING draft_id,draft_type""",
+            (json.dumps(extra_metadata, default=str), ids),
+        )
+        rows = cur.fetchall()
+    processed_ids = {str(row["draft_id"]) for row in rows}
+    for row in rows:
+        emit_event("draft.rejected", {"draft_id": str(row["draft_id"]),
+                   "draft_type": row["draft_type"], "reason": reason})
+    return {
+        "processed_count": len(rows),
+        "failed": [{"draft_id": draft_id, "errors": ["draft_not_found"]}
+                   for draft_id in ids if draft_id not in processed_ids],
+    }
+
+
 def reclassify_draft_object(draft_id: str, corrected_draft_type: DraftObjectType) -> DraftObject | None:
     """A reviewer determined this draft's document kind was wrong (e.g.
     parsed as a resume but is actually a job requirement, or hotlist vs.

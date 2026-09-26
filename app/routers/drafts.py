@@ -12,6 +12,7 @@ from app.claim.service import get_claim_by_draft
 from app.drafts.models import DraftObject, DraftObjectType, DraftPublishResult
 from app.drafts.service import (
     apply_field_corrections,
+    bulk_reject_draft_objects,
     backfill_full_reparse,
     backfill_signature_company_fill,
     delete_draft_object,
@@ -101,6 +102,13 @@ class DraftSummaryEntry(BaseModel):
     source_message_id: str | None = None
     display_title: str
     is_duplicate: bool = False
+    channel: str | None = None
+
+
+class BulkDraftRequest(BaseModel):
+    draft_ids: list[str] = Field(min_length=1, max_length=200)
+    action: Literal['reconcile', 'reject']
+    reason: str | None = Field(default=None, max_length=500)
 
 
 router = APIRouter(prefix="/drafts", tags=["Drafts"])
@@ -171,10 +179,29 @@ def list_drafts_page(
     search: str = Query(default='', max_length=200),
     review_warning: Literal['company_missing','job_title_missing','required_skills_not_identified','candidate_name_missing','candidate_title_or_skills_missing','primary_role_or_skills_missing'] | None = None,
     include_duplicates: bool = False,
+    date_window: Literal['today','7d','30d','older30'] | None = None,
+    channel: str | None = Query(default=None, max_length=50),
+    sender_domain: str = Query(default='', max_length=120),
+    confidence_min: float | None = Query(default=None, ge=0, le=1),
+    confidence_max: float | None = Query(default=None, ge=0, le=1),
+    sort: Literal['recent','oldest','confidence_low','confidence_high'] = 'recent',
     _user: dict = Depends(require_permission('drafts:read')),
 ):
     from app.drafts.listing import list_draft_page
-    return list_draft_page(page, page_size, status, draft_type, search, include_duplicates, review_warning)
+    return list_draft_page(page, page_size, status, draft_type, search, include_duplicates,
+                           review_warning, date_window, channel, sender_domain,
+                           confidence_min, confidence_max, sort)
+
+
+@router.post('/bulk')
+def bulk_manage_drafts(body: BulkDraftRequest, _user: dict = Depends(require_permission('drafts:publish'))):
+    ids = list(dict.fromkeys(body.draft_ids))
+    if body.action == 'reconcile':
+        from app.drafts.review_rules import reconcile_review_status
+        result = reconcile_review_status(dry_run=False, limit=len(ids), draft_ids=ids)
+        return {'action':'reconcile','processed_count':result['resolved_count'],'failed':[]}
+    result = bulk_reject_draft_objects(ids, body.reason or 'bulk_review_rejection')
+    return {'action':'reject', **result}
 
 
 @router.get("/summary", response_model=list[DraftSummaryEntry])

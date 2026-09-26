@@ -14,6 +14,7 @@ import type {
   DraftSummaryEntry,
   EmailClaim,
   FieldProvenanceEntry,
+  FilteredReportAnalysis,
   JobTitleEntry,
   TaxonomyCandidateEntry,
 } from '../types'
@@ -79,6 +80,10 @@ export const api = {
     request<DraftSummaryEntry[]>(`/drafts/summary?include_duplicates=${includeDuplicates}`),
   listDraftPage: (params: URLSearchParams, signal?: AbortSignal) =>
     request<{ items: DraftSummaryEntry[]; page: number; page_size: number; total_count: number; counts: { total: number; needsReview: number; spam: number } }>(`/drafts/page?${params}`, { signal }),
+  bulkManageDrafts: (draftIds: string[], action: 'reconcile' | 'reject', reason?: string) =>
+    request<{action:string;processed_count:number;failed:{draft_id:string;errors:string[]}[]}>('/drafts/bulk', {
+      method: 'POST', body: JSON.stringify({ draft_ids: draftIds, action, reason }),
+    }),
   getDraft: (id: string) => request<DraftObject>(`/drafts/${id}`),
   getProvenance: (id: string) => request<FieldProvenanceEntry[]>(`/drafts/${id}/provenance`),
   getClaim: (id: string) => request<EmailClaim | null>(`/drafts/${id}/claim`).catch((err) => {
@@ -234,6 +239,8 @@ export const api = {
       backfilled_titles: string[]
     }>('/taxonomy/job-titles/backfill-related-titles', { method: 'POST' }),
   getDashboardOverview: () => request<DashboardOverview>('/reports/overview'),
+  getFilteredReportAnalysis: (params: URLSearchParams, signal?: AbortSignal) =>
+    request<FilteredReportAnalysis>(`/reports/analysis?${params.toString()}`, { signal }),
   assistantQuery: (question: string, history: { role: string; content: string }[]) =>
     request<AssistantQueryResult>('/assistant/query', {
       method: 'POST',
