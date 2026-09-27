@@ -15,6 +15,26 @@ EnrichmentField = Literal[
     "relationships",
     "related_roles",
 ]
+EnrichmentRelationshipType = Literal[
+    "commonly_used_with",
+    "framework_for",
+    "managed_service_for",
+    "builds_on",
+    "runs_on",
+]
+
+
+class SkillEnrichmentRelationship(BaseModel):
+    type: EnrichmentRelationshipType
+    skill: str = Field(..., min_length=1, max_length=100)
+
+
+class SkillEnrichmentProposal(BaseModel):
+    definition: str | None = Field(default=None, min_length=1, max_length=600)
+    recruiter_explanation: str | None = Field(default=None, min_length=1, max_length=1_000)
+    aliases: list[str] = Field(default_factory=list, max_length=20)
+    relationships: list[SkillEnrichmentRelationship] = Field(default_factory=list, max_length=20)
+    related_roles: list[str] = Field(default_factory=list, max_length=20)
 
 
 class ResolveBatchRequest(BaseModel):

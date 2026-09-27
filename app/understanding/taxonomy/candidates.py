@@ -37,11 +37,13 @@ from app.understanding.taxonomy.loader import (
     build_loose_title_key_index,
     build_skill_alias_index,
     build_title_alias_index,
+    get_canonical_skill_entries,
     get_job_title_entries,
     normalize_taxonomy_key,
     set_skill_description,
 )
 from app.understanding.taxonomy.title_family_classifier import classify_job_title_family, looks_like_non_title
+from app.understanding.taxonomy.skill_category_classifier import classify_skill_category
 
 # Common non-skill filler that shows up inside skills lists but is not
 # itself a skill -- "Java, Spring, and more", "SQL, etc.", "AWS (required)".
@@ -738,7 +740,7 @@ def edit_taxonomy_candidate(candidate_id: int, term: str) -> dict:
 
 def approve_taxonomy_candidate(
     candidate_id: int,
-    category: str = "Tool/Technology",
+    category: str | None = None,
     skill_type: str = "tool",
     family: str | None = None,
     seniority: str = "unspecified",
@@ -786,18 +788,31 @@ def approve_taxonomy_candidate(
     if row["signal_type"] == "skill":
         if skill_noise_reason(row["term"]):
             return {"approved": False, "reason": "invalid_skill_name"}
+        resolved_category = category
+        classification_method = "reviewer"
+        if not resolved_category:
+            known_categories = sorted({
+                str(entry.get("category"))
+                for entry in get_canonical_skill_entries()
+                if entry.get("category")
+            })
+            resolved_category, classification_method = classify_skill_category(
+                row["term"], known_categories
+            )
         # Best-effort: a description is a nice-to-have annotation the
         # approval itself never depends on. generate_skill_description
         # already swallows its own failures and returns None rather than
         # raising, but wrapped again here so a future change to it can't
         # turn a missing description into a failed approval.
         try:
-            description = generate_skill_description(row["term"], category=category)
+            description = generate_skill_description(
+                row["term"], category=resolved_category, allow_llm=True
+            )
         except Exception:  # noqa: BLE001
             description = None
 
         add_canonical_skill(
-            name=row["term"], category=category, skill_type=skill_type, description=description
+            name=row["term"], category=resolved_category, skill_type=skill_type, description=description
         )
     elif row["signal_type"] == "job_title":
         resolved_family = family
@@ -818,7 +833,12 @@ def approve_taxonomy_candidate(
             (reviewed_by, candidate_id),
         )
 
-    return {"approved": True, "term": row["term"]}
+    return {
+        "approved": True,
+        "term": row["term"],
+        **({"category": resolved_category, "classification_method": classification_method}
+           if row["signal_type"] == "skill" else {}),
+    }
 
 
 def reject_taxonomy_candidate(candidate_id: int, reviewed_by: str | None = None) -> dict:

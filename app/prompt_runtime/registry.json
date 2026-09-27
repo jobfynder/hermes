@@ -38,6 +38,45 @@
         "no_fabrication": true,
         "source": "local"
       }
+    },
+    {
+      "prompt_id": "jf.taxonomy.skill-candidate.classify",
+      "name": "Skill Candidate Category Classification",
+      "domain": "understanding",
+      "version": "v1",
+      "description": "Classifies a human-reviewed skill candidate into an existing taxonomy category when deterministic rules cannot.",
+      "required_variables": ["candidate_term", "known_categories_json"],
+      "optional_variables": [],
+      "system_template": "You classify one technical skill candidate for a recruiting taxonomy. Return ONLY JSON with one key named category. The value must exactly match one category in known_categories_json. Do not create a new category and do not explain the answer. This classification is applied only after a human approves the candidate term.",
+      "user_template": "Candidate skill: {{candidate_term}}\nAllowed categories: {{known_categories_json}}\n\nReturn JSON only.",
+      "safety_policy": "hermes_prompt_safety_v1",
+      "default_model": "anthropic/claude-haiku-4-5",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true,
+        "taxonomy_write_allowed": false,
+        "deterministic_first": true,
+        "source": "local"
+      }
+    },
+    {
+      "prompt_id": "jf.taxonomy.skill-enrichment.propose",
+      "name": "Skill Taxonomy Enrichment Proposal",
+      "domain": "understanding",
+      "version": "v1",
+      "description": "Drafts missing recruiter-facing fields for an existing canonical skill. Output always requires human approval.",
+      "required_variables": ["canonical_name", "requested_fields_json", "current_skill_json", "known_skill_names_json"],
+      "optional_variables": ["reviewer_notes"],
+      "system_template": "You draft a review proposal for an existing technical skill taxonomy entry. Return ONLY valid JSON with exactly these keys: definition, recruiter_explanation, aliases, relationships, related_roles. Populate only fields named in requested_fields_json; use null or [] for every other field. definition is a concise factual explanation. recruiter_explanation tells an IT recruiter how the skill appears in requirements and what adjacent expertise commonly matters. aliases contains only real alternate names for the same skill, never related products. relationships is an array of objects with type and skill; type must be commonly_used_with, framework_for, managed_service_for, builds_on, or runs_on, and skill must exactly match a name in known_skill_names_json. related_roles contains common job titles that materially use the skill. Do not propose a value already present in current_skill_json. This is a draft for human review and must never state that it has been approved.",
+      "user_template": "Canonical skill: {{canonical_name}}\nRequested fields: {{requested_fields_json}}\nCurrent taxonomy entry: {{current_skill_json}}\nAllowed canonical relationship targets: {{known_skill_names_json}}\nReviewer notes: {{reviewer_notes}}\n\nReturn JSON only.",
+      "safety_policy": "hermes_prompt_safety_v1",
+      "default_model": "anthropic/claude-haiku-4-5",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true,
+        "taxonomy_write_allowed": false,
+        "source": "local"
+      }
     }
   ]
 }
