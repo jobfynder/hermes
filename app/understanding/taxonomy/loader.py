@@ -365,6 +365,98 @@ def update_canonical_skill(
     return {"updated": True, "name": entry["name"]}
 
 
+def apply_canonical_skill_enrichment(
+    skill_id: str,
+    values: dict[str, Any],
+    reviewed_by: str | None = None,
+) -> dict[str, Any]:
+    """Apply only missing fields from a human-approved enrichment proposal.
+
+    Existing human or seed content always wins. Relationships may reference
+    only canonical skills and aliases may not collide with another skill.
+    """
+    from datetime import UTC, datetime
+
+    from app.skill_intelligence.enrichment import RELATIONSHIP_TYPES
+
+    allowed = {"definition", "recruiter_explanation", "aliases", "relationships", "related_roles"}
+    proposed = {key: value for key, value in values.items() if key in allowed}
+    with cursor() as cur:
+        cur.execute("SELECT pg_advisory_xact_lock(%s)", (_SKILLS_WRITE_LOCK_KEY,))
+        data = json.loads(_writable_taxonomy_path("canonical_skills.json").read_text(encoding="utf-8"))
+        entries = data.get("skills", [])
+        entry = next(
+            (row for row in entries if str(row.get("skill_id") or stable_skill_id(str(row.get("name", "")))) == skill_id),
+            None,
+        )
+        if entry is None:
+            return {"updated": False, "reason": "skill_not_found", "applied_fields": []}
+
+        entry.setdefault("skill_id", stable_skill_id(entry["name"]))
+        names = {normalize_taxonomy_key(str(row.get("name", ""))): row for row in entries}
+        alias_owners: dict[str, dict[str, Any]] = {}
+        for row in entries:
+            alias_owners[normalize_taxonomy_key(str(row.get("name", "")))] = row
+            for alias in row.get("aliases", []):
+                alias_owners[normalize_taxonomy_key(str(alias))] = row
+
+        applied: list[str] = []
+        if not (entry.get("short_definition") or entry.get("description")) and proposed.get("definition"):
+            entry["short_definition"] = str(proposed["definition"]).strip()
+            applied.append("definition")
+        if not entry.get("recruiter_explanation") and proposed.get("recruiter_explanation"):
+            entry["recruiter_explanation"] = str(proposed["recruiter_explanation"]).strip()
+            applied.append("recruiter_explanation")
+        if not entry.get("aliases") and proposed.get("aliases"):
+            aliases: list[str] = []
+            for raw in proposed["aliases"]:
+                alias = str(raw).strip()
+                key = normalize_taxonomy_key(alias)
+                owner = alias_owners.get(key)
+                if alias and key != normalize_taxonomy_key(entry["name"]) and (owner is None or owner is entry):
+                    if key not in {normalize_taxonomy_key(item) for item in aliases}:
+                        aliases.append(alias)
+            if aliases:
+                entry["aliases"] = aliases
+                applied.append("aliases")
+        if not (entry.get("relationships") or entry.get("related_skills")) and proposed.get("relationships"):
+            relationships: list[dict[str, str]] = []
+            for raw in proposed["relationships"]:
+                relation_type = str(raw.get("type") or "")
+                related = names.get(normalize_taxonomy_key(str(raw.get("skill") or "")))
+                if relation_type in RELATIONSHIP_TYPES and related is not None and related is not entry:
+                    item = {"type": relation_type, "skill": str(related["name"])}
+                    if item not in relationships:
+                        relationships.append(item)
+            if relationships:
+                entry["relationships"] = relationships
+                applied.append("relationships")
+        if not entry.get("related_roles") and proposed.get("related_roles"):
+            roles = list(dict.fromkeys(str(role).strip() for role in proposed["related_roles"] if str(role).strip()))
+            if roles:
+                entry["related_roles"] = roles
+                applied.append("related_roles")
+
+        if applied:
+            provenance = entry.setdefault("field_provenance", {})
+            reviewed_at = datetime.now(UTC).isoformat()
+            for field in applied:
+                provenance[field] = {
+                    "source": "llm_proposal_human_approved",
+                    "reviewed_by": reviewed_by,
+                    "reviewed_at": reviewed_at,
+                }
+            _write_json_atomic(_writable_taxonomy_path("canonical_skills.json"), data)
+            clear_taxonomy_cache()
+
+    return {
+        "updated": bool(applied),
+        "name": entry["name"],
+        "applied_fields": applied,
+        "skipped_fields": sorted(set(proposed) - set(applied)),
+    }
+
+
 def delete_canonical_skill(name: str) -> dict[str, Any]:
     """Permanently removes a canonical skill -- for a genuinely bad entry
     (a parser artifact that got approved by mistake, an exact duplicate

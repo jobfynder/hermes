@@ -14,6 +14,8 @@ SkillRelationshipType = Literal[
     "managed_service_for",
     "implementation_of",
     "alternative_to",
+    "builds_on",
+    "runs_on",
 ]
 
 

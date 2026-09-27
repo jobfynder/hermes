@@ -319,6 +319,44 @@ ON taxonomy_enrichment_requests (status, last_seen_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_taxonomy_enrichment_requests_pending_skill
 ON taxonomy_enrichment_requests (skill_id) WHERE status = 'pending';
 
+-- LLM output is a review proposal, never runtime taxonomy data. A reviewer
+-- may edit it and must approve it before the exact approved values are
+-- applied to canonical_skills.json.
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS proposal JSONB;
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS proposal_status TEXT NOT NULL DEFAULT 'not_generated';
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS proposal_prompt_id TEXT;
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS proposal_run_id TEXT;
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS proposal_model TEXT;
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS proposal_generated_at TIMESTAMPTZ;
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS proposal_error TEXT;
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS approved_values JSONB;
+ALTER TABLE taxonomy_enrichment_requests ADD COLUMN IF NOT EXISTS apply_result JSONB;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'taxonomy_enrichment_proposal_status_check'
+    ) THEN
+        ALTER TABLE taxonomy_enrichment_requests
+        ADD CONSTRAINT taxonomy_enrichment_proposal_status_check
+        CHECK (proposal_status IN ('not_generated', 'generating', 'ready', 'failed'));
+    END IF;
+END $$;
+
+-- Normalized request evidence provides exact idempotency beyond the bounded
+-- request_refs preview stored on the queue row.
+CREATE TABLE IF NOT EXISTS taxonomy_enrichment_request_evidence (
+    request_id      BIGINT NOT NULL REFERENCES taxonomy_enrichment_requests(id) ON DELETE CASCADE,
+    request_ref     TEXT NOT NULL,
+    source_domain   TEXT,
+    first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (request_id, request_ref)
+);
+INSERT INTO taxonomy_enrichment_request_evidence (request_id, request_ref)
+SELECT request.id, ref.value
+FROM taxonomy_enrichment_requests AS request
+CROSS JOIN LATERAL jsonb_array_elements_text(request.request_refs) AS ref(value)
+ON CONFLICT (request_id, request_ref) DO NOTHING;
+
 -- 'boilerplate_line' added after the table above already existed in
 -- production, so the CHECK constraint is dropped and re-added rather
 -- than part of the original CREATE TABLE -- idempotent, safe to run

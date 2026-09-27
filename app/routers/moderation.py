@@ -27,9 +27,12 @@ from app.understanding.taxonomy.loader import (
     update_canonical_skill,
 )
 from app.skill_intelligence.suggestions import (
+    generate_enrichment_proposal,
     list_enrichment_requests,
     review_enrichment_request,
+    save_enrichment_proposal,
 )
+from app.skill_intelligence.models import SkillEnrichmentProposal
 
 
 class BlocklistEntry(BaseModel):
@@ -84,6 +87,7 @@ class CandidateActionResult(BaseModel):
 
 class EnrichmentReviewRequest(BaseModel):
     decision: str
+    proposal: SkillEnrichmentProposal | None = None
 
 
 router = APIRouter(tags=["Moderation"])
@@ -141,9 +145,39 @@ def review_taxonomy_enrichment(
     user: dict = Depends(require_permission("drafts:publish")),
 ):
     try:
-        return review_enrichment_request(request_id, body.decision, user.get("id"))
+        return review_enrichment_request(
+            request_id,
+            body.decision,
+            user.get("id"),
+            body.proposal.model_dump() if body.proposal else None,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/taxonomy-enrichment-requests/{request_id}/generate")
+def generate_taxonomy_enrichment(
+    request_id: int,
+    _user: dict = Depends(require_permission("drafts:publish")),
+):
+    """Generate an LLM review draft; never writes to the taxonomy."""
+    try:
+        return generate_enrichment_proposal(request_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put("/taxonomy-enrichment-requests/{request_id}/proposal")
+def update_taxonomy_enrichment_proposal(
+    request_id: int,
+    body: SkillEnrichmentProposal,
+    _user: dict = Depends(require_permission("drafts:publish")),
+):
+    """Save the reviewer's corrected proposal without applying it."""
+    try:
+        return save_enrichment_proposal(request_id, body.model_dump())
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
