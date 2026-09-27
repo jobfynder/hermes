@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime, timedelta
 
 from app.prompt_runtime.extraction_fallback import run_llm_fallback
@@ -11,7 +12,10 @@ from app.understanding.taxonomy.candidates import queue_user_skill_candidate
 from app.understanding.taxonomy.loader import (
     apply_canonical_skill_enrichment,
     get_canonical_skill_entries,
+    get_job_title_entries,
+    normalize_taxonomy_key,
 )
+from app.understanding.taxonomy.descriptions import generate_skill_description
 
 
 ALLOWED_ENRICHMENT_FIELDS = {
@@ -21,6 +25,33 @@ ALLOWED_ENRICHMENT_FIELDS = {
     "relationships",
     "related_roles",
 }
+
+
+def _deterministic_enrichment_proposal(card: dict, requested_fields: list[str]) -> dict:
+    """Fill fields that Hermes can derive without a model call."""
+    proposal = {
+        "definition": None,
+        "recruiter_explanation": None,
+        "aliases": [],
+        "relationships": [],
+        "related_roles": [],
+    }
+    requested = set(requested_fields)
+    if "definition" in requested and not card.get("definition"):
+        proposal["definition"] = generate_skill_description(
+            card["canonical_name"], category=card.get("category"), allow_llm=False
+        )
+    if "related_roles" in requested and not card.get("related_roles"):
+        terms = [card["canonical_name"], *(card.get("aliases") or [])]
+        keys = {normalize_taxonomy_key(term) for term in terms if normalize_taxonomy_key(term)}
+        roles: list[str] = []
+        for entry in get_job_title_entries():
+            title = str(entry.get("title") or "").strip()
+            title_key = normalize_taxonomy_key(title)
+            if title and any(re.search(rf"(?<![a-z0-9]){re.escape(key)}(?![a-z0-9])", title_key) for key in keys):
+                roles.append(title)
+        proposal["related_roles"] = list(dict.fromkeys(roles))[:20]
+    return proposal
 
 
 def list_enrichment_requests(status: str = "pending") -> list[dict]:
@@ -156,32 +187,44 @@ def generate_enrichment_proposal(request_id: int) -> dict:
         raise LookupError("Canonical skill not found")
 
     requested = list(pending["requested_fields"] or [])
+    deterministic = _deterministic_enrichment_proposal(card, requested)
+    remaining = [field for field in requested if not deterministic.get(field)]
     known = get_canonical_skill_entries()
     same_category = [str(row.get("name")) for row in known if row.get("category") == card.get("category")]
     other_names = [str(row.get("name")) for row in known if row.get("category") != card.get("category")]
     known_names = list(dict.fromkeys([*same_category, *other_names]))[:800]
-    outcome = run_llm_fallback(
-        prompt_id="jf.taxonomy.skill-enrichment.propose",
-        variables={
-            "canonical_name": card["canonical_name"],
-            "requested_fields_json": json.dumps(requested),
-            "current_skill_json": json.dumps(card, ensure_ascii=False),
-            "known_skill_names_json": json.dumps(known_names, ensure_ascii=False),
-            "reviewer_notes": pending.get("notes") or "",
-        },
-        source="taxonomy_enrichment_review",
-        cache_ttl_seconds=86_400,
+    outcome = (
+        run_llm_fallback(
+            prompt_id="jf.taxonomy.skill-enrichment.propose",
+            variables={
+                "canonical_name": card["canonical_name"],
+                "requested_fields_json": json.dumps(remaining),
+                "current_skill_json": json.dumps({**card, **deterministic}, ensure_ascii=False),
+                "known_skill_names_json": json.dumps(known_names, ensure_ascii=False),
+                "reviewer_notes": pending.get("notes") or "",
+            },
+            source="taxonomy_enrichment_review",
+            cache_ttl_seconds=86_400,
+        )
+        if remaining
+        else {"used": False, "reason": "deterministic_complete", "extracted": {}}
     )
-    proposal = None
+    proposal = deterministic if not remaining else None
     error = None
-    if outcome.get("used"):
+    if remaining and outcome.get("used"):
         try:
+            llm_values = outcome.get("extracted") or {}
             proposal = _clean_proposal(
-                outcome.get("extracted") or {}, requested, pending["skill_id"]
+                {
+                    field: deterministic.get(field) or llm_values.get(field)
+                    for field in ALLOWED_ENRICHMENT_FIELDS
+                },
+                requested,
+                pending["skill_id"],
             )
         except Exception as exc:  # Pydantic provides the field-level reason to the reviewer.
             error = f"invalid_llm_proposal:{exc}"
-    else:
+    elif remaining:
         error = str(outcome.get("reason") or "llm_proposal_unavailable")
 
     status = "ready" if proposal is not None else "failed"
@@ -195,9 +238,9 @@ def generate_enrichment_proposal(request_id: int) -> dict:
             (
                 json.dumps(proposal) if proposal is not None else None,
                 status,
-                outcome.get("prompt_id"),
+                outcome.get("prompt_id") if remaining else "deterministic",
                 outcome.get("run_id"),
-                outcome.get("model_used"),
+                outcome.get("model_used") if remaining else "deterministic",
                 error,
                 request_id,
             ),

@@ -442,7 +442,7 @@ def apply_canonical_skill_enrichment(
             reviewed_at = datetime.now(UTC).isoformat()
             for field in applied:
                 provenance[field] = {
-                    "source": "llm_proposal_human_approved",
+                    "source": "human_approved_enrichment_proposal",
                     "reviewed_by": reviewed_by,
                     "reviewed_at": reviewed_at,
                 }

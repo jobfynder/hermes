@@ -93,6 +93,23 @@ class ClassificationTests(unittest.TestCase):
                 self.assertTrue(row["matched_term"])
                 self.assertGreater(row["confidence"], 0)
 
+    def test_python_is_detected_deterministically_in_a_dice_style_page(self):
+        text = (
+            "Python Developer. Build new Python automations and APIs. "
+            "What's Required / Technical Skills: Strong Python software engineering experience."
+        )
+        result = extract_requirement_intelligence(text)
+        rows = [row for group in result["skills"].values() for row in group]
+        python = next(row for row in rows if row["canonical_name"] == "Python")
+        self.assertEqual(python["matched_term"], "Python")
+        self.assertEqual(python["confidence"], 1.0)
+
+    def test_standalone_alias_taxonomy_is_used_for_page_detection(self):
+        result = extract_requirement_intelligence("Experience deploying workloads on Google Cloud Platform.")
+        rows = [row for group in result["skills"].values() for row in group]
+        gcp = next(row for row in rows if row["canonical_name"] == "GCP")
+        self.assertEqual(gcp["matched_term"], "google cloud platform")
+
 
 class RelationshipTests(unittest.TestCase):
     def test_relationship_is_context_not_equivalence(self):

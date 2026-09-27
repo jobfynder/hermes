@@ -7,6 +7,7 @@ import pytest
 
 from app.skill_intelligence.models import SkillSuggestionRequest
 from app.skill_intelligence.suggestions import (
+    _deterministic_enrichment_proposal,
     _clean_proposal,
     generate_enrichment_proposal,
     review_enrichment_request,
@@ -210,4 +211,21 @@ def test_approved_enrichment_only_fills_missing_fields_and_is_idempotent(tmp_pat
     assert saved["aliases"] == ["Alpha Tool"]
     assert saved["relationships"] == [{"type": "builds_on", "skill": "Beta"}]
     assert saved["related_roles"] == ["Platform Engineer"]
-    assert saved["field_provenance"]["aliases"]["source"] == "llm_proposal_human_approved"
+    assert saved["field_provenance"]["aliases"]["source"] == "human_approved_enrichment_proposal"
+
+
+def test_enrichment_uses_deterministic_definition_and_related_roles_before_llm():
+    card = {
+        "canonical_name": "Python",
+        "category": "Programming Language",
+        "definition": None,
+        "related_roles": [],
+        "aliases": ["Python3"],
+    }
+    with patch(
+        "app.skill_intelligence.suggestions.get_job_title_entries",
+        return_value=[{"title": "Python Developer"}, {"title": "Java Developer"}],
+    ):
+        proposal = _deterministic_enrichment_proposal(card, ["definition", "related_roles"])
+    assert proposal["definition"]
+    assert proposal["related_roles"] == ["Python Developer"]

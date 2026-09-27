@@ -265,7 +265,11 @@ def extract_requirement_intelligence(text: str, include_unknown_terms: bool = Fa
         "required": extract_skills(required_text) if required_text else [],
         "preferred": extract_skills(preferred_text) if preferred_text else [],
         "excluded": extract_skills(excluded_text) if excluded_text else [],
-        "mentioned": extract_skills(text),
+        # Page overlays need every exact published taxonomy name and alias,
+        # not a fuzzy whole-document guess. Exact matching is deterministic,
+        # faster on long job-board pages, and supplies a term that really
+        # exists in the DOM so Chrome can highlight it.
+        "mentioned": extract_skills(text, allow_fuzzy=False),
     }
     classified: dict[str, list[dict[str, Any]]] = {key: [] for key in _CONTEXT_ORDER}
     claimed: set[str] = set()

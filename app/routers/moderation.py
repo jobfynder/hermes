@@ -69,7 +69,7 @@ class TaxonomyCandidateEntry(BaseModel):
 
 class ApproveCandidateRequest(BaseModel):
     # Used when approving a signal_type='skill' candidate.
-    category: str = "Tool/Technology"
+    category: str | None = None
     skill_type: str = "tool"
     # Used when approving a signal_type='job_title' candidate. family=None
     # (not "Unclassified") is the default so approve_taxonomy_candidate's

@@ -7,7 +7,7 @@ Hermes stores each request in `taxonomy_enrichment_requests`. A request is evide
 ## Review flow
 
 1. `POST /skill-intelligence/suggestions` queues an `enrichment` request. Hermes removes fields already populated on the canonical card and merges repeated evidence into the one pending row for that skill.
-2. `POST /taxonomy-enrichment-requests/{id}/generate` claims proposal generation and runs `jf.taxonomy.skill-enrichment.propose` through the existing prompt runtime. The JSON result is stored as a proposal only.
+2. `POST /taxonomy-enrichment-requests/{id}/generate` claims proposal generation. Hermes first fills any definition available in the deterministic glossary and derives related roles from governed job titles. It calls `jf.taxonomy.skill-enrichment.propose` through the existing prompt runtime only for fields still missing. The combined JSON result is stored as a proposal only.
 3. A reviewer can correct the draft with `PUT /taxonomy-enrichment-requests/{id}/proposal`.
 4. `POST /taxonomy-enrichment-requests/{id}/review` with `{"decision":"approved"}` applies the exact reviewed values. `{"decision":"rejected"}` closes the request without changing the taxonomy.
 
@@ -23,3 +23,9 @@ Both proposal generation and review endpoints require `drafts:publish`. Listing 
 - Relationships accept only the controlled relationship vocabulary and must resolve to another existing canonical skill.
 - Approval records the reviewer, approved values, apply result, prompt run, model, and field-level taxonomy provenance.
 - LLM output never writes directly to `canonical_skills.json`. Only an authenticated human approval can apply it.
+
+## New-skill crowdseeding
+
+The extension presents crowdseed CTAs only for terms detected in page highlighting or the selected-text action card. Core enforces 100 unique normalized new-skill contributions per authenticated user per UTC week before calling Hermes. Repeated clicks for the same term do not consume another quota slot.
+
+Hermes applies its deterministic noise, exact-known, loose-identity, and pending-candidate checks before recording evidence. A reviewer still approves or rejects the candidate. On approval, an explicit reviewer category wins; otherwise Hermes applies deterministic category rules and calls `jf.taxonomy.skill-candidate.classify` only when those rules cannot decide. The LLM must choose an existing category. Description generation follows the same deterministic-first, LLM-fallback order. No candidate becomes a published skill before the human approval action.

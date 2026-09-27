@@ -40,6 +40,26 @@
       }
     },
     {
+      "prompt_id": "jf.taxonomy.skill-candidate.classify",
+      "name": "Skill Candidate Category Classification",
+      "domain": "understanding",
+      "version": "v1",
+      "description": "Classifies a human-reviewed skill candidate into an existing taxonomy category when deterministic rules cannot.",
+      "required_variables": ["candidate_term", "known_categories_json"],
+      "optional_variables": [],
+      "system_template": "You classify one technical skill candidate for a recruiting taxonomy. Return ONLY JSON with one key named category. The value must exactly match one category in known_categories_json. Do not create a new category and do not explain the answer. This classification is applied only after a human approves the candidate term.",
+      "user_template": "Candidate skill: {{candidate_term}}\nAllowed categories: {{known_categories_json}}\n\nReturn JSON only.",
+      "safety_policy": "hermes_prompt_safety_v1",
+      "default_model": "anthropic/claude-haiku-4-5",
+      "status": "active",
+      "metadata": {
+        "human_review_required": true,
+        "taxonomy_write_allowed": false,
+        "deterministic_first": true,
+        "source": "local"
+      }
+    },
+    {
       "prompt_id": "jf.taxonomy.skill-enrichment.propose",
       "name": "Skill Taxonomy Enrichment Proposal",
       "domain": "understanding",
