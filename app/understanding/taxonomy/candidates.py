@@ -42,6 +42,7 @@ from app.understanding.taxonomy.loader import (
     normalize_taxonomy_key,
     set_skill_description,
 )
+from app.understanding.taxonomy.normalizer import normalize_skill
 from app.understanding.taxonomy.title_family_classifier import classify_job_title_family, looks_like_non_title
 from app.understanding.taxonomy.skill_category_classifier import classify_skill_category
 
