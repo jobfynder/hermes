@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from app.email_parsing.html import html_to_text
 from app.email_parsing.routing import classify_recipient_mailbox
 from app.runtime.jsonl_store import read_json, runtime_path, write_json
 
@@ -54,27 +55,43 @@ def _header_value(headers: list[dict[str, Any]], name: str) -> str | None:
     return None
 
 
-def _extract_plain_text_body(payload: dict[str, Any]) -> str:
-    mime_type = payload.get('mimeType', '')
+def _is_attachment(part: dict[str, Any]) -> bool:
+    if (part.get('filename') or '').strip():
+        return True
+    disposition = _header_value(part.get('headers') or [], 'Content-Disposition') or ''
+    return disposition.lower().lstrip().startswith('attachment')
+
+
+def _find_mime_body(payload: dict[str, Any], wanted_type: str) -> str:
+    if _is_attachment(payload):
+        return ''
+    mime_type = str(payload.get('mimeType') or '').split(';', 1)[0].strip().lower()
     body = payload.get('body') or {}
-
-    if mime_type == 'text/plain' and body.get('data'):
+    if mime_type == wanted_type and body.get('data'):
         return _decode_base64url(body['data'])
-
     for part in payload.get('parts', []) or []:
-        if part.get('mimeType') == 'text/plain':
-            text = _extract_plain_text_body(part)
-            if text:
-                return text
-
-    for part in payload.get('parts', []) or []:
-        text = _extract_plain_text_body(part)
+        text = _find_mime_body(part, wanted_type)
         if text:
             return text
+    return ''
 
-    if body.get('data'):
-        return _decode_base64url(body['data'])
 
+def _extract_plain_text_body(payload: dict[str, Any]) -> str:
+    # Prefer the sender's actual text/plain alternative. HTML-only mail is
+    # common in forwarded Gmail messages, so convert that body before any
+    # classifier or field extractor sees it. Attachments are never mistaken
+    # for the message body.
+    plain = _find_mime_body(payload, 'text/plain')
+    if plain:
+        return plain
+    html = _find_mime_body(payload, 'text/html')
+    if html:
+        return html_to_text(html)
+    mime_type = str(payload.get('mimeType') or '').lower()
+    body = payload.get('body') or {}
+    if not _is_attachment(payload) and mime_type.startswith('text/') and body.get('data'):
+        decoded = _decode_base64url(body['data'])
+        return html_to_text(decoded) if '<' in decoded and '>' in decoded else decoded
     return ''
 
 
@@ -179,6 +196,13 @@ def _gmail_api_get(path: str, access_token: str) -> dict[str, Any]:
         return json.loads(response.read().decode('utf-8'))
 
 
+def _gmail_api_post(path: str, access_token: str) -> dict[str, Any]:
+    request = Request(f'{GMAIL_API_BASE}{path}', data=b'', method='POST')
+    request.add_header('Authorization', f'Bearer {access_token}')
+    with urlopen(request, timeout=15) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
 def list_gmail_message_ids(query: str, *, max_results: int = 10000) -> list[str]:
     """List message IDs matching a Gmail search query, newest first.
 
@@ -235,6 +259,24 @@ def fetch_gmail_messages(message_ids: list[str]) -> list[dict[str, Any]]:
             # intake_log, so one deleted/transient message cannot block a page.
             continue
     return messages
+
+
+def trash_gmail_messages(message_ids: list[str]) -> tuple[int, list[str]]:
+    """Move message IDs to Gmail Trash; requires the gmail.modify scope."""
+    if not message_ids or not _gmail_credentials_configured():
+        return 0, list(message_ids)
+    access_token = _get_gmail_access_token()
+    if not access_token:
+        return 0, list(message_ids)
+    moved = 0
+    failed: list[str] = []
+    for message_id in message_ids:
+        try:
+            _gmail_api_post(f'/messages/{message_id}/trash', access_token)
+            moved += 1
+        except Exception:
+            failed.append(message_id)
+    return moved, failed
 
 
 def _history_cursor_path():
