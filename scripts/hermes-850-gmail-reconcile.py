@@ -42,7 +42,9 @@ def main() -> None:
     if not gmail_provider_status()['configured']:
         raise SystemExit('Gmail reconciliation is not configured')
 
-    query = os.getenv('HERMES_GMAIL_RECONCILE_QUERY', 'newer_than:2d').strip()
+    query = os.getenv(
+        'HERMES_GMAIL_RECONCILE_QUERY', 'label:nvoids newer_than:2d'
+    ).strip()
     scan_limit = _positive_int('HERMES_GMAIL_RECONCILE_SCAN_LIMIT', 10000, 50000)
     batch_size = _positive_int('HERMES_GMAIL_RECONCILE_BATCH_SIZE', 500, 2000)
     default_kind = os.getenv(

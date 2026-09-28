@@ -167,7 +167,7 @@ def test_gmail_reconcile_lists_paginated_message_ids() -> None:
         'pageToken=next-page': {
             'messages': [{'id': 'msg-3'}],
         },
-        '/messages?q=newer_than%3A2d': {
+        '/messages?q=label%3Anvoids+newer_than%3A2d': {
             'messages': [{'id': 'msg-1'}, {'id': 'msg-2'}],
             'nextPageToken': 'next-page',
         },
@@ -180,7 +180,7 @@ def test_gmail_reconcile_lists_paginated_message_ids() -> None:
     ):
         with patched_urlopen(responses) as calls:
             result = gmail_service.list_gmail_message_ids(
-                'newer_than:2d', max_results=3
+                'label:nvoids newer_than:2d', max_results=3
             )
 
     require(result == ['msg-1', 'msg-2', 'msg-3'], f'Unexpected IDs: {result}')

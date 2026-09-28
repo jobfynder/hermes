@@ -12,11 +12,12 @@ client secret, and refresh token as `HERMES_GMAIL_CLIENT_ID`,
 `HERMES_GMAIL_DEFAULT_DOCUMENT_KIND=job_description` for a mailbox dedicated to
 nvoids requirements.
 
-The reconciliation timer searches the last two days every five minutes. It
-lists message IDs first, removes IDs already present in `intake_log`, and fetches
-only unseen messages. Normal Hermes transport deduplication and exact-content
-deduplication remain active. This makes repeated look-back scans safe and
-recovers messages received before the timer was installed or during an outage.
+The reconciliation timer searches the Gmail `nvoids` label over the last two
+days every five minutes. It lists message IDs first, removes IDs already present
+in `intake_log`, and fetches only unseen messages. Normal Hermes transport
+deduplication and exact-content deduplication remain active. This makes repeated
+look-back scans safe, excludes unrelated account mail, and recovers messages
+received before the timer was installed or during an outage.
 
 Install the timer after OAuth is configured:
 
