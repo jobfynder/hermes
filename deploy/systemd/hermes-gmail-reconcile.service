@@ -1,0 +1,10 @@
+[Unit]
+Description=Hermes Gmail recent-message reconciliation
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/hermes
+ExecStart=/usr/bin/flock -E 0 -n /run/hermes-gmail-reconcile.lock /usr/bin/docker compose exec -T hermes-api python scripts/hermes-850-gmail-reconcile.py
+TimeoutStartSec=30min

@@ -79,6 +79,28 @@ def test_gmail_pubsub_envelope_decoding() -> None:
     require(parsed['history_id'] == '98765', 'Pub/Sub envelope must decode historyId')
 
 
+def test_dedicated_gmail_default_routes_to_requirements() -> None:
+    message = {
+        'id': 'gmail-nvoids-1',
+        'payload': {
+            'headers': [
+                {'name': 'Subject', 'value': 'Java requirement'},
+                {'name': 'From', 'value': 'Recruiter <recruiter@example.com>'},
+                {'name': 'To', 'value': 'nvoids.collector@gmail.com'},
+            ],
+            'mimeType': 'text/plain',
+            'body': {'data': ''},
+        },
+    }
+    normalized = normalize_gmail_message(
+        message, default_document_kind='job_description'
+    )
+    require(
+        normalized['metadata']['intended_document_kind'] == 'job_description',
+        'A dedicated collector mailbox must route to job requirements',
+    )
+
+
 def test_graph_status_is_contract_until_configured() -> None:
     status = microsoft_graph_provider_status()
     require(status['configured'] is False, 'Microsoft Graph must report unconfigured with no credentials set')
@@ -175,6 +197,7 @@ def run() -> None:
         test_gmail_status_is_contract_until_configured,
         test_gmail_message_normalization,
         test_gmail_pubsub_envelope_decoding,
+        test_dedicated_gmail_default_routes_to_requirements,
         test_graph_status_is_contract_until_configured,
         test_graph_message_normalization_plain_text,
         test_graph_message_normalization_strips_html,

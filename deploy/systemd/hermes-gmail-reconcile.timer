@@ -1,0 +1,11 @@
+[Unit]
+Description=Reconcile the dedicated Gmail intake mailbox every five minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

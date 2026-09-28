@@ -30,7 +30,7 @@ def gmail_provider_status() -> dict[str, Any]:
         'purpose': 'normalized_gmail_intake_contract',
         'parser_mode': 'deterministic',
         'uses_llm': False,
-        'notification_mode': 'pubsub_push',
+        'notification_mode': 'pubsub_push_with_recent_reconciliation',
     }
 
 
@@ -78,17 +78,18 @@ def _extract_plain_text_body(payload: dict[str, Any]) -> str:
     return ''
 
 
-def normalize_gmail_message(message: dict[str, Any]) -> dict[str, Any]:
+def normalize_gmail_message(
+    message: dict[str, Any], *, default_document_kind: str | None = None
+) -> dict[str, Any]:
     '''Normalize a Gmail API users.messages.get resource (format=full) into
     the same shape normalize_email_payload() produces in
     app/providers/email/service.py, so it flows through the existing email
     intake pipeline (mailbox routing -> deterministic parsing) unchanged.
 
     Requires an already-fetched message resource. Gmail Pub/Sub push
-    notifications only carry a historyId, not message content - fetching the
-    message with an authenticated client is not yet wired in (see
-    HERMES_GMAIL_* env vars in .env.example). This function is the reusable,
-    testable normalization step for when that fetch is added.
+    notifications carry only a historyId, while the scheduled reconciliation
+    lists recent IDs; both paths fetch message content with the configured
+    HERMES_GMAIL_* OAuth credentials before calling this normalizer.
     '''
     payload = message.get('payload') or {}
     headers = payload.get('headers') or []
@@ -103,6 +104,14 @@ def normalize_gmail_message(message: dict[str, Any]) -> dict[str, Any]:
 
     body_text = _extract_plain_text_body(payload) or message.get('snippet', '')
     intended_document_kind = classify_recipient_mailbox(to_raw)
+    fallback_kind = (
+        default_document_kind
+        or os.getenv('HERMES_GMAIL_DEFAULT_DOCUMENT_KIND', '')
+    ).strip().lower()
+    if intended_document_kind == 'unknown' and fallback_kind in {
+        'job_description', 'hotlist'
+    }:
+        intended_document_kind = fallback_kind
 
     return {
         'channel': 'email',
@@ -168,6 +177,64 @@ def _gmail_api_get(path: str, access_token: str) -> dict[str, Any]:
 
     with urlopen(request, timeout=15) as response:
         return json.loads(response.read().decode('utf-8'))
+
+
+def list_gmail_message_ids(query: str, *, max_results: int = 10000) -> list[str]:
+    """List message IDs matching a Gmail search query, newest first.
+
+    This is the reconciliation counterpart to history.list. It deliberately
+    searches a bounded recent window so a missed Pub/Sub notification, an
+    expired history cursor, or the first-ever run cannot create a blind spot.
+    Message content is fetched separately after the caller removes IDs Hermes
+    has already recorded.
+    """
+    if not _gmail_credentials_configured() or max_results <= 0:
+        return []
+
+    access_token = _get_gmail_access_token()
+    if not access_token:
+        return []
+
+    ids: list[str] = []
+    page_token: str | None = None
+    while len(ids) < max_results:
+        params = {
+            'q': query,
+            'maxResults': min(500, max_results - len(ids)),
+        }
+        if page_token:
+            params['pageToken'] = page_token
+        listing = _gmail_api_get(f"/messages?{urlencode(params)}", access_token)
+        ids.extend(
+            str(item['id'])
+            for item in listing.get('messages', []) or []
+            if item.get('id')
+        )
+        page_token = listing.get('nextPageToken')
+        if not page_token:
+            break
+    return ids[:max_results]
+
+
+def fetch_gmail_messages(message_ids: list[str]) -> list[dict[str, Any]]:
+    """Fetch full Gmail resources for a bounded set of message IDs."""
+    if not message_ids or not _gmail_credentials_configured():
+        return []
+    access_token = _get_gmail_access_token()
+    if not access_token:
+        return []
+
+    messages: list[dict[str, Any]] = []
+    for message_id in message_ids:
+        try:
+            messages.append(
+                _gmail_api_get(f'/messages/{message_id}?format=full', access_token)
+            )
+        except Exception:
+            # The next reconciliation run retries any ID that never reached
+            # intake_log, so one deleted/transient message cannot block a page.
+            continue
+    return messages
 
 
 def _history_cursor_path():

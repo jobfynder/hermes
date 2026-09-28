@@ -162,6 +162,34 @@ def test_gmail_fetch_swallows_api_errors() -> None:
     require(result == [], 'A failed token exchange must return [] rather than raising')
 
 
+def test_gmail_reconcile_lists_paginated_message_ids() -> None:
+    responses = {
+        'pageToken=next-page': {
+            'messages': [{'id': 'msg-3'}],
+        },
+        '/messages?q=newer_than%3A2d': {
+            'messages': [{'id': 'msg-1'}, {'id': 'msg-2'}],
+            'nextPageToken': 'next-page',
+        },
+        'oauth2.googleapis.com/token': {'access_token': 'tok'},
+    }
+    with env_vars(
+        HERMES_GMAIL_CLIENT_ID='id',
+        HERMES_GMAIL_CLIENT_SECRET='secret',
+        HERMES_GMAIL_REFRESH_TOKEN='refresh',
+    ):
+        with patched_urlopen(responses) as calls:
+            result = gmail_service.list_gmail_message_ids(
+                'newer_than:2d', max_results=3
+            )
+
+    require(result == ['msg-1', 'msg-2', 'msg-3'], f'Unexpected IDs: {result}')
+    require(
+        any('pageToken=next-page' in call for call in calls),
+        'Reconciliation must follow Gmail list pagination',
+    )
+
+
 def test_graph_fetch_returns_none_without_credentials() -> None:
     with env_vars(
         HERMES_MS_GRAPH_CLIENT_ID='',
@@ -392,6 +420,7 @@ def run() -> None:
         test_gmail_fetch_establishes_baseline_on_first_notification,
         test_gmail_fetch_lists_history_and_fetches_new_messages,
         test_gmail_fetch_swallows_api_errors,
+        test_gmail_reconcile_lists_paginated_message_ids,
         test_graph_fetch_returns_none_without_credentials,
         test_graph_fetch_acquires_token_and_fetches_message,
         test_graph_fetch_swallows_missing_resource,
