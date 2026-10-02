@@ -20,7 +20,7 @@ export function AssistantPage({ onBack }: { onBack: () => void }) {
     {
       role: 'assistant',
       content:
-        "Ask me anything about the taxonomy, the review queue, daily triage activity, LLM cost, or parsing quality.",
+        "I report live Hermes data. Scheduled deterministic operators handle ingestion, review resolution, taxonomy maintenance, and cleanup automatically.",
     },
   ])
   const [input, setInput] = useState('')
@@ -57,8 +57,8 @@ export function AssistantPage({ onBack }: { onBack: () => void }) {
     <div className="mx-auto flex h-[calc(100vh-0px)] max-w-3xl flex-col px-6 py-8">
       <header className="mb-4 flex items-baseline justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-ink">Assistant</h1>
-          <p className="mt-1 text-sm text-ink-soft">Ask questions about your data in plain English.</p>
+          <h1 className="text-xl font-semibold text-ink">Data assistant</h1>
+          <p className="mt-1 text-sm text-ink-soft">Read-only reporting for the automated Hermes operators.</p>
         </div>
         <button
           onClick={onBack}

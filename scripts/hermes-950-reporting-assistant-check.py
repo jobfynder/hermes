@@ -4,6 +4,7 @@ reads the same data.
 """
 
 import json
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -290,7 +291,8 @@ def test_reports_signature_quality_endpoint() -> None:
 def test_assistant_answers_gracefully_without_llm_configured() -> None:
     # No LITELLM_API_KEY in this check environment -- the assistant must
     # say so plainly, never crash or silently return an empty answer.
-    result = answer_query("How many skills are in the taxonomy?")
+    with patch("app.assistant.service.litellm_configured", return_value=False):
+        result = answer_query("How many skills are in the taxonomy?")
     require(result["answer"], f"Expected a non-empty fallback answer: {result}")
     require(result["tool_used"] is None, f"No tool should run without an LLM to plan with: {result}")
 
@@ -298,6 +300,15 @@ def test_assistant_answers_gracefully_without_llm_configured() -> None:
 def test_assistant_handles_empty_question() -> None:
     result = answer_query("")
     require(result["answer"], f"An empty question must still get a helpful reply, not a crash: {result}")
+
+
+def test_operator_request_is_deterministic_and_does_not_return_a_plan() -> None:
+    result = answer_query("Monitor the dashboard and handle the review queues automatically")
+    require(result["tool_used"] == "operator_status", f"Expected deterministic operator status: {result}")
+    require(result["data"]["mode"] == "scheduled_deterministic", f"Unexpected operator mode: {result}")
+    require(result["data"]["llm_allowed_for_scheduled_operations"] is False,
+            f"Scheduled operations must explicitly prohibit LLM use: {result}")
+    require("already enabled" in result["answer"].lower(), f"Must report active operators, not propose a plan: {result}")
 
 
 def test_reports_overview_endpoint() -> None:
@@ -399,6 +410,8 @@ def main() -> None:
     print("PASS: the assistant answers gracefully without an LLM configured")
 
     test_assistant_handles_empty_question()
+    test_operator_request_is_deterministic_and_does_not_return_a_plan()
+    print("PASS: operational requests report the active deterministic operators without an LLM plan")
     print("PASS: an empty question still gets a helpful reply")
 
     test_reports_overview_endpoint()

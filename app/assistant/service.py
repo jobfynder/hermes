@@ -219,6 +219,45 @@ _NO_DATA_SYSTEM_PROMPT = (
 )
 
 
+_OPERATOR_INTENT_PATTERNS = (
+    re.compile(r"\bmonitor\b.{0,80}\b(?:dashboard|queues?|parsing|taxonomy|companies|automation)\b", re.I),
+    re.compile(r"\b(?:take care of|handle|work on)\b.{0,80}\b(?:dashboard|queues?|records?|parsing|taxonomy)\b", re.I),
+    re.compile(r"\b(?:resolve|reprocess|fix)\b.{0,80}\b(?:needs? review|records?|queue|parsing|taxonomy)\b", re.I),
+)
+
+
+def _operator_request_response(question: str) -> dict[str, Any] | None:
+    """Handle operational requests without asking an LLM to invent a plan.
+
+    Dashboard chat is deliberately read-only. Durable deterministic operators
+    run as server timers, so an instruction to "monitor everything" should
+    report that boundary and the live queue rather than sounding as though no
+    automation exists or asking whether implementation should begin.
+    """
+    if not any(pattern.search(question) for pattern in _OPERATOR_INTENT_PATTERNS):
+        return None
+
+    report = get_review_queue_report(days=7)
+    needs_review = int((report.get("by_status") or {}).get("needs_review") or 0)
+    return {
+        "answer": (
+            "Hermes' deterministic server operators are already enabled: Gmail reconciliation runs every "
+            "5 minutes, review resolution every 15 minutes, taxonomy maintenance every 6 hours, and Gmail "
+            f"cleanup daily. The current needs-review queue contains {needs_review:,} records. This chat is "
+            "the read-only reporting surface; it does not create infrastructure or execute arbitrary prose "
+            "as a production command. The scheduled operators will keep processing eligible records and "
+            "leave only evidence conflicts or genuinely missing fields for escalation."
+        ),
+        "tool_used": "operator_status",
+        "data": {
+            "mode": "scheduled_deterministic",
+            "llm_allowed_for_scheduled_operations": False,
+            "needs_review": needs_review,
+            "review_report": report,
+        },
+    }
+
+
 def _extract_json_object(text: str) -> dict[str, Any] | None:
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
@@ -247,6 +286,10 @@ def answer_query(question: str, history: list[dict[str, str]] | None = None) -> 
     if not question or not question.strip():
         return {"answer": "Ask me something about the taxonomy, review queue, cost, or parsing quality.",
                 "tool_used": None, "data": None}
+
+    operator_response = _operator_request_response(question)
+    if operator_response:
+        return operator_response
 
     if not litellm_configured():
         return {
