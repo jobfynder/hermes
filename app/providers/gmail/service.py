@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -248,17 +249,18 @@ def fetch_gmail_messages(message_ids: list[str]) -> list[dict[str, Any]]:
     if not access_token:
         return []
 
-    messages: list[dict[str, Any]] = []
-    for message_id in message_ids:
+    def fetch_one(message_id: str) -> dict[str, Any] | None:
         try:
-            messages.append(
-                _gmail_api_get(f'/messages/{message_id}?format=full', access_token)
-            )
+            return _gmail_api_get(f'/messages/{message_id}?format=full', access_token)
         except Exception:
             # The next reconciliation run retries any ID that never reached
             # intake_log, so one deleted/transient message cannot block a page.
-            continue
-    return messages
+            return None
+
+    workers = min(max(int(os.getenv('HERMES_GMAIL_API_WORKERS', '8')), 1), 16)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        fetched = executor.map(fetch_one, message_ids)
+        return [message for message in fetched if message is not None]
 
 
 def trash_gmail_messages(message_ids: list[str]) -> tuple[int, list[str]]:
@@ -268,14 +270,18 @@ def trash_gmail_messages(message_ids: list[str]) -> tuple[int, list[str]]:
     access_token = _get_gmail_access_token()
     if not access_token:
         return 0, list(message_ids)
-    moved = 0
-    failed: list[str] = []
-    for message_id in message_ids:
+    def trash_one(message_id: str) -> tuple[str, bool]:
         try:
             _gmail_api_post(f'/messages/{message_id}/trash', access_token)
-            moved += 1
+            return message_id, True
         except Exception:
-            failed.append(message_id)
+            return message_id, False
+
+    workers = min(max(int(os.getenv('HERMES_GMAIL_API_WORKERS', '8')), 1), 16)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        outcomes = list(executor.map(trash_one, message_ids))
+    moved = sum(1 for _message_id, ok in outcomes if ok)
+    failed = [message_id for message_id, ok in outcomes if not ok]
     return moved, failed
 
 
