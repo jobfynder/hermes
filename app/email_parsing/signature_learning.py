@@ -53,9 +53,28 @@ FREEMAIL_DOMAINS = {
     "rediffmail.com",
 }
 
+SHARED_RELAY_DOMAINS = {
+    "jobfynder.com",
+    "nvoids.com",
+    "jobs.nvoids.com",
+    "prohirespowerhouse.com",
+    "groups.google.com",
+    "googlegroups.com",
+    "techmail001.email",
+}
+
 
 def _is_learnable_domain(sender_domain: str | None) -> bool:
-    return bool(sender_domain) and sender_domain not in FREEMAIL_DOMAINS
+    return bool(sender_domain) and sender_domain not in FREEMAIL_DOMAINS | SHARED_RELAY_DOMAINS
+
+
+def _contact_domain(contact: dict) -> str | None:
+    email = contact.get("email") or {}
+    value = email.get("value") if isinstance(email, dict) else None
+    if not value or "@" not in value:
+        return None
+    domain = value.rsplit("@", 1)[-1].strip().lower()
+    return domain if _is_learnable_domain(domain) else None
 
 
 def record_signature_correction(sender_domain: str, field: str, value: str) -> None:
@@ -77,15 +96,40 @@ def apply_learned_signature_patterns(contact: dict, sender_domain: str | None) -
     reviewer previously confirmed for the same sender domain. Mutates
     `contact` in place and returns the list of fields it filled in.
     """
-    if not _is_learnable_domain(sender_domain):
+    # A relay transport domain is not the recruiter's company. Prefer the
+    # corporate address extracted from the signature; use the transport
+    # sender only when it is itself a real corporate domain.
+    learned_domain = _contact_domain(contact) or (
+        sender_domain if _is_learnable_domain(sender_domain) else None
+    )
+    if not learned_domain:
         return []
 
     with cursor() as cur:
         cur.execute(
             "SELECT field, corrected_value FROM signature_corrections WHERE sender_domain = %s",
-            (sender_domain,),
+            (learned_domain,),
         )
         rows = cur.fetchall()
+
+        # Company Master is a deterministic consensus built from source-backed
+        # signature observations. Two independent observations are required
+        # before it may fill a missing company; a single parse can never teach
+        # itself and immediately become accepted evidence.
+        company_name = None
+        existing_company = contact.get("company_name")
+        existing_company_value = (
+            existing_company.get("value") if isinstance(existing_company, dict) else existing_company
+        )
+        if not existing_company_value:
+            cur.execute(
+                "SELECT c.canonical_name FROM hermes_companies c "
+                "WHERE c.identity_domain=%s AND "
+                "(SELECT count(*) FROM company_observations o WHERE o.company_id=c.company_id) >= 2",
+                (learned_domain,),
+            )
+            company = cur.fetchone()
+            company_name = company["canonical_name"] if company else None
 
     applied: list[str] = []
 
@@ -100,8 +144,18 @@ def apply_learned_signature_patterns(contact: dict, sender_domain: str | None) -
             "raw": None,
             "confidence": 0.75,
             "method": "learned_from_domain_pattern",
-            "source": sender_domain,
+            "source": learned_domain,
         }
         applied.append(field)
+
+    if company_name:
+        contact["company_name"] = {
+            "value": company_name,
+            "raw": None,
+            "confidence": 0.85,
+            "method": "learned_from_company_master",
+            "source": learned_domain,
+        }
+        applied.append("company_name")
 
     return applied

@@ -670,7 +670,11 @@ def get_approved_boilerplate_lines() -> frozenset[str]:
         return frozenset(row["normalized_line"] for row in cur.fetchall())
 
 
-def list_taxonomy_candidates(status: str = "pending") -> list[dict]:
+def list_taxonomy_candidates(
+    status: str = "pending", *, include_boilerplate_observations: bool = False,
+    limit: int | None = None,
+) -> list[dict]:
+    bounded_limit = min(max(int(limit), 1), 20000) if limit is not None else None
     with cursor() as cur:
         cur.execute(
             "SELECT id, signal_type, term, normalized_term, occurrence_count, "
@@ -682,9 +686,10 @@ def list_taxonomy_candidates(status: str = "pending") -> list[dict]:
             # pattern, not one company's own content -- see
             # record_boilerplate_line_candidates. skill/job_title rows
             # are unaffected, exactly as before.
-            "AND (signal_type != 'boilerplate_line' OR jsonb_array_length(distinct_senders) >= %s) "
-            "ORDER BY occurrence_count DESC, last_seen_at DESC",
-            (status, _MIN_BOILERPLATE_DISTINCT_SENDERS),
+            "AND (%s OR signal_type != 'boilerplate_line' OR jsonb_array_length(distinct_senders) >= %s) "
+            "ORDER BY occurrence_count DESC, last_seen_at DESC "
+            "LIMIT COALESCE(%s, 2147483647)",
+            (status, include_boilerplate_observations, _MIN_BOILERPLATE_DISTINCT_SENDERS, bounded_limit),
         )
         rows = [dict(row) for row in cur.fetchall()]
 
@@ -746,6 +751,7 @@ def approve_taxonomy_candidate(
     family: str | None = None,
     seniority: str = "unspecified",
     reviewed_by: str | None = None,
+    allow_llm: bool = True,
 ) -> dict:
     """Adds the candidate's term to canonical_skills.json or job_titles.json
     (live immediately, no redeploy -- see add_canonical_skill/
@@ -798,7 +804,7 @@ def approve_taxonomy_candidate(
                 if entry.get("category")
             })
             resolved_category, classification_method = classify_skill_category(
-                row["term"], known_categories
+                row["term"], known_categories, allow_llm=allow_llm
             )
         # Best-effort: a description is a nice-to-have annotation the
         # approval itself never depends on. generate_skill_description
@@ -807,7 +813,7 @@ def approve_taxonomy_candidate(
         # turn a missing description into a failed approval.
         try:
             description = generate_skill_description(
-                row["term"], category=resolved_category, allow_llm=True
+                row["term"], category=resolved_category, allow_llm=allow_llm
             )
         except Exception:  # noqa: BLE001
             description = None
@@ -822,7 +828,9 @@ def approve_taxonomy_candidate(
                 {(e.get("family") or "Unclassified") for e in get_job_title_entries()} - {"Unclassified"}
             )
             try:
-                resolved_family, _method = classify_job_title_family(row["term"], known_families)
+                resolved_family, _method = classify_job_title_family(
+                    row["term"], known_families, allow_llm=allow_llm
+                )
             except Exception:  # noqa: BLE001
                 resolved_family = "Unclassified"
 
@@ -857,7 +865,9 @@ def reject_taxonomy_candidate(candidate_id: int, reviewed_by: str | None = None)
     return {"rejected": True, "term": row["term"]}
 
 
-def bulk_approve_taxonomy_candidates(candidate_ids: list[int], reviewed_by: str | None = None) -> dict:
+def bulk_approve_taxonomy_candidates(
+    candidate_ids: list[int], reviewed_by: str | None = None, *, allow_llm: bool = True
+) -> dict:
     """Approves a batch of pending candidates in one call -- the review
     page's "Approve selected" action. Each candidate keeps its own
     signal_type (skill vs job_title), so approve_taxonomy_candidate's
@@ -872,7 +882,9 @@ def bulk_approve_taxonomy_candidates(candidate_ids: list[int], reviewed_by: str 
     failed: list[dict] = []
 
     for candidate_id in candidate_ids:
-        result = approve_taxonomy_candidate(candidate_id, reviewed_by=reviewed_by)
+        result = approve_taxonomy_candidate(
+            candidate_id, reviewed_by=reviewed_by, allow_llm=allow_llm
+        )
         if result.get("approved"):
             approved.append(result["term"])
         else:

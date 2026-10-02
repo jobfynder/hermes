@@ -1,171 +1,80 @@
-"""HERMES-900 daily taxonomy candidate triage.
+"""Evidence-gated, deterministic taxonomy and boilerplate maintenance.
 
-Runs on a schedule (see the hermes-taxonomy-triage.service/.timer host
-systemd units) to clear the day's new skill/job-title/boilerplate-line
-taxonomy candidates automatically, so a human never has to work through
-this queue by hand on a daily basis. Two layers, in order:
-
-1. Deterministic pre-filter -- candidates.py's _is_noise_skill_term/
-   _is_noise_job_title already keep most junk (sentence fragments,
-   person names, table rows) from ever being queued in the first
-   place, so by the time this script runs, most of what's left is
-   already a plausible term.
-
-2. LLM batch classification -- whatever's still pending gets a real
-   judgment call ("is this a genuine, nameable skill/job title, or
-   still noise the deterministic filter didn't catch?"), in batches of
-   ~40 terms per call rather than one call per term. On a real
-   production backlog (2026-09), this batching brought a 2,300-item
-   ambiguous set down to ~30 calls total.
-
-Cost guardrail: MAX_PER_RUN caps how many candidates get processed in
-a single run, oldest first -- if the backlog somehow spikes (a queue
-processing bug, a burst of unusual mail), this bounds the worst-case
-LLM spend for one run rather than processing an unbounded backlog.
-Anything beyond the cap is left pending for the next scheduled run.
-
-A batch that fails to parse an LLM response (after 3 retries) is left
-pending rather than guessed at -- never silently auto-approved or
-auto-rejected on an LLM hiccup.
+No model call is permitted in this scheduled job. Clear noise is rejected;
+technical terms and job titles are promoted only after recurring across
+independent sender domains; ambiguous terms remain pending.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import sys
-import time
-
-from app.prompt_runtime.models import PromptRenderedMessage
-from app.prompt_runtime.service import _call_litellm_with_model, litellm_configured
 from app.understanding.taxonomy.candidates import (
+    _is_noise_job_title,
+    _is_noise_skill_term,
     auto_classify_unclassified_job_titles,
     bulk_approve_taxonomy_candidates,
     bulk_reject_taxonomy_candidates,
     list_taxonomy_candidates,
-    taxonomy_candidate_noise_reason,
 )
+from app.understanding.taxonomy.skill_quality import skill_noise_reason
+from app.understanding.taxonomy.title_family_classifier import classify_family_deterministically
 from app.understanding.taxonomy.descriptions import generate_skill_description
 from app.understanding.taxonomy.loader import get_canonical_skill_entries, set_skill_description
+from app.runtime.db import cursor
 
-MODEL = os.getenv("HERMES_PROMPT_DEFAULT_MODEL", "anthropic/claude-haiku-4-5")
-BATCH_SIZE = 40
 MAX_PER_RUN = int(os.getenv("HERMES_TAXONOMY_TRIAGE_MAX_PER_RUN", "500"))
-DESCRIPTION_LLM_LIMIT = int(os.getenv("HERMES_DESCRIPTION_LLM_MAX_PER_RUN", "200"))
+SKILL_SYSTEM_PROMPT = "deterministic"
+TITLE_SYSTEM_PROMPT = "deterministic"
 
-SKILL_SYSTEM_PROMPT = (
-    "You are cleaning up an IT staffing recruitment platform's SKILLS taxonomy. "
-    "You will get a numbered list of candidate terms pulled automatically from real "
-    "job posting emails -- many are genuine technical skills/tools, but many are "
-    "parsing noise: sentence fragments, person names, company names, city/location "
-    "names, generic business phrases, HR labels, or garbled text. "
-    "For EACH numbered item, decide APPROVE (it is a genuine, specific, nameable "
-    "technical skill or tool a recruiter would list -- a technology, platform, "
-    "certification, methodology, or programming concept) or REJECT (anything else: "
-    "a person's name, company name, place name, sentence fragment, vague soft-skill "
-    "phrase, HR/admin label, or garbled text). "
-    "Reply with ONLY a JSON array of the strings \"approve\" or \"reject\", in the "
-    "exact same order as the input, one entry per numbered item. No other text."
+
+_TECHNICAL_SKILL_RE = re.compile(
+    r"(?i)(?:\b(?:api|sdk|sql|nosql|aws|azure|gcp|sap|oracle|salesforce|servicenow|"
+    r"workday|kubernetes|docker|python|java|javascript|typescript|node(?:\.js)?|react|"
+    r"angular|linux|unix|terraform|ansible|kafka|snowflake|databricks|tableau|power\s*bi|"
+    r"git(?:hub|lab)?|jenkins|devops|sre|ci\s*/?\s*cd|etl|iam|rbac|siem|soar|llm|"
+    r"machine learning|artificial intelligence|nlp|database|cloud|network|cybersecurity|"
+    r"security|automation|scripting|microservices?|middleware|observability|data pipeline)\b|"
+    r"(?:\.net|c\+\+|c#))"
 )
-
-TITLE_SYSTEM_PROMPT = (
-    "You are cleaning up an IT staffing recruitment platform's JOB TITLES taxonomy. "
-    "You will get a numbered list of candidate terms pulled automatically from real "
-    "job posting emails -- many are genuine job titles, but many are parsing noise: "
-    "sentence fragments, person names, requirement-summary sentences, or garbled text. "
-    "For EACH numbered item, decide APPROVE (it is a genuine, specific job title a "
-    "recruiter would use -- possibly with a seniority/technology qualifier, e.g. "
-    "'Senior SAP ABAP Developer') or REJECT (a person's name, a sentence, a vague "
-    "phrase, or garbled text -- NOT a title). "
-    "Reply with ONLY a JSON array of the strings \"approve\" or \"reject\", in the "
-    "exact same order as the input, one entry per numbered item. No other text."
+_TITLE_ROLE_RE = re.compile(
+    r"(?i)\b(?:developer|engineer|architect|analyst|administrator|admin|manager|consultant|"
+    r"lead|designer|researcher|technician|scientist|specialist|tester|coordinator|owner|"
+    r"director|programmer|sme)\b"
 )
-
-# Boilerplate lines are a different, higher-stakes call than skills/
-# titles: approving one gets it stripped from EVERY future job
-# description, permanently. It already passed a strict deterministic
-# bar before ever reaching here (record_boilerplate_line_candidates
-# only queues a line once it's recurred, byte-identical, across 8+
-# distinct sender domains -- see app/understanding/taxonomy/
-# candidates.py) so most of what arrives here really is generic
-# template filler. The prompt is written to stay conservative anyway:
-# a genuinely specific requirement sentence that merely happens to
-# recur (several recruiters forwarding the same original posting)
-# should be rejected, not stripped from unrelated future postings.
-BOILERPLATE_SYSTEM_PROMPT = (
-    "You are deciding which recurring lines from IT staffing job-posting emails are "
-    "generic TEMPLATE/BOILERPLATE text that should be stripped from every future job "
-    "description, versus lines that are genuine, specific job-requirement content that "
-    "merely happens to recur (e.g. several recruiters forwarding the same original "
-    "posting). Each line below has already been confirmed to appear, byte-for-byte "
-    "identical, across at least 8 different sending companies -- so lean APPROVE for "
-    "generic section headers, boilerplate disclaimers, and generic soft-skill filler "
-    "sentences ('Strong analytical and problem-solving skills.', 'Required "
-    "Qualifications, Capabilities, and Skills:'). Lean REJECT only when the line "
-    "names a SPECIFIC technology, project, client, or unusual requirement that reads "
-    "as real content from one particular posting, not a template a recruiter reuses "
-    "for every role (e.g. 'Mainframe to Java migration experience (Preferred)' names "
-    "a specific migration project -- reject that even though it recurred). "
-    "Reply with ONLY a JSON array of the strings \"approve\" or \"reject\", in the "
-    "exact same order as the input, one entry per numbered item. No other text."
-)
+_BLOCKED_TECH_ACRONYMS = {"USA", "US", "GC", "H1B", "C2C", "W2", "F2F", "ASAP"}
 
 
-def _extract_json_array(text: str) -> list[str] | None:
-    match = re.search(r"\[.*\]", text, re.DOTALL)
-    if not match:
-        return None
-    try:
-        parsed = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(parsed, list):
-        return None
-    return [str(x).strip().lower() for x in parsed]
+def deterministic_taxonomy_decision(candidate: dict) -> str:
+    """Resolve only evidence-backed cases; ambiguous terms remain pending."""
+    term = re.sub(r"\s+", " ", candidate.get("term") or "").strip()
+    occurrences = int(candidate.get("occurrence_count") or 0)
+    senders = len(candidate.get("distinct_senders") or [])
+    signal_type = candidate.get("signal_type")
+
+    if signal_type == "skill":
+        if skill_noise_reason(term) or _is_noise_skill_term(term):
+            return "reject"
+        acronym = term if re.fullmatch(r"[A-Z][A-Z0-9+#.-]{1,11}", term) else None
+        technical_shape = bool(_TECHNICAL_SKILL_RE.search(term)) or bool(
+            acronym and acronym not in _BLOCKED_TECH_ACRONYMS
+        )
+        return "approve" if technical_shape and occurrences >= 5 and senders >= 3 else "review"
+
+    if signal_type == "job_title":
+        if _is_noise_job_title(term):
+            return "reject"
+        family = classify_family_deterministically(term)
+        return "approve" if family and _TITLE_ROLE_RE.search(term) and occurrences >= 3 and senders >= 2 else "review"
+
+    return "review"
 
 
-def classify_batch(terms: list[str], system_prompt: str) -> list[str]:
-    # A term with an embedded newline or non-breaking space (a stray
-    # parsing artifact from an older, already-queued candidate) turns
-    # into an extra fake "line" in the numbered list below, throwing off
-    # the model's item count and reliably producing a mismatched-length
-    # response every retry -- confirmed against a real stuck batch in
-    # production containing "HANA \xa0 \xa0 \xa0 \n\nRN SAP BOBJ Admin
-    # Consultant". Collapsed to single spaces here, for prompting only;
-    # the candidate's stored term is never modified.
-    sanitized_terms = [re.sub(r"\s+", " ", t).strip() for t in terms]
-    numbered = "\n".join(f"{i + 1}. {t}" for i, t in enumerate(sanitized_terms))
-    messages = [
-        PromptRenderedMessage(role="system", content=system_prompt),
-        PromptRenderedMessage(role="user", content=numbered),
-    ]
-
-    for attempt in range(3):
-        try:
-            output, _usage = _call_litellm_with_model(messages, MODEL)
-        except Exception as e:  # noqa: BLE001
-            print(f"    LLM call failed (attempt {attempt + 1}): {e}")
-            time.sleep(2)
-            continue
-
-        decisions = _extract_json_array(output)
-        if decisions and len(decisions) == len(terms):
-            return decisions
-
-        print(f"    Bad/mismatched response (attempt {attempt + 1}): "
-              f"got {len(decisions) if decisions else 0} decisions for {len(terms)} terms")
-        time.sleep(2)
-
-    return ["review"] * len(terms)
-
-
-def triage(signal_type: str, system_prompt: str) -> dict:
-    if signal_type in {"skill", "job_title"}:
-        return triage_taxonomy_deterministically(signal_type)
+def triage(signal_type: str, _system_prompt: str) -> dict:
     candidates = list_taxonomy_candidates(status="pending")
     candidates = [c for c in candidates if c["signal_type"] == signal_type]
-    candidates.sort(key=lambda c: c["first_seen_at"])
+    candidates.sort(key=lambda c: (-int(c.get("occurrence_count") or 0), c["first_seen_at"]))
     candidates = candidates[:MAX_PER_RUN]
 
     if not candidates:
@@ -173,28 +82,17 @@ def triage(signal_type: str, system_prompt: str) -> dict:
 
     approve_ids: list[int] = []
     reject_ids: list[int] = []
-    review_count = 0
-
-    for start in range(0, len(candidates), BATCH_SIZE):
-        batch = candidates[start:start + BATCH_SIZE]
-        terms = [c["term"] for c in batch]
-        decisions = classify_batch(terms, system_prompt)
-
-        for c, decision in zip(batch, decisions):
-            if decision == "approve":
-                approve_ids.append(c["id"])
-            elif decision == "reject":
-                reject_ids.append(c["id"])
-            else:
-                review_count += 1
-
-        print(f"  {signal_type} batch {start}-{start + len(batch)}: "
-              f"approve={len(approve_ids)} reject={len(reject_ids)} review={review_count}")
+    decisions = {c["id"]: deterministic_taxonomy_decision(c) for c in candidates}
+    approve_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "approve"]
+    reject_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "reject"]
+    review_count = len(candidates) - len(approve_ids) - len(reject_ids)
 
     approved = 0
     rejected = 0
     if approve_ids:
-        result = bulk_approve_taxonomy_candidates(approve_ids, reviewed_by="hermes-daily-triage")
+        result = bulk_approve_taxonomy_candidates(
+            approve_ids, reviewed_by="hermes-daily-triage", allow_llm=False
+        )
         approved = result["approved_count"]
         if result["failed"]:
             print(f"  {signal_type} approve failures: {result['failed'][:5]}")
@@ -210,27 +108,6 @@ def triage(signal_type: str, system_prompt: str) -> dict:
         "rejected": rejected,
         "left_for_review": review_count,
     }
-
-
-def triage_taxonomy_deterministically(signal_type: str) -> dict:
-    """Reject only provable noise. Never auto-promote an unknown term."""
-    candidates = [c for c in list_taxonomy_candidates(status="pending")
-                  if c["signal_type"] == signal_type]
-    candidates.sort(key=lambda c: c["first_seen_at"])
-    reject_ids = []
-    for candidate in candidates:
-        # Preserve embedded newlines/non-breaking spaces: those are themselves
-        # deterministic evidence that an old queued value is a parser artifact.
-        term = (candidate["term"] or "").strip()
-        if taxonomy_candidate_noise_reason(signal_type, term):
-            reject_ids.append(candidate["id"])
-    reject_ids = reject_ids[:MAX_PER_RUN]
-    rejected = 0
-    if reject_ids:
-        result = bulk_reject_taxonomy_candidates(reject_ids, reviewed_by="hermes-daily-deterministic")
-        rejected = result["rejected_count"]
-    return {"processed": len(candidates), "approved": 0, "rejected": rejected,
-            "left_for_review": len(candidates) - rejected}
 
 
 _SAFE_BOILERPLATE_EXACT = {
@@ -250,6 +127,12 @@ _SAFE_BOILERPLATE_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for patter
     r"^(?:strong|excellent) (?:written and verbal )?(?:communication|analytical|problem[- ]solving|organizational|time[- ]management|interpersonal|presentation)(?: and (?:communication|analytical|problem[- ]solving|organizational|time[- ]management|interpersonal|presentation))* (?:skills|abilities|capabilities)[.!]?$",
     r"^ability to manage multiple priorities in a fast[- ]paced environment[.!]?$",
     r"^perform other related duties as assigned[.!]?$",
+    r"^(?:reply to|e-?mail|phone|web(?:site)?|address)\s*:\s*\S+",
+    r"^(?:please|kindly).{0,80}(?:find|review|go through|have a look).{0,100}(?:job description|requirement|jd)\b",
+    r"^(?:please|kindly).{0,160}(?:send|share|forward|revert).{0,80}(?:resume|profile|cv)\b",
+    r"^(?:i hope|hope) (?:this email finds you|you are|you'?re) .{0,100}$",
+    r"^(?:sign-up for your account with .{0,80} recruiting portal|hire our it recruiter at .{0,80})$",
+    r"^(?:an early response is .{0,80}|due to the urgent nature .{0,140})$",
 ))
 _SPECIFIC_REQUIREMENT_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pattern in (
     r"\b\d+\+?\s*(?:years?|yrs?)\b",
@@ -279,16 +162,18 @@ def deterministic_boilerplate_decision(term: str) -> str:
 
 
 def triage_boilerplate_deterministically() -> dict:
-    candidates = [c for c in list_taxonomy_candidates(status="pending")
+    candidates = [c for c in list_taxonomy_candidates(
+        status="pending", include_boilerplate_observations=True, limit=MAX_PER_RUN
+    )
                   if c["signal_type"] == "boilerplate_line"]
-    candidates.sort(key=lambda c: c["first_seen_at"])
-    candidates = candidates[:MAX_PER_RUN]
     decisions = {c["id"]: deterministic_boilerplate_decision(c["term"]) for c in candidates}
     approve_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "approve"]
     reject_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "reject"]
     approved = 0
     if approve_ids:
-        result = bulk_approve_taxonomy_candidates(approve_ids, reviewed_by="hermes-daily-deterministic")
+        result = bulk_approve_taxonomy_candidates(
+            approve_ids, reviewed_by="hermes-daily-deterministic", allow_llm=False
+        )
         approved = result["approved_count"]
     rejected = 0
     if reject_ids:
@@ -298,8 +183,23 @@ def triage_boilerplate_deterministically() -> dict:
             "left_for_review": len(candidates) - len(approve_ids) - len(reject_ids)}
 
 
+def prune_stale_boilerplate_observations(limit: int = 20000) -> int:
+    """Retire one-off lines after 14 days so observation storage stays bounded."""
+    with cursor() as cur:
+        cur.execute(
+            "WITH stale AS (SELECT id FROM taxonomy_candidates "
+            "WHERE signal_type='boilerplate_line' AND status='pending' "
+            "AND occurrence_count < 3 AND jsonb_array_length(distinct_senders) < 2 "
+            "AND last_seen_at < now()-interval '14 days' ORDER BY last_seen_at LIMIT %s) "
+            "UPDATE taxonomy_candidates t SET status='rejected', reviewed_at=now(), "
+            "reviewed_by='hermes-stale-observation' FROM stale WHERE t.id=stale.id",
+            (min(max(limit, 1), 50000),),
+        )
+        return cur.rowcount
+
+
 def backfill_missing_descriptions() -> dict:
-    """Retry missing descriptions daily; deterministic first, capped LLM fallback second."""
+    """Retry descriptions from the curated glossary without any model call."""
     missing = [entry for entry in get_canonical_skill_entries() if not (entry.get("description") or "").strip()]
     deterministic_filled = 0
     still_missing = []
@@ -310,16 +210,9 @@ def backfill_missing_descriptions() -> dict:
         else:
             still_missing.append(entry)
 
-    llm_enabled = os.getenv("HERMES_SKILL_DESCRIPTION_LLM_FALLBACK_ENABLED", "false").lower() in {"1", "true", "yes"}
+    llm_enabled = False
     llm_filled = 0
     llm_failed = 0
-    if llm_enabled and litellm_configured():
-        for entry in still_missing[:DESCRIPTION_LLM_LIMIT]:
-            description = generate_skill_description(entry["name"], category=entry.get("category"), allow_llm=True)
-            if description and set_skill_description(entry["name"], description, source="ai_generated"):
-                llm_filled += 1
-            else:
-                llm_failed += 1
     return {"missing_before": len(missing), "deterministic_filled": deterministic_filled,
             "llm_enabled": llm_enabled and litellm_configured(), "llm_filled": llm_filled,
             "llm_failed": llm_failed, "remaining": len(missing) - deterministic_filled - llm_filled}
@@ -341,13 +234,13 @@ def main() -> int:
     family_summary = auto_classify_unclassified_job_titles()
     print(f"TITLE FAMILIES: checked={family_summary['checked_count']} "
           f"classified={family_summary['classified_count']} "
-          f"still_unclassified={family_summary['still_unclassified_count']} "
-          f"llm_attempted={family_summary['llm_attempted']} llm_classified={family_summary['llm_classified']}")
+          f"still_unclassified={family_summary['still_unclassified_count']} method=deterministic")
 
     boilerplate_summary = triage_boilerplate_deterministically()
     print(f"BOILERPLATE: processed={boilerplate_summary['processed']} "
           f"approved={boilerplate_summary['approved']} rejected={boilerplate_summary['rejected']} "
           f"left_for_review={boilerplate_summary['left_for_review']}")
+    print(f"BOILERPLATE_STALE_RETIRED: {prune_stale_boilerplate_observations()}")
 
     description_summary = backfill_missing_descriptions()
     print(f"DESCRIPTIONS: missing_before={description_summary['missing_before']} "

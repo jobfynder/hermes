@@ -17,7 +17,7 @@ from app.email_parsing.provenance import (
 )
 from app.understanding.taxonomy.candidates import get_approved_boilerplate_lines
 
-REVIEW_REPARSE_VERSION = 'deterministic_review_reparse_v2'
+REVIEW_REPARSE_VERSION = 'deterministic_review_reparse_v3'
 
 
 def get_job(job_id):

@@ -41,10 +41,15 @@ def classify_skill_category_deterministically(term: str) -> str | None:
     return None
 
 
-def classify_skill_category(term: str, known_categories: list[str]) -> tuple[str, str]:
+def classify_skill_category(
+    term: str, known_categories: list[str], *, allow_llm: bool = True
+) -> tuple[str, str]:
     deterministic = classify_skill_category_deterministically(term)
     if deterministic and deterministic in known_categories:
         return deterministic, "deterministic"
+
+    if not allow_llm:
+        return "Tool/Technology", "fallback"
 
     outcome = run_llm_fallback(
         prompt_id="jf.taxonomy.skill-candidate.classify",

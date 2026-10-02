@@ -39,8 +39,19 @@ class SkillQualityTests(unittest.TestCase):
     def test_daily_skill_triage_does_not_call_model(self):
         spec=importlib.util.spec_from_file_location('triage_test',Path('scripts/hermes-900-daily-taxonomy-triage.py'))
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        with patch.object(module,'classify_batch') as llm,patch.object(module,'list_taxonomy_candidates') as listing:
+        candidates=[
+            {'id':1,'signal_type':'skill','term':'RBAC','occurrence_count':8,
+             'distinct_senders':['a.com','b.com','c.com'],'first_seen_at':'2026-01-01'},
+            {'id':2,'signal_type':'skill','term':'Stakeholder Management','occurrence_count':8,
+             'distinct_senders':['a.com','b.com','c.com'],'first_seen_at':'2026-01-01'},
+        ]
+        with patch.object(module,'list_taxonomy_candidates',return_value=candidates) as listing, \
+             patch.object(module,'bulk_approve_taxonomy_candidates',return_value={'approved_count':1,'failed':[]}) as approve, \
+             patch.object(module,'bulk_reject_taxonomy_candidates',return_value={'rejected_count':1,'failed':[]}):
             result=module.triage('skill','ignored')
-            self.assertEqual(result['approved'],0)
-            llm.assert_not_called()
-            listing.assert_called_once_with(status='pending')
+            self.assertEqual(result['approved'],1)
+            self.assertEqual(result['rejected'],1)
+            listing.assert_called_once()
+            approve.assert_called_once_with(
+                [1], reviewed_by='hermes-daily-triage', allow_llm=False
+            )

@@ -49,7 +49,28 @@ def extract_probable_title(text: str) -> str | None:
     # the colon (outside the title regex's own allowed character class
     # below, and not one of its terminators either) made the whole match
     # fail at that position with no title recovered at all.
-    clean_text = re.sub(r"^(?:(?:urgent|immediate)\s+)?(?:need|hiring|looking for|seeking)(?:\s*:\s*|\s+)(?:for\s+)?", "", clean_text, flags=re.IGNORECASE)
+    clean_text = re.sub(
+        r"^(?:"
+        r"we\s+are\s+looking\s+for|"
+        r"job\s+opportunity|"
+        r"urgent\s+job\s+opening\s+for|"
+        r"immediate\s+(?:interview|hiring)\s+for|"
+        r"(?:urgent|immediate)\s+(?:need|requirement|opening)\s*(?:for)?|"
+        r"(?:(?:urgent|immediate)\s+)?(?:need|hiring|looking\s+for|seeking)"
+        r")(?:\s*[:|\-]+\s*|\s+)(?:for\s+)?",
+        "",
+        clean_text,
+        flags=re.IGNORECASE,
+    )
+    # Remove only location-shaped suffixes. Requiring a state abbreviation
+    # (or a standalone two-letter location) preserves real titles such as
+    # "Software Development Engineer in Test (SDET)".
+    clean_text = re.sub(
+        r"\s+(?:in|at)\s+[A-Z][A-Za-z.]+(?:\s+[A-Z][A-Za-z.]+){0,2},\s*[A-Z]{2}\b.*$",
+        "",
+        clean_text,
+    )
+    clean_text = re.sub(r"\s+(?:in|at)\s+[A-Z]{2}\s*$", "", clean_text)
 
     # "|" (or "||") as a terminator alongside "-"/","/"for" -- real
     # recruiter subject lines routinely read "Title | Location |" or

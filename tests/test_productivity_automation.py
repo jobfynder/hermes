@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from app.understanding.taxonomy.title_family_classifier import classify_family_deterministically
+from app.understanding.taxonomy.skill_category_classifier import classify_skill_category
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,6 +21,16 @@ def _load_triage():
 
 
 class ProductivityAutomationTests(unittest.TestCase):
+    def test_skill_category_deterministic_mode_never_calls_llm(self):
+        with patch(
+            "app.understanding.taxonomy.skill_category_classifier.run_llm_fallback"
+        ) as fallback:
+            category, method = classify_skill_category(
+                "Long Tail Technical Tool", ["Cloud", "Tool/Technology"], allow_llm=False
+            )
+        self.assertEqual((category, method), ("Tool/Technology", "fallback"))
+        fallback.assert_not_called()
+
     def test_job_title_family_rules_cover_production_title_shapes(self):
         cases = {
             "Oracle WMS Functional Consultant": "ERP",
@@ -54,7 +65,6 @@ class ProductivityAutomationTests(unittest.TestCase):
             patch.object(module, "get_canonical_skill_entries", return_value=entries),
             patch.object(module, "generate_skill_description", side_effect=["Cloud definition", None]),
             patch.object(module, "set_skill_description", return_value=True) as write,
-            patch.object(module, "litellm_configured", return_value=False),
             patch.dict(module.os.environ, {"HERMES_SKILL_DESCRIPTION_LLM_FALLBACK_ENABLED": "true"}),
         ):
             result = module.backfill_missing_descriptions()

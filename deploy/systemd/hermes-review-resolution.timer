@@ -1,11 +1,11 @@
 [Unit]
-Description=Queue deterministic Hermes review resolution daily
+Description=Queue deterministic Hermes review resolution every 15 minutes
 
 [Timer]
-OnCalendar=*-*-* 04:15:00
+OnCalendar=*:0/15
 OnBootSec=20min
 Persistent=true
-RandomizedDelaySec=5min
+RandomizedDelaySec=60s
 Unit=hermes-review-resolution.service
 
 [Install]

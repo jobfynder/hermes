@@ -28,6 +28,17 @@ class EmailReviewRegressionTests(unittest.TestCase):
         ]:
             self.assertEqual(extract_probable_title(text), expected)
 
+    def test_recruiter_subject_prefixes_are_removed(self):
+        cases = {
+            'We are looking for Linux Admin in Boston, MA (Onsite)': 'Linux Admin',
+            'Job Opportunity - AWS Solution Architect at NY': 'AWS Solution Architect',
+            'Immediate interview for VoIP Engineer II in Seattle, WA': 'VoIP Engineer II',
+            'Urgent job opening for ServiceNow Engagement Manager || Remote': 'ServiceNow Engagement Manager',
+        }
+        for subject, expected in cases.items():
+            with self.subTest(subject=subject):
+                self.assertEqual(extract_probable_title(subject), expected)
+
     def test_explicit_any_visa(self):
         from app.understanding.parsers.contact import extract_work_authorization
         self.assertEqual(extract_work_authorization('ANY VISA!!'), 'Any Visa')

@@ -1,0 +1,9 @@
+[Unit]
+Description=Hermes deterministic taxonomy and boilerplate triage
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec hermes-api python scripts/hermes-900-daily-taxonomy-triage.py
+TimeoutStartSec=20min
