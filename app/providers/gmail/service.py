@@ -1,8 +1,10 @@
 import base64
 import json
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -189,19 +191,43 @@ def _get_gmail_access_token() -> str | None:
     return body.get('access_token')
 
 
+def _gmail_api_request(request: Request) -> dict[str, Any]:
+    for attempt in range(5):
+        try:
+            with urlopen(request, timeout=15) as response:
+                return json.loads(response.read().decode('utf-8'))
+        except HTTPError as exc:
+            try:
+                body = json.loads(exc.read().decode('utf-8'))
+                reasons = {
+                    item.get('reason')
+                    for item in ((body.get('error') or {}).get('errors') or [])
+                }
+            except Exception:
+                reasons = set()
+            retryable = exc.code == 429 or bool(
+                reasons & {'rateLimitExceeded', 'userRateLimitExceeded', 'backendError'}
+            )
+            if not retryable or attempt == 4:
+                raise
+            try:
+                retry_after = float(exc.headers.get('Retry-After', '0'))
+            except (TypeError, ValueError):
+                retry_after = 0
+            time.sleep(max(retry_after, 2 ** attempt))
+    raise RuntimeError('unreachable')
+
+
 def _gmail_api_get(path: str, access_token: str) -> dict[str, Any]:
     request = Request(f'{GMAIL_API_BASE}{path}', method='GET')
     request.add_header('Authorization', f'Bearer {access_token}')
-
-    with urlopen(request, timeout=15) as response:
-        return json.loads(response.read().decode('utf-8'))
+    return _gmail_api_request(request)
 
 
 def _gmail_api_post(path: str, access_token: str) -> dict[str, Any]:
     request = Request(f'{GMAIL_API_BASE}{path}', data=b'', method='POST')
     request.add_header('Authorization', f'Bearer {access_token}')
-    with urlopen(request, timeout=15) as response:
-        return json.loads(response.read().decode('utf-8'))
+    return _gmail_api_request(request)
 
 
 def list_gmail_message_ids(query: str, *, max_results: int = 10000) -> list[str]:
@@ -257,7 +283,7 @@ def fetch_gmail_messages(message_ids: list[str]) -> list[dict[str, Any]]:
             # intake_log, so one deleted/transient message cannot block a page.
             return None
 
-    workers = min(max(int(os.getenv('HERMES_GMAIL_API_WORKERS', '8')), 1), 16)
+    workers = min(max(int(os.getenv('HERMES_GMAIL_API_WORKERS', '4')), 1), 16)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         fetched = executor.map(fetch_one, message_ids)
         return [message for message in fetched if message is not None]
@@ -277,7 +303,7 @@ def trash_gmail_messages(message_ids: list[str]) -> tuple[int, list[str]]:
         except Exception:
             return message_id, False
 
-    workers = min(max(int(os.getenv('HERMES_GMAIL_API_WORKERS', '8')), 1), 16)
+    workers = min(max(int(os.getenv('HERMES_GMAIL_API_WORKERS', '4')), 1), 16)
     with ThreadPoolExecutor(max_workers=workers) as executor:
         outcomes = list(executor.map(trash_one, message_ids))
     moved = sum(1 for _message_id, ok in outcomes if ok)
