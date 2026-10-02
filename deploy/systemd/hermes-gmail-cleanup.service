@@ -7,4 +7,4 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=/opt/hermes
 ExecStart=/usr/bin/flock -E 0 -n /run/hermes-gmail-cleanup.lock /usr/bin/docker compose exec -T hermes-api python scripts/hermes-850-gmail-cleanup.py
-TimeoutStartSec=30min
+TimeoutStartSec=2h
