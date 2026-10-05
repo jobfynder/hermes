@@ -713,6 +713,18 @@ def list_taxonomy_candidates(
         )
         rows = [dict(row) for row in cur.fetchall()]
 
+    # A term already present as a canonical name or alias is not review
+    # work. Hide it immediately even before the scheduled maintenance pass
+    # retires the persisted observation. Loose keys cover punctuation and
+    # spacing variants such as Node.js / Node JS.
+    if status == 'pending':
+        known_by_type = {
+            'skill': build_loose_skill_key_index(),
+            'job_title': build_loose_title_key_index(),
+        }
+        rows = [row for row in rows if row['signal_type'] not in known_by_type
+                or _loose_key(row['term']) not in known_by_type[row['signal_type']]]
+
     # psycopg returns real datetime objects for TIMESTAMPTZ columns, but
     # the response model (TaxonomyCandidateEntry in app/routers/
     # moderation.py) declares first_seen_at/last_seen_at as str -- FastAPI
@@ -727,6 +739,22 @@ def list_taxonomy_candidates(
                 row[timestamp_field] = row[timestamp_field].isoformat()
 
     return rows
+
+
+def retire_known_taxonomy_candidates(reviewed_by: str = 'hermes-known-taxonomy-dedup') -> dict:
+    """Close pending rows whose identity is already canonical, without LLM."""
+    known_by_type = {
+        'skill': build_loose_skill_key_index(),
+        'job_title': build_loose_title_key_index(),
+    }
+    with cursor() as cur:
+        cur.execute("SELECT id,signal_type,term FROM taxonomy_candidates WHERE status='pending' AND signal_type IN ('skill','job_title')")
+        duplicate_ids = [row['id'] for row in cur.fetchall()
+                         if _loose_key(row['term']) in known_by_type[row['signal_type']]]
+        if duplicate_ids:
+            cur.execute("UPDATE taxonomy_candidates SET status='rejected',reviewed_at=now(),reviewed_by=%s WHERE id=ANY(%s) AND status='pending'",
+                        (reviewed_by, duplicate_ids))
+    return {'retired_count': len(duplicate_ids), 'candidate_ids': duplicate_ids}
 
 
 def edit_taxonomy_candidate(candidate_id: int, term: str) -> dict:
@@ -862,6 +890,9 @@ def approve_taxonomy_candidate(
             "UPDATE taxonomy_candidates SET status = 'approved', reviewed_at = now(), reviewed_by = %s WHERE id = %s",
             (reviewed_by, candidate_id),
         )
+
+    # One approval can make several spelling/punctuation variants redundant.
+    retire_known_taxonomy_candidates(reviewed_by='hermes-approval-dedup')
 
     return {
         "approved": True,

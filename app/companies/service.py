@@ -286,3 +286,48 @@ def get_company(company_id):
                              'recent_unique_requirements':recent_jobs,'recent_contacts':recent['n'],
                              'recent_sources':recent['sources'],'window_days':30,'version':'observed_activity_v1'}
     return company
+def update_company(company_id, *, canonical_name=None, identity_domain=None,
+                   verification_status=None, claim_status=None):
+    """Update reviewer-owned master fields without rewriting source evidence."""
+    changes = {}
+    if canonical_name is not None:
+        cleaned_name = normalize_company_name(canonical_name)
+        if not cleaned_name:
+            raise ValueError('invalid_company_name')
+        changes['canonical_name'] = cleaned_name
+    if identity_domain is not None:
+        cleaned_domain = corporate_domain(identity_domain)
+        if not cleaned_domain:
+            raise ValueError('invalid_or_shared_company_domain')
+        changes['identity_domain'] = cleaned_domain
+    if verification_status is not None:
+        if verification_status not in {'unverified', 'verified'}:
+            raise ValueError('invalid_verification_status')
+        changes['verification_status'] = verification_status
+    if claim_status is not None:
+        if claim_status not in {'unclaimed', 'claimed'}:
+            raise ValueError('invalid_claim_status')
+        changes['claim_status'] = claim_status
+    if not changes:
+        raise ValueError('no_changes')
+    assignments = ', '.join(f'{field}=%({field})s' for field in changes)
+    changes['company_id'] = company_id
+    try:
+        with cursor() as cur:
+            cur.execute(f'UPDATE hermes_companies SET {assignments} WHERE company_id=%(company_id)s RETURNING *', changes)
+            row = cur.fetchone()
+    except Exception as exc:
+        if getattr(exc, 'sqlstate', None) == '23505':
+            raise ValueError('company_domain_already_exists') from exc
+        raise
+    return row
+
+
+def delete_companies(company_ids):
+    """Delete selected master rows and their projections; source drafts remain intact."""
+    unique_ids = list(dict.fromkeys(company_ids))[:100]
+    with cursor() as cur:
+        cur.execute('SELECT company_id, identity_domain FROM hermes_companies WHERE company_id=ANY(%s)', (unique_ids,))
+        rows = cur.fetchall()
+        cur.execute('DELETE FROM hermes_companies WHERE company_id=ANY(%s)', (unique_ids,))
+    return rows

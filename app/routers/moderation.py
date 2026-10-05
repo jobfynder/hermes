@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,7 +42,7 @@ class BlocklistEntry(BaseModel):
     match_type: str
     value: str
     reason: str | None = None
-    source_draft_id: str | None = None
+    source_draft_id: UUID | None = None
     created_at: str
 
 

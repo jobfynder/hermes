@@ -73,6 +73,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   listCompanies: (params: URLSearchParams, signal?: AbortSignal) => request<CompanyPage>(`/companies?${params}`, { signal }),
   importCompanies: (csvText: string, dryRun: boolean) => request<{dry_run:boolean;valid_rows:number;new_companies:number;existing_companies:number;errors:{row:number;error:string}[];duplicate_rows:number}>('/companies/import', { method: 'POST', body: JSON.stringify({ csv_text: csvText, dry_run: dryRun }) }),
+  updateCompany: (id: string, changes: {canonical_name?:string;identity_domain?:string;verification_status?:string;claim_status?:string}) => request<CompanyDetail>(`/companies/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+  deleteCompany: (id: string, blockDomain = true) => request<{deleted:boolean;blocked_domain?:string}>(`/companies/${encodeURIComponent(id)}?block_domain=${blockDomain}`, { method: 'DELETE' }),
+  bulkDeleteCompanies: (ids: string[], blockDomains = true) => request<{deleted_count:number;deleted_company_ids:string[];blocked_domains:string[]}>('/companies/bulk-delete', { method: 'POST', body: JSON.stringify({company_ids:ids,block_domains:blockDomains}) }),
   reconcileReadyReviews: (dryRun = false, limit = 500) => request<{dry_run:boolean;checked_count:number;resolved_count:number}>(`/drafts/review/reconcile-ready?dry_run=${dryRun}&limit=${limit}`, { method: 'POST' }),
   getCompany: (id: string, signal?: AbortSignal) => request<CompanyDetail>(`/companies/${encodeURIComponent(id)}`, { signal }),
   listDrafts: () => request<DraftObject[]>('/drafts'),
@@ -91,6 +94,7 @@ export const api = {
     throw err
   }),
   publishDraft: (id: string) => request<DraftPublishResult>(`/drafts/${id}/publish`, { method: 'POST' }),
+  bulkDraftStatus: (ids: string[], targetStatus: 'draft'|'published') => request<{target_status:string;changed_count:number;changed_ids:string[];failed:{draft_id:string;reason:string}[]}>('/drafts/bulk-status', { method: 'POST', body: JSON.stringify({draft_ids:ids,target_status:targetStatus}) }),
   rejectDraft: (id: string, reason?: string) =>
     request<DraftPublishResult>(`/drafts/${id}/reject`, {
       method: 'POST',

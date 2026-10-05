@@ -15,6 +15,7 @@ from app.drafts.service import (
     bulk_reject_draft_objects,
     backfill_full_reparse,
     backfill_signature_company_fill,
+    bulk_change_draft_status,
     delete_draft_object,
     get_draft_object,
     list_draft_objects,
@@ -112,6 +113,22 @@ class BulkDraftRequest(BaseModel):
 
 
 router = APIRouter(prefix="/drafts", tags=["Drafts"])
+
+
+class BulkDraftStatusRequest(BaseModel):
+    draft_ids: list[str] = Field(min_length=1, max_length=200)
+    target_status: Literal['draft', 'published']
+
+
+@router.post('/bulk-status')
+def bulk_draft_status(
+    body: BulkDraftStatusRequest,
+    user: dict = Depends(require_permission('drafts:publish')),
+):
+    try:
+        return bulk_change_draft_status(body.draft_ids, body.target_status, user.get('id'))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 class BackfillJobRequest(BaseModel):

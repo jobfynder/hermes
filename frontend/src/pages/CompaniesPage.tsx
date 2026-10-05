@@ -26,12 +26,18 @@ export function CompaniesPage({ onSelectDraft }: { onSelectDraft: (id: string) =
   const [revision, setRevision] = useState(0)
   const [csvText, setCsvText] = useState('company_name,domain,source,source_url,location,careers_url\n')
   const [importResult, setImportResult] = useState<string | null>(null)
+  const [checked, setChecked] = useState<Set<string>>(new Set())
+  const [actionMessage, setActionMessage] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editDomain, setEditDomain] = useState('')
+  const [editVerification, setEditVerification] = useState('unverified')
+  const [editClaim, setEditClaim] = useState('unclaimed')
   const pageCount = Math.max(1, Math.ceil((data?.total_count ?? 0) / pageSize))
   const params = useMemo(() => new URLSearchParams({ q: search, page: String(page), page_size: String(pageSize), verification, origin, activity, location, source, sort }), [search,page,pageSize,verification,origin,activity,location,source,sort])
 
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError(null)
-    const load = selected ? api.getCompany(selected, controller.signal).then(setDetail) : api.listCompanies(params, controller.signal).then(result => { setData(result); if (result.page !== page) setPage(result.page) })
+    const load = selected ? api.getCompany(selected, controller.signal).then(value => { setDetail(value); setEditName(value.canonical_name); setEditDomain(value.identity_domain); setEditVerification(value.verification_status); setEditClaim(value.claim_status) }) : api.listCompanies(params, controller.signal).then(result => { setData(result); if (result.page !== page) setPage(result.page) })
     load.catch(err => { if (!controller.signal.aborted) setError(err.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [selected, params, revision])
@@ -41,6 +47,22 @@ export function CompaniesPage({ onSelectDraft }: { onSelectDraft: (id: string) =
     try { const r=await api.importCompanies(csvText,dryRun); setImportResult(`${dryRun?'Preview':'Imported'}: ${r.valid_rows} valid · ${r.new_companies} new · ${r.existing_companies} existing · ${r.errors.length} errors`); if(!dryRun)setRevision(v=>v+1) }
     catch(err){setImportResult(err instanceof Error?err.message:'Import failed')}
   }
+  const toggle = (id:string) => setChecked(previous => { const next=new Set(previous); next.has(id)?next.delete(id):next.add(id); return next })
+  const bulkRemove = async () => {
+    if(!checked.size || !window.confirm(`Delete ${checked.size} selected companies and block their domains from future email intake?`)) return
+    try { const r=await api.bulkDeleteCompanies([...checked],true); setActionMessage(`${r.deleted_count} companies deleted and ${r.blocked_domains.length} domains blocked`); setChecked(new Set()); setRevision(v=>v+1) }
+    catch(err){setActionMessage(err instanceof Error?err.message:'Bulk delete failed')}
+  }
+  const saveCompany = async () => {
+    if(!selected)return
+    try { await api.updateCompany(selected,{canonical_name:editName,identity_domain:editDomain,verification_status:editVerification,claim_status:editClaim}); setActionMessage('Company updated');setRevision(v=>v+1) }
+    catch(err){setActionMessage(err instanceof Error?err.message:'Update failed')}
+  }
+  const removeCompany = async () => {
+    if(!selected || !window.confirm('Delete this company and block its domain from future email intake? Source drafts will remain available.'))return
+    try { await api.deleteCompany(selected,true);setActionMessage('Company deleted and domain blocked');setSelected(null);setDetail(null);setRevision(v=>v+1) }
+    catch(err){setActionMessage(err instanceof Error?err.message:'Delete failed')}
+  }
   return <main className="mx-auto max-w-6xl px-6 py-8">
     <header className="mb-6 flex flex-wrap items-start justify-between gap-4"><div>
       {selected && <button className="mb-3 text-sm text-accent" onClick={() => {setSelected(null);setDetail(null)}}>← All companies</button>}
@@ -48,6 +70,7 @@ export function CompaniesPage({ onSelectDraft }: { onSelectDraft: (id: string) =
       <p className="mt-1 max-w-3xl text-sm text-ink-soft">Company master built from deterministic email evidence and traceable imports. Relationships remain unverified until reviewed.</p>
     </div><button disabled={loading} onClick={() => setRevision(v=>v+1)} className="rounded-lg border border-line bg-surface px-4 py-2 text-sm disabled:opacity-40">{loading?'Loading…':'Refresh'}</button></header>
     {error && <div role="alert" className="mb-4 rounded-lg bg-fail-soft p-4 text-fail">{error}</div>}
+    {actionMessage && <div role="status" className="mb-4 rounded-lg border border-line bg-surface p-3 text-sm">{actionMessage}</div>}
     {!selected && <>
       <div className="mb-5 grid gap-3 sm:grid-cols-3">
         <div className={card}><p className="text-xs uppercase text-ink-soft">Matching companies</p><p className="mt-1 text-2xl font-semibold">{data?.total_count.toLocaleString()??'—'}</p><p className="text-xs text-ink-soft">Canonical corporate domains</p></div>
@@ -63,13 +86,15 @@ export function CompaniesPage({ onSelectDraft }: { onSelectDraft: (id: string) =
         <input aria-label="Source filter" placeholder="Source, e.g. Dice" value={source} onChange={filter(setSource)} className={select}/>
         <select aria-label="Sort" value={sort} onChange={filter(setSort)} className={select}><option value="recent">Most recent</option><option value="name">Company name</option><option value="contacts">Most contacts</option><option value="sources">Most sources</option></select>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-line bg-surface"><table className="w-full text-left text-sm"><thead className="border-b border-line text-xs uppercase text-ink-soft"><tr>{['Company','Domain','Contacts','Email sources','Last activity','Verification'].map(x=><th key={x} className="p-3">{x}</th>)}</tr></thead><tbody>{data?.items.map(c=><tr key={c.company_id} className="border-b border-line last:border-0"><td className="p-3"><button onClick={()=>setSelected(c.company_id)} className="font-medium text-accent hover:underline">{c.canonical_name}</button></td><td className="p-3 text-ink-soft">{c.identity_domain}</td><td className="p-3">{c.contact_count}</td><td className="p-3">{c.source_count}</td><td className="p-3 text-ink-soft">{date(c.last_seen)}</td><td className="p-3"><span className="rounded-full bg-paper px-2 py-1 text-xs">{c.verification_status}</span></td></tr>)}</tbody></table>{!loading&&!data?.items.length&&<p className="p-8 text-center text-sm text-ink-soft">No companies match these filters.</p>}
+      <div className="mb-3 flex items-center gap-3"><button disabled={!checked.size} onClick={bulkRemove} className="rounded-lg border border-fail px-3 py-2 text-sm text-fail disabled:opacity-40">Delete &amp; block selected ({checked.size})</button><span className="text-xs text-ink-soft">Spam company domains are also added to the sender blocklist.</span></div>
+      <div className="overflow-x-auto rounded-xl border border-line bg-surface"><table className="w-full text-left text-sm"><thead className="border-b border-line text-xs uppercase text-ink-soft"><tr><th className="p-3"><input aria-label="Select page" type="checkbox" checked={!!data?.items.length&&data.items.every(c=>checked.has(c.company_id))} onChange={e=>setChecked(e.target.checked?new Set(data?.items.map(c=>c.company_id)??[]):new Set())}/></th>{['Company','Domain','Contacts','Email sources','Last activity','Verification'].map(x=><th key={x} className="p-3">{x}</th>)}</tr></thead><tbody>{data?.items.map(c=><tr key={c.company_id} className="border-b border-line last:border-0"><td className="p-3"><input aria-label={`Select ${c.canonical_name}`} type="checkbox" checked={checked.has(c.company_id)} onChange={()=>toggle(c.company_id)}/></td><td className="p-3"><button onClick={()=>setSelected(c.company_id)} className="font-medium text-accent hover:underline">{c.canonical_name}</button></td><td className="p-3 text-ink-soft">{c.identity_domain}</td><td className="p-3">{c.contact_count}</td><td className="p-3">{c.source_count}</td><td className="p-3 text-ink-soft">{date(c.last_seen)}</td><td className="p-3"><span className="rounded-full bg-paper px-2 py-1 text-xs">{c.verification_status}</span></td></tr>)}</tbody></table>{!loading&&!data?.items.length&&<p className="p-8 text-center text-sm text-ink-soft">No companies match these filters.</p>}
         <PaginationControls page={page} pageCount={pageCount} pageSize={pageSize} totalCount={data?.total_count??0} onPageChange={setPage} onPageSizeChange={size=>{setPageSize(size);setPage(1)}}/>
       </div>
       <details className={`${card} mt-5`}><summary className="cursor-pointer font-medium">Import companies from portals or lists</summary><p className="mt-2 text-sm text-ink-soft">Paste CSV with company_name and domain. Optional columns: source, source_url, location, careers_url. Use the staffing company's own domain—not dice.com or another portal domain. Imports add provenance; only observed jobs, contacts, and emails increase activity.</p><textarea aria-label="Company import CSV" value={csvText} onChange={e=>setCsvText(e.target.value)} className="mt-3 h-40 w-full rounded-lg border border-line bg-paper p-3 font-mono text-xs"/><div className="mt-3 flex gap-2"><button onClick={()=>runImport(true)} className="rounded-lg border border-line px-3 py-2 text-sm">Preview</button><button onClick={()=>runImport(false)} className="rounded-lg bg-accent px-3 py-2 text-sm text-white">Import valid rows</button></div>{importResult&&<p className="mt-2 text-sm text-ink-soft">{importResult}</p>}</details>
       <p className="mt-5 text-xs text-ink-soft">Name-only mentions, shared providers, and relay senders remain in review. Company discovery and imports do not publish to CORE.</p>
     </>}
     {selected&&detail&&<>
+      <section className={`${card} mb-5`}><h2 className="mb-3 font-semibold">Edit company</h2><div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Company name<input value={editName} onChange={e=>setEditName(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2"/></label><label className="text-sm">Corporate domain<input value={editDomain} onChange={e=>setEditDomain(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2"/></label><label className="text-sm">Verification<select value={editVerification} onChange={e=>setEditVerification(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2"><option value="unverified">Unverified</option><option value="verified">Verified</option></select></label><label className="text-sm">Claim status<select value={editClaim} onChange={e=>setEditClaim(e.target.value)} className="mt-1 w-full rounded-lg border border-line bg-paper px-3 py-2"><option value="unclaimed">Unclaimed</option><option value="claimed">Claimed</option></select></label></div><div className="mt-4 flex gap-2"><button onClick={saveCompany} className="rounded-lg bg-accent px-4 py-2 text-sm text-white">Save changes</button><button onClick={removeCompany} className="rounded-lg border border-fail px-4 py-2 text-sm text-fail">Delete &amp; block domain</button></div><p className="mt-2 text-xs text-ink-soft">Deleting removes the company projection and imports but preserves source emails for audit.</p></section>
       <div className="mb-5 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-surface px-3 py-1">{detail.identity_domain}</span><span className="rounded-full bg-surface px-3 py-1">{detail.verification_status}</span><span className="rounded-full bg-surface px-3 py-1">{detail.claim_status}</span></div>
       <div className="mb-5 grid gap-3 sm:grid-cols-3"><div className={card}><p className="text-sm text-ink-soft">Unique requirements</p><p className="text-2xl font-semibold">{detail.job_requirements}</p></div><div className={card}><p className="text-sm text-ink-soft">Observed contacts</p><p className="text-2xl font-semibold">{detail.contact_count}</p></div><div className={card}><p className="text-sm text-ink-soft">30-day activity</p><p className="text-2xl font-semibold">{detail.activity.score} / 100</p></div></div>
       {detail.imports.length>0&&<section className={`${card} mb-5`}><h2 className="mb-2 font-semibold">Import provenance</h2>{detail.imports.map((i,n)=><p key={`${i.source_url}-${n}`} className="text-sm text-ink-soft">{i.source} · {i.imported_name}{i.location?` · ${i.location}`:''} · {date(i.imported_at)}</p>)}</section>}

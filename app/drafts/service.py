@@ -761,6 +761,44 @@ def bulk_reject_draft_objects(draft_ids: list[str], reason: str | None = None) -
     }
 
 
+def bulk_change_draft_status(draft_ids: list[str], target_status: str, reviewer_id: str | None = None) -> dict:
+    """Apply an explicit reviewer decision to at most 200 selected drafts."""
+    unique_ids = list(dict.fromkeys(draft_ids))[:200]
+    if target_status == 'draft':
+        reviewer_metadata = json.dumps({
+            'review_override': {'status': 'draft', 'reviewed_by': reviewer_id, 'method': 'bulk_human_review'}
+        })
+        with cursor() as cur:
+            cur.execute(
+                "UPDATE drafts SET status='draft', requires_review=false, "
+                "metadata=metadata || %s::jsonb, updated_at=now() "
+                "WHERE draft_id::text=ANY(%s) AND status IN ('needs_review','spam','draft') RETURNING draft_id,draft_type",
+                (reviewer_metadata, unique_ids),
+            )
+            rows = cur.fetchall()
+        for row in rows:
+            emit_event('draft.review_overridden', {
+                'draft_id': str(row['draft_id']), 'draft_type': row['draft_type'],
+                'target_status': 'draft', 'reviewed_by': reviewer_id,
+            })
+        changed = {str(row['draft_id']) for row in rows}
+        return {'target_status': 'draft', 'changed_count': len(rows),
+                'changed_ids': sorted(changed),
+                'failed': [{'draft_id': item, 'reason': 'not_found_or_invalid_status'}
+                           for item in unique_ids if item not in changed]}
+    if target_status == 'published':
+        changed_ids, failed = [], []
+        for draft_id in unique_ids:
+            result = publish_draft_object(draft_id)
+            if result.status == 'published':
+                changed_ids.append(draft_id)
+            else:
+                failed.append({'draft_id': draft_id, 'reason': ','.join(result.errors) or result.status})
+        return {'target_status': 'published', 'changed_count': len(changed_ids),
+                'changed_ids': changed_ids, 'failed': failed}
+    raise ValueError('unsupported_target_status')
+
+
 def reclassify_draft_object(draft_id: str, corrected_draft_type: DraftObjectType) -> DraftObject | None:
     """A reviewer determined this draft's document kind was wrong (e.g.
     parsed as a resume but is actually a job requirement, or hotlist vs.

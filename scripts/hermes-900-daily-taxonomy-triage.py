@@ -21,6 +21,7 @@ from app.understanding.taxonomy.candidates import (
     bulk_approve_taxonomy_candidates,
     bulk_reject_taxonomy_candidates,
     list_taxonomy_candidates,
+    retire_known_taxonomy_candidates,
 )
 from app.understanding.taxonomy.skill_quality import skill_noise_reason
 from app.understanding.taxonomy.title_family_classifier import classify_family_deterministically
@@ -251,6 +252,9 @@ def backfill_missing_descriptions() -> dict:
 
 def main() -> int:
     print("=== HERMES-900 daily taxonomy triage ===")
+
+    dedup_summary = retire_known_taxonomy_candidates()
+    print(f"KNOWN_TAXONOMY_DUPLICATES_RETIRED: {dedup_summary['retired_count']}")
 
     skill_summary = triage("skill", SKILL_SYSTEM_PROMPT)
     print(f"SKILLS: processed={skill_summary['processed']} "
