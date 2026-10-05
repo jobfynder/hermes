@@ -55,6 +55,13 @@ _FILLER_TERMS = {
     "good to have", "knowledge of", "hands on", "hands-on",
 }
 
+# Raw observations stay available to the deterministic learner, but only
+# evidence-backed candidates should appear in the human review queue.
+_MIN_SKILL_REVIEW_OCCURRENCES = 5
+_MIN_SKILL_REVIEW_SENDERS = 3
+_MIN_TITLE_REVIEW_OCCURRENCES = 3
+_MIN_TITLE_REVIEW_SENDERS = 2
+
 # Plain English stopwords/filler that a comma/newline split can hand back
 # as a lone "term" when a skills section runs into ordinary prose (e.g.
 # a listed sentence fragment like "...deployment  on  the  cloud").
@@ -126,7 +133,8 @@ _NOISE_LEADING_WORDS = {
     "review", "build", "ensure", "develop", "manage", "improve",
     "support", "provide", "maintain", "design", "implement", "perform",
     "monitor", "assist", "lead", "work", "collaborate", "drive",
-    "validate", "works", "leads", "helps", "help", "based",
+    "validate", "works", "leads", "helps", "help", "based", "in",
+    "using", "preferably", "automate",
 }
 
 _NOISE_TRAILING_WORDS = {
@@ -139,7 +147,7 @@ _NOISE_VERB_START_RE = re.compile(
     r"improve|support|provide|maintain|coordinate|design|implement|"
     r"conduct|perform|monitor|assist|lead|work|collaborate|deliver|"
     r"analyze|analyse|troubleshoot|configure|deploy|write|document|"
-    r"partner|engage|own|define|establish|execute|oversee|install|"
+    r"partner|engage|own|define|establish|execute|oversee|install|automate|"
     r"validated?|tracks?|documents?|follows?|managing|evaluate|remain)\b"
 )
 
@@ -672,24 +680,36 @@ def get_approved_boilerplate_lines() -> frozenset[str]:
 
 def list_taxonomy_candidates(
     status: str = "pending", *, include_boilerplate_observations: bool = False,
+    include_low_evidence_observations: bool = False,
+    signal_type: str | None = None,
+    least_recently_reviewed_first: bool = False,
     limit: int | None = None,
 ) -> list[dict]:
     bounded_limit = min(max(int(limit), 1), 20000) if limit is not None else None
     with cursor() as cur:
         cur.execute(
             "SELECT id, signal_type, term, normalized_term, occurrence_count, "
-            "distinct_senders, sample_draft_ids, status, first_seen_at, last_seen_at "
+            "distinct_senders, sample_draft_ids, status, first_seen_at, last_seen_at, reviewed_at "
             "FROM taxonomy_candidates "
             "WHERE status = %s "
+            "AND (%s::text IS NULL OR signal_type = %s) "
             # A boilerplate_line row only becomes visible once it's been
             # seen from enough distinct sender domains to be a real
             # pattern, not one company's own content -- see
             # record_boilerplate_line_candidates. skill/job_title rows
             # are unaffected, exactly as before.
             "AND (%s OR signal_type != 'boilerplate_line' OR jsonb_array_length(distinct_senders) >= %s) "
-            "ORDER BY occurrence_count DESC, last_seen_at DESC "
+            "AND (%s OR status != 'pending' OR signal_type = 'boilerplate_line' "
+            "OR (signal_type = 'skill' AND occurrence_count >= %s AND jsonb_array_length(distinct_senders) >= %s) "
+            "OR (signal_type = 'job_title' AND occurrence_count >= %s AND jsonb_array_length(distinct_senders) >= %s)) "
+            "ORDER BY CASE WHEN %s THEN reviewed_at END ASC NULLS FIRST, occurrence_count DESC, last_seen_at DESC "
             "LIMIT COALESCE(%s, 2147483647)",
-            (status, include_boilerplate_observations, _MIN_BOILERPLATE_DISTINCT_SENDERS, bounded_limit),
+            (status, signal_type, signal_type,
+             include_boilerplate_observations, _MIN_BOILERPLATE_DISTINCT_SENDERS,
+             include_low_evidence_observations,
+             _MIN_SKILL_REVIEW_OCCURRENCES, _MIN_SKILL_REVIEW_SENDERS,
+             _MIN_TITLE_REVIEW_OCCURRENCES, _MIN_TITLE_REVIEW_SENDERS,
+             least_recently_reviewed_first, bounded_limit),
         )
         rows = [dict(row) for row in cur.fetchall()]
 
@@ -702,8 +722,9 @@ def list_taxonomy_candidates(
     for row in rows:
         if row.get("first_seen_at"):
             row["first_seen_at"] = row["first_seen_at"].isoformat()
-        if row.get("last_seen_at"):
-            row["last_seen_at"] = row["last_seen_at"].isoformat()
+        for timestamp_field in ("last_seen_at", "reviewed_at"):
+            if row.get(timestamp_field):
+                row[timestamp_field] = row[timestamp_field].isoformat()
 
     return rows
 

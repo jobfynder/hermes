@@ -26,6 +26,10 @@ from typing import Any
 from app.runtime.db import cursor
 from app.understanding.taxonomy.candidates import (
     _MIN_BOILERPLATE_DISTINCT_SENDERS,
+    _MIN_SKILL_REVIEW_OCCURRENCES,
+    _MIN_SKILL_REVIEW_SENDERS,
+    _MIN_TITLE_REVIEW_OCCURRENCES,
+    _MIN_TITLE_REVIEW_SENDERS,
     _is_noise_job_title,
     _is_noise_skill_term,
 )
@@ -131,12 +135,31 @@ def get_candidate_queue_health() -> dict[str, Any]:
     """
     with cursor() as cur:
         cur.execute(
-            "SELECT signal_type, COUNT(*) AS pending_count, MIN(first_seen_at) AS oldest_first_seen "
+            "SELECT signal_type, "
+            "COUNT(*) FILTER (WHERE "
+            "(signal_type='skill' AND occurrence_count >= %s AND jsonb_array_length(distinct_senders) >= %s) OR "
+            "(signal_type='job_title' AND occurrence_count >= %s AND jsonb_array_length(distinct_senders) >= %s) OR "
+            "(signal_type='boilerplate_line' AND jsonb_array_length(distinct_senders) >= %s)) AS pending_count, "
+            "COUNT(*) FILTER (WHERE "
+            "(signal_type='skill' AND NOT (occurrence_count >= %s AND jsonb_array_length(distinct_senders) >= %s)) OR "
+            "(signal_type='job_title' AND NOT (occurrence_count >= %s AND jsonb_array_length(distinct_senders) >= %s)) OR "
+            "(signal_type='boilerplate_line' AND jsonb_array_length(distinct_senders) < %s)) AS observed_count, "
+            "MIN(first_seen_at) FILTER (WHERE "
+            "(signal_type='skill' AND occurrence_count >= %s AND jsonb_array_length(distinct_senders) >= %s) OR "
+            "(signal_type='job_title' AND occurrence_count >= %s AND jsonb_array_length(distinct_senders) >= %s) OR "
+            "(signal_type='boilerplate_line' AND jsonb_array_length(distinct_senders) >= %s)) AS oldest_first_seen "
             "FROM taxonomy_candidates "
             "WHERE status = 'pending' "
-            "AND (signal_type != 'boilerplate_line' OR jsonb_array_length(distinct_senders) >= %s) "
             "GROUP BY signal_type",
-            (_MIN_BOILERPLATE_DISTINCT_SENDERS,),
+            (_MIN_SKILL_REVIEW_OCCURRENCES, _MIN_SKILL_REVIEW_SENDERS,
+             _MIN_TITLE_REVIEW_OCCURRENCES, _MIN_TITLE_REVIEW_SENDERS,
+             _MIN_BOILERPLATE_DISTINCT_SENDERS,
+             _MIN_SKILL_REVIEW_OCCURRENCES, _MIN_SKILL_REVIEW_SENDERS,
+             _MIN_TITLE_REVIEW_OCCURRENCES, _MIN_TITLE_REVIEW_SENDERS,
+             _MIN_BOILERPLATE_DISTINCT_SENDERS,
+             _MIN_SKILL_REVIEW_OCCURRENCES, _MIN_SKILL_REVIEW_SENDERS,
+             _MIN_TITLE_REVIEW_OCCURRENCES, _MIN_TITLE_REVIEW_SENDERS,
+             _MIN_BOILERPLATE_DISTINCT_SENDERS),
         )
         rows = {r["signal_type"]: r for r in cur.fetchall()}
 
@@ -145,10 +168,11 @@ def get_candidate_queue_health() -> dict[str, Any]:
     def _entry(signal_type: str) -> dict[str, Any]:
         row = rows.get(signal_type)
         if not row:
-            return {"pending_count": 0, "oldest_pending_days": 0}
+            return {"pending_count": 0, "observed_count": 0, "oldest_pending_days": 0}
         oldest = row["oldest_first_seen"]
         age_days = (now - oldest).days if oldest else 0
-        return {"pending_count": row["pending_count"], "oldest_pending_days": age_days}
+        return {"pending_count": row["pending_count"], "observed_count": row["observed_count"],
+                "oldest_pending_days": age_days}
 
     return {
         "skill": _entry("skill"),

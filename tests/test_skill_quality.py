@@ -51,7 +51,11 @@ class SkillQualityTests(unittest.TestCase):
             result=module.triage('skill','ignored')
             self.assertEqual(result['approved'],1)
             self.assertEqual(result['rejected'],1)
-            listing.assert_called_once()
+            listing.assert_called_once_with(
+                status='pending', include_low_evidence_observations=True,
+                signal_type='skill', least_recently_reviewed_first=True,
+                limit=module.MAX_PER_RUN,
+            )
             approve.assert_called_once_with(
                 [1], reviewed_by='hermes-daily-triage', allow_llm=False
             )

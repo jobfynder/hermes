@@ -11,6 +11,10 @@ import os
 import re
 import sys
 from app.understanding.taxonomy.candidates import (
+    _MIN_SKILL_REVIEW_OCCURRENCES,
+    _MIN_SKILL_REVIEW_SENDERS,
+    _MIN_TITLE_REVIEW_OCCURRENCES,
+    _MIN_TITLE_REVIEW_SENDERS,
     _is_noise_job_title,
     _is_noise_skill_term,
     auto_classify_unclassified_job_titles,
@@ -56,26 +60,33 @@ def deterministic_taxonomy_decision(candidate: dict) -> str:
     if signal_type == "skill":
         if skill_noise_reason(term) or _is_noise_skill_term(term):
             return "reject"
-        acronym = term if re.fullmatch(r"[A-Z][A-Z0-9+#.-]{1,11}", term) else None
-        technical_shape = bool(_TECHNICAL_SKILL_RE.search(term)) or bool(
-            acronym and acronym not in _BLOCKED_TECH_ACRONYMS
-        )
-        return "approve" if technical_shape and occurrences >= 5 and senders >= 3 else "review"
+        # An uppercase shape alone is not evidence of a technology: company
+        # names, recruiter names and staffing acronyms have the same shape.
+        technical_shape = bool(_TECHNICAL_SKILL_RE.search(term))
+        return "approve" if (
+            technical_shape
+            and occurrences >= _MIN_SKILL_REVIEW_OCCURRENCES
+            and senders >= _MIN_SKILL_REVIEW_SENDERS
+        ) else "review"
 
     if signal_type == "job_title":
         if _is_noise_job_title(term):
             return "reject"
         family = classify_family_deterministically(term)
-        return "approve" if family and _TITLE_ROLE_RE.search(term) and occurrences >= 3 and senders >= 2 else "review"
+        return "approve" if (
+            family and _TITLE_ROLE_RE.search(term)
+            and occurrences >= _MIN_TITLE_REVIEW_OCCURRENCES
+            and senders >= _MIN_TITLE_REVIEW_SENDERS
+        ) else "review"
 
     return "review"
 
 
 def triage(signal_type: str, _system_prompt: str) -> dict:
-    candidates = list_taxonomy_candidates(status="pending")
-    candidates = [c for c in candidates if c["signal_type"] == signal_type]
-    candidates.sort(key=lambda c: (-int(c.get("occurrence_count") or 0), c["first_seen_at"]))
-    candidates = candidates[:MAX_PER_RUN]
+    candidates = list_taxonomy_candidates(
+        status="pending", include_low_evidence_observations=True,
+        signal_type=signal_type, least_recently_reviewed_first=True, limit=MAX_PER_RUN,
+    )
 
     if not candidates:
         return {"processed": 0, "approved": 0, "rejected": 0, "left_for_review": 0}
@@ -86,6 +97,7 @@ def triage(signal_type: str, _system_prompt: str) -> dict:
     approve_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "approve"]
     reject_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "reject"]
     review_count = len(candidates) - len(approve_ids) - len(reject_ids)
+    review_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "review"]
 
     approved = 0
     rejected = 0
@@ -101,6 +113,16 @@ def triage(signal_type: str, _system_prompt: str) -> dict:
         rejected = result["rejected_count"]
         if result["failed"]:
             print(f"  {signal_type} reject failures: {result['failed'][:5]}")
+    if review_ids:
+        # A pending row remains eligible if future sightings strengthen its
+        # evidence. Recording the pass lets the next run examine a different
+        # page instead of reconsidering the same ambiguous rows forever.
+        with cursor() as cur:
+            cur.execute(
+                "UPDATE taxonomy_candidates SET reviewed_at=now(), reviewed_by='hermes-deferred-observation' "
+                "WHERE id=ANY(%s) AND status='pending'",
+                (review_ids,),
+            )
 
     return {
         "processed": len(candidates),
@@ -162,10 +184,11 @@ def deterministic_boilerplate_decision(term: str) -> str:
 
 
 def triage_boilerplate_deterministically() -> dict:
-    candidates = [c for c in list_taxonomy_candidates(
-        status="pending", include_boilerplate_observations=True, limit=MAX_PER_RUN
+    candidates = list_taxonomy_candidates(
+        status="pending", include_boilerplate_observations=False,
+        include_low_evidence_observations=False, signal_type="boilerplate_line",
+        least_recently_reviewed_first=True, limit=MAX_PER_RUN,
     )
-                  if c["signal_type"] == "boilerplate_line"]
     decisions = {c["id"]: deterministic_boilerplate_decision(c["term"]) for c in candidates}
     approve_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "approve"]
     reject_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "reject"]
@@ -179,6 +202,14 @@ def triage_boilerplate_deterministically() -> dict:
     if reject_ids:
         result = bulk_reject_taxonomy_candidates(reject_ids, reviewed_by="hermes-daily-deterministic")
         rejected = result["rejected_count"]
+    review_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "review"]
+    if review_ids:
+        with cursor() as cur:
+            cur.execute(
+                "UPDATE taxonomy_candidates SET reviewed_at=now(), reviewed_by='hermes-deferred-observation' "
+                "WHERE id=ANY(%s) AND status='pending'",
+                (review_ids,),
+            )
     return {"processed": len(candidates), "approved": approved, "rejected": rejected,
             "left_for_review": len(candidates) - len(approve_ids) - len(reject_ids)}
 
