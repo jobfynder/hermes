@@ -329,5 +329,11 @@ def delete_companies(company_ids):
     with cursor() as cur:
         cur.execute('SELECT company_id, identity_domain FROM hermes_companies WHERE company_id=ANY(%s)', (unique_ids,))
         rows = cur.fetchall()
+        # Some long-lived installations predate the ON DELETE CASCADE
+        # migration on company_observations. Delete projection-only children
+        # explicitly so the dashboard action works on those databases too.
+        # drafts and company_projection_state are intentionally untouched.
+        cur.execute('DELETE FROM company_observations WHERE company_id=ANY(%s)', (unique_ids,))
+        cur.execute('DELETE FROM company_import_sources WHERE company_id=ANY(%s)', (unique_ids,))
         cur.execute('DELETE FROM hermes_companies WHERE company_id=ANY(%s)', (unique_ids,))
     return rows

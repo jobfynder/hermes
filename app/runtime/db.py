@@ -372,6 +372,14 @@ CREATE TABLE IF NOT EXISTS company_observations (
     jobs JSONB NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS idx_company_observations_company ON company_observations(company_id, observed_at DESC);
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname='company_observations_company_id_fkey'
+        AND confdeltype <> 'c') THEN
+        ALTER TABLE company_observations DROP CONSTRAINT company_observations_company_id_fkey;
+        ALTER TABLE company_observations ADD CONSTRAINT company_observations_company_id_fkey
+            FOREIGN KEY(company_id) REFERENCES hermes_companies(company_id) ON DELETE CASCADE;
+    END IF;
+END $$;
 CREATE TABLE IF NOT EXISTS company_import_sources (
     company_id UUID NOT NULL REFERENCES hermes_companies(company_id) ON DELETE CASCADE,
     source TEXT NOT NULL, source_url TEXT NOT NULL DEFAULT '',
