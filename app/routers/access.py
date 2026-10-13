@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from app.security.rbac import require_service_permission
+from fastapi import APIRouter, Depends
 
 from app.access.models import ActionAccessDecision, ActionAccessRequest
 from app.access.registry import ROLE_ACTIONS
@@ -8,7 +9,7 @@ router = APIRouter(prefix="/access", tags=["Access"])
 
 
 @router.get("/actions")
-def get_action_registry() -> dict:
+def get_action_registry(_principal: dict = Depends(require_service_permission("understanding:read"))) -> dict:
     return {
         "result_version": "hermes_role_action_registry_v1",
         "roles": ROLE_ACTIONS,
@@ -16,5 +17,5 @@ def get_action_registry() -> dict:
 
 
 @router.post("/authorize", response_model=ActionAccessDecision)
-def authorize(request: ActionAccessRequest) -> ActionAccessDecision:
+def authorize(request: ActionAccessRequest, _principal: dict = Depends(require_service_permission("understanding:read"))) -> ActionAccessDecision:
     return authorize_action(request)

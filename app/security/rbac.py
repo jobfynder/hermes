@@ -79,9 +79,37 @@ def require_permission(permission: str):
 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Missing permission: {permission}",
+            detail="Forbidden",
         )
 
+    return dependency
+
+
+def require_service_permission(permission: str):
+    """Reuse bearer verification; body roles never establish service identity."""
+    def dependency(user: dict[str, Any] = Depends(require_permission(permission))) -> dict[str, Any]:
+        if not is_rbac_enabled():
+            return user
+        if user.get("role") not in {"service", "admin"}:
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return user
+
+    dependency.security_policy = "BEARER_SERVICE"
+    dependency.required_permission = permission
+    return dependency
+
+
+def require_admin_permission(permission: str):
+    """Administrative operations require both permission and an admin principal."""
+    def dependency(user: dict[str, Any] = Depends(require_permission(permission))) -> dict[str, Any]:
+        if not is_rbac_enabled():
+            return user
+        if user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return user
+
+    dependency.security_policy = "BEARER_ADMIN"
+    dependency.required_permission = permission
     return dependency
 
 

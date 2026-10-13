@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from app.security.rbac import require_service_permission
+from fastapi import APIRouter, HTTPException, Depends
 
 from app.onboarding.models import (
     OnboardingProfileDraft,
@@ -21,12 +22,12 @@ router = APIRouter(prefix="/onboarding", tags=["Onboarding"])
 
 
 @router.post("/session", response_model=OnboardingSession)
-def start_onboarding_session(request: OnboardingSessionRequest) -> OnboardingSession:
+def start_onboarding_session(request: OnboardingSessionRequest, _principal: dict = Depends(require_service_permission("understanding:parse"))) -> OnboardingSession:
     return create_onboarding_session(request)
 
 
 @router.get("/session/{session_id}", response_model=OnboardingSession)
-def read_onboarding_session(session_id: str) -> OnboardingSession:
+def read_onboarding_session(session_id: str, _principal: dict = Depends(require_service_permission("understanding:read"))) -> OnboardingSession:
     session = get_onboarding_session(session_id)
 
     if not session:
@@ -38,12 +39,13 @@ def read_onboarding_session(session_id: str) -> OnboardingSession:
 @router.post("/profile/draft", response_model=OnboardingProfileDraft)
 def create_onboarding_profile_draft(
     request: OnboardingProfileDraftRequest,
+    _principal: dict = Depends(require_service_permission("understanding:parse")),
 ) -> OnboardingProfileDraft:
     return create_profile_draft(request)
 
 
 @router.get("/profile/draft/{session_id}", response_model=OnboardingProfileDraft)
-def read_onboarding_profile_draft(session_id: str) -> OnboardingProfileDraft:
+def read_onboarding_profile_draft(session_id: str, _principal: dict = Depends(require_service_permission("understanding:read"))) -> OnboardingProfileDraft:
     draft = get_profile_draft(session_id)
 
     if not draft:
@@ -53,12 +55,13 @@ def read_onboarding_profile_draft(session_id: str) -> OnboardingProfileDraft:
 
 
 @router.post("/profile/publish/{session_id}")
-def publish_onboarding_profile(session_id: str) -> dict:
+def publish_onboarding_profile(session_id: str, _principal: dict = Depends(require_service_permission("drafts:publish"))) -> dict:
     return publish_profile_draft(session_id)
 
 @router.post("/verification/draft", response_model=OnboardingVerificationDraft)
 def create_onboarding_verification_draft(
     request: OnboardingVerificationDraftRequest,
+    _principal: dict = Depends(require_service_permission("understanding:parse")),
 ) -> OnboardingVerificationDraft:
     return create_verification_draft(request)
 

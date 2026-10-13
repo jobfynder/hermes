@@ -1,8 +1,10 @@
+from app.security.rbac import require_service_permission
 from typing import Any
 
-from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile, Depends
 
 from app.config import HERMES_TELEGRAM_WEBHOOK_SECRET
+from app.security.upload_auth import ChannelUploadAuthRoute
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse
 from app.channels.adapters.registry import get_channel_adapter, list_channel_adapters
 from app.channels.registry import get_supported_channels
@@ -25,11 +27,11 @@ from app.sessions.service import (
     start_waiting_for_action,
 )
 
-router = APIRouter(prefix="/channels", tags=["Channels"])
+router = APIRouter(prefix="/channels", tags=["Channels"], route_class=ChannelUploadAuthRoute)
 
 
 @router.get("/health")
-def channels_health() -> dict[str, str]:
+def channels_health(_principal: dict = Depends(require_service_permission("understanding:read"))) -> dict[str, str]:
     return {
         "status": "ok",
         "module": "HERMES-450",
@@ -38,14 +40,14 @@ def channels_health() -> dict[str, str]:
 
 
 @router.get("/supported")
-def supported_channels() -> dict[str, Any]:
+def supported_channels(_principal: dict = Depends(require_service_permission("understanding:read"))) -> dict[str, Any]:
     result = get_supported_channels()
     result["adapters"] = list_channel_adapters()
     return result
 
 
 @router.post("/intake", response_model=ChannelIntakeResponse)
-def channel_intake(request: ChannelIntakeRequest) -> ChannelIntakeResponse:
+def channel_intake(request: ChannelIntakeRequest, _principal: dict = Depends(require_service_permission("understanding:parse"))) -> ChannelIntakeResponse:
     adapter = get_channel_adapter(request.channel)
     normalized = adapter.normalize(request.model_dump())
     return process_channel_intake(normalized)
@@ -56,12 +58,8 @@ def telegram_webhook(
     payload: dict[str, Any],
     x_telegram_bot_api_secret_token: str | None = Header(None),
 ) -> ChannelIntakeResponse:
-    if HERMES_TELEGRAM_WEBHOOK_SECRET:
-        if x_telegram_bot_api_secret_token != HERMES_TELEGRAM_WEBHOOK_SECRET:
-            raise HTTPException(
-                status_code=403,
-                detail="Invalid Telegram webhook secret",
-            )
+    if not HERMES_TELEGRAM_WEBHOOK_SECRET or x_telegram_bot_api_secret_token != HERMES_TELEGRAM_WEBHOOK_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     message = payload.get("message", {})
     chat = message.get("chat", {})
@@ -341,6 +339,7 @@ async def channel_file_intake(
     actor_id: str | None = Form(None),
     role: str | None = Form(None),
     action: str | None = Form(None),
+    _principal: dict = Depends(require_service_permission("understanding:parse")),
 ):
     content = await file.read()
 

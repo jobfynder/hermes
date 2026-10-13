@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from app.security.rbac import require_service_permission
+from fastapi import APIRouter, Depends
 
 from app.integrations.jobfynder import build_submission_request_from_jobfynder_event
 from app.submission_intelligence.service import evaluate_submission_intelligence
@@ -25,13 +26,14 @@ router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
 
 @router.get("/health", response_model=IntegrationHealthResponse)
-def integrations_health() -> IntegrationHealthResponse:
+def integrations_health(_principal: dict = Depends(require_service_permission("submissions:evaluate"))) -> IntegrationHealthResponse:
     return get_integration_health()
 
 
 @router.post("/events/normalize", response_model=IntegrationNormalizedEvent)
 def normalize_event(
     envelope: IntegrationEnvelope,
+    _principal: dict = Depends(require_service_permission("submissions:evaluate")),
 ) -> IntegrationNormalizedEvent:
     return normalize_integration_event(envelope)
 
@@ -41,6 +43,7 @@ def normalize_event(
 )
 def evaluate_jobfynder_submission_handoff(
     envelope: IntegrationEnvelope,
+    _principal: dict = Depends(require_service_permission("submissions:evaluate")),
 ) -> JobfynderSubmissionHandoffResult:
     integration_event = normalize_integration_event(envelope)
     submission_request = build_submission_request_from_jobfynder_event(envelope)
@@ -59,19 +62,21 @@ def evaluate_jobfynder_submission_handoff(
     )
 
 @router.get("/retry-policy", response_model=IntegrationRetryPolicyResponse)
-def integrations_retry_policy() -> IntegrationRetryPolicyResponse:
+def integrations_retry_policy(_principal: dict = Depends(require_service_permission("submissions:evaluate"))) -> IntegrationRetryPolicyResponse:
     return get_retry_policy()
 
 
 @router.post("/retry-decision", response_model=IntegrationRetryDecisionResponse)
 def integrations_retry_decision(
     request: IntegrationRetryDecisionRequest,
+    _principal: dict = Depends(require_service_permission("submissions:evaluate")),
 ) -> IntegrationRetryDecisionResponse:
     return decide_retry(request)
 
 @router.post("/events/identity", response_model=IntegrationEventIdentityResponse)
 def integrations_event_identity(
     request: IntegrationEventIdentityRequest,
+    _principal: dict = Depends(require_service_permission("submissions:evaluate")),
 ) -> IntegrationEventIdentityResponse:
     return build_event_identity(request)
 

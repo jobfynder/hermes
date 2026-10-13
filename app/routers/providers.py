@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+from app.security.rbac import require_admin_permission
+from fastapi import APIRouter, Depends
 
 from app.providers.models import ProviderHealth
 from app.providers.registry import get_all_provider_health, get_provider_health
@@ -7,12 +8,12 @@ router = APIRouter(prefix="/providers", tags=["Providers"])
 
 
 @router.get("", response_model=list[ProviderHealth])
-def list_providers() -> list[ProviderHealth]:
+def list_providers(_principal: dict = Depends(require_admin_permission("runtime:read"))) -> list[ProviderHealth]:
     return get_all_provider_health()
 
 
 @router.get("/status")
-def provider_status_summary() -> dict:
+def provider_status_summary(_principal: dict = Depends(require_admin_permission("runtime:read"))) -> dict:
     providers = get_all_provider_health()
 
     return {
@@ -37,5 +38,5 @@ def provider_status_summary() -> dict:
 
 
 @router.get("/{provider}", response_model=ProviderHealth)
-def read_provider(provider: str) -> ProviderHealth:
+def read_provider(provider: str, _principal: dict = Depends(require_admin_permission("runtime:read"))) -> ProviderHealth:
     return get_provider_health(provider)

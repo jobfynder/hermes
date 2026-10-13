@@ -1,6 +1,7 @@
+from app.security.rbac import require_admin_permission
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse
 from app.channels.service import process_channel_intake
@@ -11,7 +12,7 @@ router = APIRouter(prefix="/providers/email", tags=["Email Provider"])
 
 
 @router.get("/status")
-def email_status() -> dict:
+def email_status(_principal: dict = Depends(require_admin_permission("runtime:read"))) -> dict:
     return email_provider_status()
 
 

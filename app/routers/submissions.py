@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.contracts.envelope import HermesCapabilityEnvelope, build_envelope
-from app.security.rbac import require_permission
+from app.security.rbac import require_permission, require_service_permission
 
 from app.submission_intelligence.adapters import build_submission_intelligence_request_from_handoff
 from app.submission_intelligence.extraction import extract_submission_status, extract_tracker_update
@@ -26,7 +26,7 @@ router = APIRouter(
 
 
 @router.get("/workflow-policy", response_model=SubmissionWorkflowPolicyResponse)
-def get_submission_workflow_policy() -> SubmissionWorkflowPolicyResponse:
+def get_submission_workflow_policy(_principal: dict = Depends(require_service_permission("submissions:evaluate"))) -> SubmissionWorkflowPolicyResponse:
     return SubmissionWorkflowPolicyResponse(**workflow_policy())
 
 
@@ -50,6 +50,7 @@ def evaluate_submission_from_handoff(
 @router.post("/tracker-update/extract", response_model=HermesCapabilityEnvelope)
 def extract_tracker_update_endpoint(
     request: TrackerUpdateExtractRequest,
+    _principal: dict = Depends(require_service_permission("submissions:evaluate")),
 ) -> HermesCapabilityEnvelope:
     result = extract_tracker_update(
         message=request.message,
@@ -70,6 +71,7 @@ def extract_tracker_update_endpoint(
 @router.post("/status/extract", response_model=HermesCapabilityEnvelope)
 def extract_submission_status_endpoint(
     request: SubmissionStatusExtractRequest,
+    _principal: dict = Depends(require_service_permission("submissions:evaluate")),
 ) -> HermesCapabilityEnvelope:
     result = extract_submission_status(
         message=request.message,

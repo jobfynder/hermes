@@ -1,6 +1,7 @@
+from app.security.rbac import require_admin_permission
 import json
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 
 from app.channels.models import ChannelIntakeRequest
 from app.channels.service import process_channel_intake
@@ -15,7 +16,7 @@ router = APIRouter(prefix='/providers/gmail', tags=['Gmail Provider'])
 
 
 @router.get('/status')
-def gmail_status() -> dict:
+def gmail_status(_principal: dict = Depends(require_admin_permission("runtime:read"))) -> dict:
     return gmail_provider_status()
 
 

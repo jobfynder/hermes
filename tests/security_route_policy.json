@@ -1,0 +1,766 @@
+{
+  "DELETE /actions/{action_id}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "actions:write"
+  },
+  "DELETE /blocklist/{block_id}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "DELETE /companies/{company_id}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "DELETE /drafts/{draft_id}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "GET /access/actions": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:read",
+    "p0b_modified": true
+  },
+  "GET /accuracy/summary": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /actions": {
+    "policy": "BEARER_USER",
+    "permission": "actions:read"
+  },
+  "GET /actions/{action_id}": {
+    "policy": "BEARER_USER",
+    "permission": "actions:read"
+  },
+  "GET /agents/health": {
+    "policy": "BEARER_USER",
+    "permission": "agents:read"
+  },
+  "GET /agents/registry": {
+    "policy": "BEARER_USER",
+    "permission": "agents:read"
+  },
+  "GET /agents/snapshot": {
+    "policy": "BEARER_USER",
+    "permission": "agents:read"
+  },
+  "GET /agents/{agent_id}": {
+    "policy": "BEARER_USER",
+    "permission": "agents:read"
+  },
+  "GET /blocklist": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /channels/health": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:read",
+    "p0b_modified": true
+  },
+  "GET /channels/supported": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:read",
+    "p0b_modified": true
+  },
+  "GET /claim/{token}": {
+    "policy": "CLAIM_TOKEN"
+  },
+  "GET /companies": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /companies/{company_id}": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /docs": {
+    "policy": "PUBLIC",
+    "note": "Existing documentation exposure; unchanged in P0-B"
+  },
+  "GET /docs/oauth2-redirect": {
+    "policy": "PUBLIC",
+    "note": "Existing documentation exposure; unchanged in P0-B"
+  },
+  "GET /drafts": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /drafts/backfill/jobs": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /drafts/backfill/jobs/{job_id}": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /drafts/page": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /drafts/summary": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /drafts/{draft_id}": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /drafts/{draft_id}/claim": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /drafts/{draft_id}/provenance": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /health": {
+    "policy": "PUBLIC"
+  },
+  "GET /integrations/health": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "GET /integrations/retry-policy": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "GET /matching/policy": {
+    "policy": "BEARER_USER",
+    "permission": "matching:evaluate"
+  },
+  "GET /mission-control": {
+    "policy": "BEARER_USER",
+    "permission": "mission_control:read"
+  },
+  "GET /onboarding/profile/draft/{session_id}": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:read",
+    "p0b_modified": true
+  },
+  "GET /onboarding/session/{session_id}": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:read",
+    "p0b_modified": true
+  },
+  "GET /openapi.json": {
+    "policy": "PUBLIC",
+    "note": "Existing documentation exposure; unchanged in P0-B"
+  },
+  "GET /prompts/health": {
+    "policy": "BEARER_USER",
+    "permission": "agents:read"
+  },
+  "GET /prompts/registry": {
+    "policy": "BEARER_USER",
+    "permission": "agents:read"
+  },
+  "GET /prompts/{prompt_id}": {
+    "policy": "BEARER_USER",
+    "permission": "agents:read"
+  },
+  "GET /providers": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/brightdata/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/email/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/gmail/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/google-chat/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/linkedin/authorize": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read",
+    "p0b_modified": true
+  },
+  "GET /providers/linkedin/callback": {
+    "policy": "OAUTH_CALLBACK"
+  },
+  "GET /providers/linkedin/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/slack/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/teams/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/telegram/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/whatsapp/status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /providers/{provider}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "runtime:read",
+    "p0b_modified": true
+  },
+  "GET /redoc": {
+    "policy": "PUBLIC",
+    "note": "Existing documentation exposure; unchanged in P0-B"
+  },
+  "GET /reports/ai-dependency": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/analysis": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/classification": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/ingestion-health": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/llm-cost": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/overview": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/parsing-quality": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/queue-health": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/recruitment-intelligence": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/review-queue": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/sender-intelligence": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/signature-quality": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/taxonomy": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /reports/triage-activity": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /resume-builder/health": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:read"
+  },
+  "GET /resume-builder/policy": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:read"
+  },
+  "GET /runtime/cache/stats": {
+    "policy": "BEARER_USER",
+    "permission": "runtime:read"
+  },
+  "GET /security/rbac/status": {
+    "policy": "BEARER_USER",
+    "permission": "security:read"
+  },
+  "GET /session-brief": {
+    "policy": "BEARER_USER",
+    "permission": "session_brief:read"
+  },
+  "GET /skill-intelligence/search": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /skill-intelligence/skills/{skill_id}": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /submissions/workflow-policy": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "GET /taxonomy-candidates": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /taxonomy-enrichment-requests": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "GET /understanding/taxonomy/job-title-aliases": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /understanding/taxonomy/job-titles": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /understanding/taxonomy/skills": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /understanding/taxonomy/skills/aliases": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /understanding/taxonomy/skills/browse": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /understanding/taxonomy/skills/canonical": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /understanding/taxonomy/skills/page": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /understanding/taxonomy/snapshot": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "GET /workspace": {
+    "policy": "BEARER_USER",
+    "permission": "workspace:read"
+  },
+  "MOUNT /review": {
+    "policy": "STATIC"
+  },
+  "PATCH /companies/{company_id}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "PATCH /drafts/{draft_id}/fields": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "PATCH /taxonomy-candidates/{candidate_id}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "PATCH /taxonomy/job-titles": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "PATCH /taxonomy/skills": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "PATCH /taxonomy/skills/description": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /access/authorize": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:read",
+    "p0b_modified": true
+  },
+  "POST /actions": {
+    "policy": "BEARER_ADMIN",
+    "permission": "actions:write"
+  },
+  "POST /agents/dry-run": {
+    "policy": "BEARER_USER",
+    "permission": "agents:run"
+  },
+  "POST /assistant/query": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "POST /blocklist": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /broadcast/hotlist/extract": {
+    "policy": "BEARER_USER",
+    "permission": "broadcast:extract"
+  },
+  "POST /broadcast/requirement/extract": {
+    "policy": "BEARER_USER",
+    "permission": "broadcast:extract"
+  },
+  "POST /channels/intake": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:parse",
+    "p0b_modified": true
+  },
+  "POST /channels/intake/file": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:parse",
+    "p0b_modified": true
+  },
+  "POST /channels/telegram/webhook": {
+    "policy": "TELEGRAM_SECRET"
+  },
+  "POST /claim/prepare": {
+    "policy": "BEARER_USER",
+    "permission": "claim:prepare"
+  },
+  "POST /claim/{claim_id}/mark-sent": {
+    "policy": "BEARER_USER",
+    "permission": "claim:prepare"
+  },
+  "POST /claim/{token}/confirm": {
+    "policy": "CLAIM_TOKEN"
+  },
+  "POST /companies/bulk-delete": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /companies/import": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /context/candidate-card/build": {
+    "policy": "BEARER_USER",
+    "permission": "context:build"
+  },
+  "POST /context/conversation/compress": {
+    "policy": "BEARER_USER",
+    "permission": "context:build"
+  },
+  "POST /context/job-card/build": {
+    "policy": "BEARER_USER",
+    "permission": "context:build"
+  },
+  "POST /context/relationship-card/build": {
+    "policy": "BEARER_USER",
+    "permission": "context:build"
+  },
+  "POST /drafts/backfill/full-reparse": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/backfill/jobs": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/backfill/jobs/{job_id}/{action}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/backfill/signature-company-fill": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/bulk": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/bulk-status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/review/reconcile-ready": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/{draft_id}/block-sender": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/{draft_id}/publish": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/{draft_id}/reclassify": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/{draft_id}/reject": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /integrations/events/identity": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "POST /integrations/events/normalize": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "POST /integrations/jobfynder/submission-handoff/evaluate": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "POST /integrations/retry-decision": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "POST /internal/comm/intake": {
+    "policy": "COMM_HMAC"
+  },
+  "POST /matching/resume-to-job": {
+    "policy": "BEARER_USER",
+    "permission": "matching:evaluate"
+  },
+  "POST /matching/resume-to-job/from-understanding": {
+    "policy": "BEARER_USER",
+    "permission": "matching:evaluate"
+  },
+  "POST /onboarding/profile/draft": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:parse",
+    "p0b_modified": true
+  },
+  "POST /onboarding/profile/publish/{session_id}": {
+    "policy": "BEARER_SERVICE",
+    "permission": "drafts:publish",
+    "p0b_modified": true
+  },
+  "POST /onboarding/session": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:parse",
+    "p0b_modified": true
+  },
+  "POST /onboarding/verification/draft": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:parse",
+    "p0b_modified": true
+  },
+  "POST /prompts/run": {
+    "policy": "BEARER_USER",
+    "permission": "agents:run"
+  },
+  "POST /providers/brightdata/linkedin-profile": {
+    "policy": "BEARER_SERVICE",
+    "permission": "understanding:parse",
+    "p0b_modified": true
+  },
+  "POST /providers/email/webhook": {
+    "policy": "COMM_HMAC"
+  },
+  "POST /providers/gmail/push": {
+    "policy": "GMAIL_OIDC",
+    "status": "PENDING_P0_C"
+  },
+  "POST /providers/google-chat/webhook": {
+    "policy": "COMM_HMAC"
+  },
+  "POST /providers/slack/webhook": {
+    "policy": "COMM_HMAC"
+  },
+  "POST /providers/teams/webhook": {
+    "policy": "COMM_HMAC"
+  },
+  "POST /providers/telegram/register-webhook": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish",
+    "p0b_modified": true
+  },
+  "POST /providers/whatsapp/webhook": {
+    "policy": "COMM_HMAC"
+  },
+  "POST /resume-builder/analyze": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:analyze"
+  },
+  "POST /resume-builder/bullets/suggest": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:suggest"
+  },
+  "POST /resume-builder/feedback/analyze": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:analyze"
+  },
+  "POST /resume-builder/quality/analyze": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:analyze"
+  },
+  "POST /resume-builder/skills/normalize": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:analyze"
+  },
+  "POST /resume-builder/summary/suggest": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:suggest"
+  },
+  "POST /resume-builder/tailor": {
+    "policy": "BEARER_USER",
+    "permission": "resume_builder:analyze"
+  },
+  "POST /skill-intelligence/requirements/extract": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:parse"
+  },
+  "POST /skill-intelligence/resolve-batch": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:read"
+  },
+  "POST /skill-intelligence/suggestions": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:parse"
+  },
+  "POST /submissions/evaluate": {
+    "policy": "BEARER_USER",
+    "permission": "submissions:evaluate"
+  },
+  "POST /submissions/evaluate/from-handoff": {
+    "policy": "BEARER_USER",
+    "permission": "submissions:evaluate"
+  },
+  "POST /submissions/status/extract": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "POST /submissions/tracker-update/extract": {
+    "policy": "BEARER_SERVICE",
+    "permission": "submissions:evaluate",
+    "p0b_modified": true
+  },
+  "POST /taxonomy-candidates/bulk-approve": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy-candidates/bulk-reject": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy-candidates/{candidate_id}/approve": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy-candidates/{candidate_id}/reject": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy-enrichment-requests/{request_id}/generate": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy-enrichment-requests/{request_id}/review": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy/job-titles/auto-classify": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy/job-titles/backfill-related-titles": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy/job-titles/bulk-delete": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy/job-titles/bulk-set-family": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy/job-titles/delete": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy/job-titles/suggest-family": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
+  "POST /taxonomy/skills/bulk-delete": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy/skills/bulk-set-category": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /taxonomy/skills/delete": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /understanding/parse-file": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:parse"
+  },
+  "POST /understanding/parse-text": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:parse"
+  },
+  "POST /understanding/taxonomy/extract-signals": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:parse"
+  },
+  "POST /understanding/taxonomy/normalize": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:parse"
+  },
+  "POST /understanding/taxonomy/suggestions": {
+    "policy": "BEARER_USER",
+    "permission": "understanding:parse"
+  },
+  "POST /v1/consultants/parse": {
+    "policy": "BEARER_USER",
+    "permission": "consultants:parse"
+  },
+  "POST /v1/engineering-memory/generate": {
+    "policy": "BEARER_SERVICE",
+    "permission": "engineering_memory:write"
+  },
+  "POST /v1/jobs/parse": {
+    "policy": "BEARER_USER",
+    "permission": "jobs:parse"
+  },
+  "POST /v1/messages/actions/extract": {
+    "policy": "BEARER_USER",
+    "permission": "messages:understand"
+  },
+  "POST /v1/messages/understand": {
+    "policy": "BEARER_USER",
+    "permission": "messages:understand"
+  },
+  "PUT /actions/{action_id}": {
+    "policy": "BEARER_ADMIN",
+    "permission": "actions:write"
+  },
+  "PUT /taxonomy-enrichment-requests/{request_id}/proposal": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  }
+}

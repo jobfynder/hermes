@@ -1,7 +1,8 @@
+from app.security.rbac import require_admin_permission
 import json
 from typing import Any, Callable
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends
 
 from app.channels.models import ChannelIntakeRequest, ChannelIntakeResponse
 from app.channels.service import process_channel_intake
@@ -43,7 +44,7 @@ async def signed_payload(request: Request) -> dict[str, Any]:
 
 
 @router.get("/whatsapp/status")
-def whatsapp_status() -> dict:
+def whatsapp_status(_principal: dict = Depends(require_admin_permission("runtime:read"))) -> dict:
     return whatsapp_provider_status()
 
 
@@ -56,7 +57,7 @@ async def whatsapp_webhook(request: Request) -> ChannelIntakeResponse:
 
 
 @router.get("/slack/status")
-def slack_status() -> dict:
+def slack_status(_principal: dict = Depends(require_admin_permission("runtime:read"))) -> dict:
     return slack_provider_status()
 
 
@@ -69,7 +70,7 @@ async def slack_webhook(request: Request) -> ChannelIntakeResponse:
 
 
 @router.get("/teams/status")
-def teams_status() -> dict:
+def teams_status(_principal: dict = Depends(require_admin_permission("runtime:read"))) -> dict:
     return teams_provider_status()
 
 
@@ -82,7 +83,7 @@ async def teams_webhook(request: Request) -> ChannelIntakeResponse:
 
 
 @router.get("/google-chat/status")
-def google_chat_status() -> dict:
+def google_chat_status(_principal: dict = Depends(require_admin_permission("runtime:read"))) -> dict:
     return google_chat_provider_status()
 
 
