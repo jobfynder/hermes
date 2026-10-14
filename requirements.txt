@@ -1,4 +1,5 @@
 fastapi
+google-auth[requests]>=2.62,<3
 uvicorn[standard]
 pydantic
 markitdown
