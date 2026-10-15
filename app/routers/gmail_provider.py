@@ -1,7 +1,10 @@
 from app.security.rbac import require_admin_permission
 import json
 
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, HTTPException
+
+from app import config
+from app.security.google_push import PushIdentity, require_google_push
 
 from app.channels.models import ChannelIntakeRequest
 from app.channels.service import process_channel_intake
@@ -20,16 +23,30 @@ def gmail_status(_principal: dict = Depends(require_admin_permission("runtime:re
     return gmail_provider_status()
 
 
-@router.post('/push')
-async def gmail_push(request: Request) -> dict:
-    '''Cloud Pub/Sub push endpoint for Gmail mailbox change notifications.
+def gmail_push_identity(request: Request) -> dict:
+    """Reject disabled or incomplete configuration before any body read."""
+    if not config.HERMES_GMAIL_PUSH_ENABLED:
+        raise HTTPException(status_code=410, detail="Gmail push ingestion is disabled")
+    project = config.HERMES_GMAIL_PUSH_PROJECT_ID
+    subscription = config.HERMES_GMAIL_PUSH_SUBSCRIPTION
+    prefix = f"projects/{project}/subscriptions/"
+    try:
+        if (not project or project != project.strip() or "/" in project
+                or not subscription.startswith(prefix)
+                or not subscription[len(prefix):]
+                or "/" in subscription[len(prefix):]
+                or subscription != subscription.strip()):
+            raise ValueError("Incomplete push configuration")
+        identity = PushIdentity(config.HERMES_GMAIL_PUSH_AUDIENCE,
+                                config.HERMES_GMAIL_PUSH_SERVICE_ACCOUNT_EMAIL)
+    except ValueError:
+        raise HTTPException(status_code=503, detail="Gmail push ingestion is unavailable") from None
+    return require_google_push(identity)(request)
 
-    No auth dependency here on purpose -- this is called by Google Cloud
-    Pub/Sub, not by an authenticated Hermes client, matching
-    /providers/email/webhook's use of signature verification instead of a
-    bearer token. Always acknowledges receipt (Pub/Sub redelivers on
-    non-2xx) even when nothing could be fetched/processed.
-    '''
+
+@router.post('/push')
+async def gmail_push(request: Request, _principal: dict = Depends(gmail_push_identity)) -> dict:
+    """Unused by production. Future enabled delivery requires verified Google OIDC."""
     body = await request.body()
     envelope = json.loads(body.decode('utf-8')) if body else {}
     parsed = parse_pubsub_push_envelope(envelope)

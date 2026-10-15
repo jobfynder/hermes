@@ -577,8 +577,9 @@
     "policy": "COMM_HMAC"
   },
   "POST /providers/gmail/push": {
-    "policy": "GMAIL_OIDC",
-    "status": "PENDING_P0_C"
+    "policy": "GMAIL_PUSH_DISABLED",
+    "enabled_policy": "GMAIL_OIDC",
+    "status": "DISABLED_BY_DEFAULT"
   },
   "POST /providers/google-chat/webhook": {
     "policy": "COMM_HMAC"

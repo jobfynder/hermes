@@ -281,11 +281,13 @@ class RoutePolicyTests(unittest.TestCase):
                     self.assertTrue(any(getattr(c, "security_policy", None) == policy["policy"] and getattr(c, "required_permission", None) == policy["permission"] for c in calls))
 
     def test_webhook_exceptions_have_no_bearer_dependency(self):
-        exceptions = {"COMM_HMAC", "TELEGRAM_SECRET", "GMAIL_OIDC", "OAUTH_CALLBACK", "CLAIM_TOKEN"}
+        exceptions = {"COMM_HMAC", "TELEGRAM_SECRET", "GMAIL_OIDC", "GMAIL_PUSH_DISABLED", "OAUTH_CALLBACK", "CLAIM_TOKEN"}
         for key, policy in POLICIES.items():
             if policy["policy"] in exceptions:
                 self.assertNotIn(rbac.get_current_user, list(dependencies(routes()[key].dependant)), key)
-        self.assertEqual(POLICIES["POST /providers/gmail/push"]["status"], "PENDING_P0_C")
+        self.assertEqual(POLICIES["POST /providers/gmail/push"]["status"], "DISABLED_BY_DEFAULT")
+        from app.routers.gmail_provider import gmail_push_identity
+        self.assertIn(gmail_push_identity, list(dependencies(routes()["POST /providers/gmail/push"].dependant)))
 
 
 if __name__ == "__main__":
