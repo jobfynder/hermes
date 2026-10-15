@@ -127,9 +127,10 @@ def _call_litellm_with_model(
         method="POST",
     )
 
-    from app.security.resource_policy import capacity
+    from app.security.resource_policy import capacity, consume_model_attempt
     try:
         with capacity('model'):
+            consume_model_attempt()
             with urllib.request.urlopen(request, timeout=60) as response:
                 data = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:

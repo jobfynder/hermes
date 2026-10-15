@@ -31,6 +31,7 @@ All application defaults live in `app/security/resource_policy.py`, overridable 
 | MAX_EXPENSIVE_REQUESTS_PER_MINUTE | 10 | Upload bucket per verified principal |
 | MAX_MODEL_REQUESTS_PER_MINUTE | 20 | Retained aggregate model-route peak was 14/minute; avoids rejecting that observed burst |
 | MAX_PARSE_REQUESTS_PER_MINUTE / MAX_ADMIN_REQUESTS_PER_MINUTE | 60 / 30 | Separate parse/admin buckets preserve ordinary service/bulk workflows |
+| MAX_MODEL_CALLS_PER_REQUEST | 4 | Bound hidden/repeated model attempts, including primary/fallback; HTTP context only, polling unchanged |
 
 The deployment is one Uvicorn process. Semaphores and rate buckets are intentionally process-local; a future multi-worker/replica deployment must account for multiplied aggregate capacity. Lightweight GETs and webhook deliveries are not rate limited. No Redis or global IP throttle is introduced.
 

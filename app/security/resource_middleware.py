@@ -12,9 +12,11 @@ from app.security import resource_policy as policy
 from app.security.rbac import bearer_scheme, get_current_user, require_permission, require_service_permission
 
 UPLOADS = {'/channels/intake/file', '/understanding/parse-file'}
-MODEL_PREFIXES = ('/prompts/', '/resume-builder/', '/assistant/', '/context/', '/broadcast/', '/moderation/', '/skill-intelligence/')
+ADMIN_PREFIXES = ('/taxonomy/', '/taxonomy-candidates/', '/taxonomy-enrichment-requests/')
+MODEL_PREFIXES = ('/prompts/', '/resume-builder/', '/assistant/', '/context/', '/broadcast/', '/skill-intelligence/') + ADMIN_PREFIXES
 MODEL_PATHS = {'/channels/intake', '/onboarding/profile/draft', '/submissions/tracker-update/extract',
-               '/submissions/status/extract', '/understanding/parse-text', '/v1/jobs/parse', '/v1/consultants/parse'}
+               '/submissions/status/extract', '/understanding/parse-text', '/v1/jobs/parse', '/v1/consultants/parse',
+               '/v1/messages/understand', '/v1/messages/actions/extract'}
 
 def expensive(path):
     return path in UPLOADS | MODEL_PATHS or path.startswith(MODEL_PREFIXES)
@@ -45,6 +47,7 @@ class ResourceSafetyMiddleware:
             return await self.app(scope, receive, send)
         counted = False
         started = False
+        budget_token = policy.MODEL_REQUEST_BUDGET.set({'calls': 0})
         async def tracked_send(message):
             nonlocal started
             if message['type'] == 'http.response.start':
@@ -58,7 +61,7 @@ class ResourceSafetyMiddleware:
                     authorize = require_service_permission('understanding:parse') if path.startswith('/channels/') else require_permission('understanding:parse')
                     authorize(principal)
                 now = time.monotonic()
-                bucket = ('upload' if path in UPLOADS else 'admin' if path.startswith('/moderation/')
+                bucket = ('upload' if path in UPLOADS else 'admin' if path.startswith(ADMIN_PREFIXES)
                           else 'parse' if path in MODEL_PATHS else 'model')
                 rate_limit = (policy.MAX_ADMIN_REQUESTS_PER_MINUTE if bucket == 'admin'
                               else policy.MAX_PARSE_REQUESTS_PER_MINUTE if bucket == 'parse'
@@ -120,5 +123,6 @@ class ResourceSafetyMiddleware:
                 raise
             await JSONResponse({'detail': exc.detail}, status_code=exc.status_code)(scope, receive, send)
         finally:
+            policy.MODEL_REQUEST_BUDGET.reset(budget_token)
             if counted:
                 self.active -= 1

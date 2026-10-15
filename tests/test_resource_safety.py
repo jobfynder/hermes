@@ -284,6 +284,42 @@ class RequestSafetyTests(unittest.TestCase):
 
 
 class ModelSafetyTests(unittest.TestCase):
+    def test_http_model_budget_reaches_sync_handler_and_resets(self):
+        from fastapi import FastAPI
+        mini=FastAPI()
+        mini.add_middleware(ResourceSafetyMiddleware)
+        @mini.post('/safe')
+        def handler():
+            p.consume_model_attempt();p.consume_model_attempt()
+            return {'ok':True}
+        async def run():
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=mini),base_url='http://test') as client:
+                return await client.post('/safe',json={})
+        with patch.object(p,'MAX_MODEL_CALLS_PER_REQUEST',1):
+            response=asyncio.run(run())
+        self.assertEqual(response.status_code,429)
+        self.assertIsNone(p.MODEL_REQUEST_BUDGET.get())
+
+    def test_actual_hidden_model_routes_receive_http_limits(self):
+        from app.security.resource_middleware import expensive
+        for path in ['/taxonomy-candidates/1/approve','/taxonomy-enrichment-requests/1/generate','/taxonomy/skills/test/description','/v1/messages/actions/extract','/v1/messages/understand','/context/candidate-card/build','/resume-builder/summary/suggest']:
+            self.assertTrue(expensive(path),path)
+
+    def test_model_attempt_budget_precedes_network(self):
+        from app.prompt_runtime.service import _call_litellm_with_model
+        from app.prompt_runtime.models import PromptRenderedMessage
+        response=Mock();response.__enter__=Mock(return_value=response);response.__exit__=Mock(return_value=False)
+        response.read.return_value=b'{"choices":[{"message":{"content":"safe"}}]}'
+        token=p.MODEL_REQUEST_BUDGET.set({'calls':0})
+        try:
+            with patch.dict(os.environ,{'LITELLM_API_KEY':'synthetic'}),patch.object(p,'MAX_MODEL_CALLS_PER_REQUEST',1),patch('urllib.request.urlopen',return_value=response) as network:
+                _call_litellm_with_model([PromptRenderedMessage(role='user',content='safe')],'unchanged-model')
+                with self.assertRaises(HTTPException) as exc:_call_litellm_with_model([PromptRenderedMessage(role='user',content='safe')],'unchanged-model')
+                self.assertEqual(exc.exception.status_code,429)
+                self.assertEqual(network.call_count,1)
+        finally:
+            p.MODEL_REQUEST_BUDGET.reset(token)
+
     def test_prompt_guard_precedes_registry_langfuse_and_model(self):
         from app.prompt_runtime.models import PromptRunRequest
         from app.prompt_runtime.service import run_prompt

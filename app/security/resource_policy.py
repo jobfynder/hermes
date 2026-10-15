@@ -4,6 +4,7 @@ import logging
 import os
 import threading
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 from fastapi import HTTPException
 
@@ -41,15 +42,27 @@ MAX_EXPENSIVE_REQUESTS_PER_MINUTE = setting('MAX_EXPENSIVE_REQUESTS_PER_MINUTE',
 MAX_MODEL_REQUESTS_PER_MINUTE = setting('MAX_MODEL_REQUESTS_PER_MINUTE', 20)
 MAX_PARSE_REQUESTS_PER_MINUTE = setting('MAX_PARSE_REQUESTS_PER_MINUTE', 60)
 MAX_ADMIN_REQUESTS_PER_MINUTE = setting('MAX_ADMIN_REQUESTS_PER_MINUTE', 30)
+MAX_MODEL_CALLS_PER_REQUEST = setting('MAX_MODEL_CALLS_PER_REQUEST', 4)
+MODEL_REQUEST_BUDGET = ContextVar('hermes_model_request_budget', default=None)
+_budget_lock = threading.Lock()
 LIST_LIMITS = {k: setting('MAX_' + k.upper(), n) for k, n in {
     'skills': 500, 'preferred_skills': 500, 'requirements': 500, 'bullets': 500,
     'jobs': 100, 'candidates': 100, 'actions': 100, 'experiences': 100,
     'education': 100, 'certifications': 200, 'messages': MAX_MESSAGES,
-    'history': MAX_MESSAGES, 'job_titles': 500,
+    'history': MAX_MESSAGES, 'job_titles': 500, 'candidate_ids': 100,
+    'job_ids': 100, 'allowed_actions': 100, 'experience': 100,
 }.items()}
 _documents = threading.BoundedSemaphore(MAX_DOCUMENT_CONCURRENCY)
 _models = threading.BoundedSemaphore(MAX_MODEL_CONCURRENCY)
 logger = logging.getLogger('hermes.resource_safety')
+
+def consume_model_attempt():
+    budget = MODEL_REQUEST_BUDGET.get()
+    if budget is not None:
+        with _budget_lock:
+            if budget['calls'] >= MAX_MODEL_CALLS_PER_REQUEST:
+                reject('RESOURCE_BUSY', 429, resource='model_attempts')
+            budget['calls'] += 1
 
 def reject(code, status=413, **metadata):
     logger.warning('resource_rejected code=%s metadata=%s', code, metadata)
