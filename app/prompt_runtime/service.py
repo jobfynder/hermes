@@ -100,6 +100,8 @@ def _call_litellm_with_model(
     messages: list[PromptRenderedMessage],
     model: str,
 ) -> tuple[str, dict]:
+    from app.security.resource_policy import guard_structure
+    guard_structure({'messages': messages}, model=True)
     api_key = os.getenv("LITELLM_API_KEY")
     if not api_key:
         raise RuntimeError("litellm_api_key_missing")
@@ -125,9 +127,11 @@ def _call_litellm_with_model(
         method="POST",
     )
 
+    from app.security.resource_policy import capacity
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            data = json.loads(response.read().decode("utf-8"))
+        with capacity('model'):
+            with urllib.request.urlopen(request, timeout=60) as response:
+                data = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         body_text = exc.read().decode("utf-8", errors="ignore")
         raise RuntimeError(f"litellm_http_{exc.code}:{body_text[:300]}") from exc
@@ -245,6 +249,8 @@ def send_langfuse_trace(
 
 
 def run_prompt(request: PromptRunRequest, force_live: bool = False) -> PromptRunResult:
+    from app.security.resource_policy import guard_structure
+    guard_structure(request.model_dump(), model=True)
     run_id = f"prompt-run-{uuid4()}"
     prompt = get_prompt(request.prompt_id)
 
@@ -267,6 +273,7 @@ def run_prompt(request: PromptRunRequest, force_live: bool = False) -> PromptRun
         return result
 
     messages = render_prompt_messages(prompt.prompt_id, request.variables)
+    guard_structure({'messages': messages}, model=True)
     safety = evaluate_prompt_safety(prompt, request)
 
     if not safety.allowed:

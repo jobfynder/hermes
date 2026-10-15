@@ -52,6 +52,8 @@ def run_llm_fallback(
     Never raises - a fallback failure must not break the deterministic
     response, it just means structured_data stays deterministic-only.
     """
+    from app.security.resource_policy import guard_structure
+    guard_structure(variables, model=True)
     outcome: dict[str, Any] = {"used": False, "prompt_id": prompt_id}
 
     if not HERMES_LLM_FALLBACK_ENABLED:

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from app.access.models import ActionAccessRequest
 from app.access.service import authorize_action
 from app.channels.service import draft_object_for
@@ -8,9 +6,9 @@ from app.intake.models import FileIntakeResult
 from app.intake.storage import store_attachment
 from app.runtime.events import emit_event
 from app.runtime.intake_log import record_intake
-from app.understanding.extractors.local_file import extract_local_file
 from app.understanding.models import DocumentKind
 from app.understanding.service import build_understanding_result
+from app.security.document_safety import parse_bytes
 
 
 def _confidence_from_understanding(result: dict, document_kind: str) -> float:
@@ -37,6 +35,8 @@ def process_file_intake(
     role: str | None = None,
     action: str | None = None,
 ) -> FileIntakeResult:
+    # Validate/extract before any durable intake, attachment or draft side effect.
+    extracted = parse_bytes(content, filename, content_type)
     if actor_id or role or action:
         if not actor_id or not role or not action:
             attachment = store_attachment(
@@ -151,7 +151,6 @@ def process_file_intake(
             errors=attachment.errors,
         )
 
-    extracted = extract_local_file(Path(attachment.storage_ref))
     extracted.filename = filename
     extracted.content_type = content_type
 

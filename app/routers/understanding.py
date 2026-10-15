@@ -1,13 +1,13 @@
 from pathlib import Path
 from datetime import UTC, datetime, timedelta
 import math
-import tempfile
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from app.security.rbac import require_permission
+from app.security.document_safety import bounded_upload, parse_bytes
 from app.runtime.db import cursor
 from app.understanding.extractors.local_file import extract_local_file
 from app.understanding.models import DocumentKind, RawDocument, UnderstandingResult
@@ -58,23 +58,13 @@ async def parse_file(
     document_kind: DocumentKind = Form("unknown"),
     user: dict = Depends(require_permission("understanding:parse")),
 ) -> UnderstandingResult:
-    suffix = Path(file.filename or "uploaded.txt").suffix or ".txt"
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
-        temp_path = Path(temp_file.name)
-        temp_file.write(await file.read())
-
-    try:
-        extracted = extract_local_file(temp_path)
-        extracted.filename = file.filename
-        extracted.content_type = file.content_type
-
-        return build_understanding_result(
-            extracted=extracted,
-            document_kind=document_kind,
-        )
-    finally:
-        temp_path.unlink(missing_ok=True)
+    content = await bounded_upload(file)
+    # Isolated parser blocks only a thread-pool slot, not the ASGI event loop.
+    from starlette.concurrency import run_in_threadpool
+    extracted = await run_in_threadpool(parse_bytes, content, file.filename or 'uploaded.txt', file.content_type)
+    extracted.filename = file.filename
+    extracted.content_type = file.content_type
+    return await run_in_threadpool(build_understanding_result, extracted=extracted, document_kind=document_kind)
 
 
 @router.get("/taxonomy/skills")

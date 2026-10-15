@@ -20,7 +20,8 @@ ALLOWED_CONTENT_TYPES = {
     "application/octet-stream",
 }
 
-MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024
+from app.security.resource_policy import MAX_FILE_BYTES
+MAX_ATTACHMENT_SIZE_BYTES = MAX_FILE_BYTES
 
 
 class AttachmentValidationResult(BaseModel):

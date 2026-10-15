@@ -88,6 +88,10 @@ def send(method, path, **kwargs):
 
 class ApplicationAuthenticationTests(unittest.TestCase):
     def setUp(self):
+        from app.security import resource_policy
+        rate = patch.object(resource_policy, "MAX_EXPENSIVE_REQUESTS_PER_MINUTE", 100_000)
+        rate.start()
+        self.addCleanup(rate.stop)
         self.rbac = patch.object(rbac, "RBAC_ENFORCEMENT", "enabled")
         self.rbac.start()
         self.addCleanup(self.rbac.stop)

@@ -11,6 +11,7 @@ from app.understanding.taxonomy.signals import extract_taxonomy_signals
 from app.understanding.taxonomy.loader import get_taxonomy_cache_revision
 from app.understanding.validation import validate_structured_output
 from app.runtime.cache import build_cache_key, cache_get, cache_set
+from app.security.resource_policy import guard_text
 
 
 DEFAULT_LLM_CONTEXT_TOKENS = 1200
@@ -24,6 +25,7 @@ def build_understanding_result(
     document_kind: DocumentKind = "unknown",
     skip_llm_fallback: bool = False,
 ) -> UnderstandingResult:
+    guard_text(extracted.text, extracted=True)
     cache_key = None
 
     if document_kind in CACHEABLE_DOCUMENT_KINDS:
@@ -110,6 +112,7 @@ def understand_document(
     document: RawDocument,
     skip_llm_fallback: bool = False,
 ) -> UnderstandingResult:
+    guard_text(document.content)
     extracted = extract_plain_text(
         content=document.content,
         filename=document.filename,

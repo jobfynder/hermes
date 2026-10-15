@@ -148,6 +148,8 @@ def telegram_get_file(file_id: str) -> dict[str, Any]:
 
 
 def telegram_download_file(file_id: str) -> dict[str, Any]:
+    from app.security.resource_policy import MAX_FILE_BYTES, reject
+    from fastapi import HTTPException
     file_info = telegram_get_file(file_id)
 
     if not file_info.get("ok"):
@@ -158,6 +160,9 @@ def telegram_download_file(file_id: str) -> dict[str, Any]:
         }
 
     file_path = file_info.get("result", {}).get("file_path")
+    reported_size = file_info.get("result", {}).get("file_size")
+    if isinstance(reported_size, int) and reported_size > MAX_FILE_BYTES:
+        reject('PAYLOAD_TOO_LARGE')
     if not file_path:
         return {
             "status": "failed",
@@ -169,13 +174,23 @@ def telegram_download_file(file_id: str) -> dict[str, Any]:
 
     try:
         with urlopen(download_url, timeout=30) as response:
-            content = response.read()
+            content = bytearray()
+            while True:
+                chunk = response.read(min(64 * 1024, MAX_FILE_BYTES + 1 - len(content)))
+                if not chunk:
+                    break
+                content.extend(chunk)
+                if len(content) > MAX_FILE_BYTES:
+                    reject('PAYLOAD_TOO_LARGE')
+            content = bytes(content)
             content_type = response.headers.get("content-type")
-    except Exception as exc:
+    except HTTPException:
+        raise
+    except Exception:
         return {
             "status": "failed",
             "reason": "telegram_file_download_failed",
-            "error": str(exc),
+            "error": "DOWNLOAD_FAILED",
             "file_path": file_path,
         }
 

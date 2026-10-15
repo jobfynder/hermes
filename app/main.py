@@ -49,6 +49,8 @@ app = FastAPI(
     title=HERMES_SERVICE_NAME,
     version=HERMES_VERSION,
 )
+from app.security.resource_middleware import ResourceSafetyMiddleware
+app.add_middleware(ResourceSafetyMiddleware)
 
 
 @app.on_event("startup")

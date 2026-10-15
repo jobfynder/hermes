@@ -31,6 +31,15 @@ def add_attempted_sources(
 
 
 def extract_local_file(path: str | Path) -> ExtractedText:
+    from app.security.document_safety import parse_bytes
+    from app.security.resource_policy import MAX_FILE_BYTES, reject
+    file_path = Path(path)
+    if file_path.stat().st_size > MAX_FILE_BYTES:
+        reject('PAYLOAD_TOO_LARGE')
+    return parse_bytes(file_path.read_bytes(), file_path.name)
+
+
+def _extract_local_file_unbounded(path: str | Path) -> ExtractedText:
     file_path = Path(path)
     suffix = file_path.suffix.lower()
 

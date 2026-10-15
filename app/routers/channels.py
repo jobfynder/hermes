@@ -10,6 +10,7 @@ from app.channels.adapters.registry import get_channel_adapter, list_channel_ada
 from app.channels.registry import get_supported_channels
 from app.channels.service import process_channel_intake
 from app.intake.service import process_file_intake
+from app.security.document_safety import bounded_upload
 from app.onboarding.models import OnboardingVerificationDraftRequest
 from app.onboarding.service import create_verification_draft
 from app.onboarding.text_parser import parse_key_value_onboarding_text, role_from_onboarding_data
@@ -341,9 +342,10 @@ async def channel_file_intake(
     action: str | None = Form(None),
     _principal: dict = Depends(require_service_permission("understanding:parse")),
 ):
-    content = await file.read()
+    content = await bounded_upload(file)
 
-    return process_file_intake(
+    from starlette.concurrency import run_in_threadpool
+    return await run_in_threadpool(process_file_intake,
         filename=file.filename or "uploaded.txt",
         content=content,
         content_type=file.content_type,

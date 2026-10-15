@@ -1,6 +1,7 @@
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+from app.security.resource_policy import MAX_PARSE_TEXT_CHARS
 
 
 DocumentKind = Literal["resume", "job_description", "message", "unknown"]
@@ -8,7 +9,7 @@ ExtractionSource = Literal["plain_text", "markitdown", "pdfplumber", "python_doc
 
 
 class RawDocument(BaseModel):
-    content: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=MAX_PARSE_TEXT_CHARS)
     filename: str | None = None
     content_type: str | None = None
     document_kind: DocumentKind = "unknown"
