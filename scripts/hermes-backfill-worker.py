@@ -8,6 +8,7 @@ from pathlib import Path
 from app.runtime.db import cursor, get_pool, init_schema
 from app.drafts.backfill import run_batch
 from app.companies.service import sync_company_batch
+from app.drafts.expiry import ReviewExpiryScheduler
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 stopping = False
@@ -27,6 +28,7 @@ def main():
         acquired = lock_connection.execute('SELECT pg_try_advisory_lock(892310481)').fetchone()[0]
         if not acquired:
             raise RuntimeError('Another backfill worker owns the processing lock')
+        expiry = ReviewExpiryScheduler()
         try:
             while not stopping:
                 Path('/tmp/hermes-backfill-heartbeat').touch()
@@ -34,6 +36,9 @@ def main():
                     cur.execute("SELECT job_id FROM draft_backfill_jobs WHERE status IN ('queued','running') ORDER BY created_at LIMIT 1")
                     job = cur.fetchone()
                 if not job:
+                    # Ticked only while no backfill job is running, so expiry
+                    # never competes with a reparse; it is a no-op until due.
+                    expiry.tick()
                     try:
                         processed = sync_company_batch(100)
                         if processed:

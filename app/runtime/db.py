@@ -403,6 +403,28 @@ CREATE TABLE IF NOT EXISTS company_projection_state (
 );
 
 ALTER TABLE company_projection_state ADD COLUMN IF NOT EXISTS projection_version TEXT NOT NULL DEFAULT 'company_directory_v1';
+
+-- Automatic expiry of stale needs_review drafts (app/drafts/expiry.py).
+-- A draft is snapshotted here in full before it is deleted from drafts, so
+-- an expiry is recoverable for HERMES_REVIEW_EXPIRY_ARCHIVE_DAYS.
+CREATE TABLE IF NOT EXISTS expired_review_drafts (
+    draft_id            UUID PRIMARY KEY,
+    draft_type          TEXT NOT NULL,
+    source_message_id   TEXT,
+    draft_created_at    TIMESTAMPTZ NOT NULL,
+    expired_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ttl_days            INTEGER NOT NULL,
+    snapshot            JSONB NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_expired_review_drafts_expired_at ON expired_review_drafts (expired_at);
+CREATE TABLE IF NOT EXISTS review_expiry_runs (
+    id                  BIGSERIAL PRIMARY KEY,
+    ran_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ttl_days            INTEGER NOT NULL,
+    expired_count       INTEGER NOT NULL,
+    purged_archive      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_review_expiry_runs_ran_at ON review_expiry_runs (ran_at DESC);
 """
 
 
