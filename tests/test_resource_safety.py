@@ -15,7 +15,7 @@ import zipfile
 import httpx
 from fastapi import HTTPException
 
-from app.security import resource_policy as p
+from app.security import rbac, resource_policy as p
 from app.security.document_safety import validate_document, validate_docx, parse_bytes
 from app.security.resource_middleware import ResourceSafetyMiddleware
 from tests.test_application_auth import principal, send
@@ -262,6 +262,8 @@ class RequestSafetyTests(unittest.TestCase):
     def test_oversized_unauthenticated_upload_has_no_side_effects(self):
         targets=['app.intake.service.store_attachment','app.intake.service.record_intake','app.intake.service.create_draft_object','app.security.document_safety.parse_bytes','app.understanding.service.extract_taxonomy_signals','app.prompt_runtime.service.run_prompt','app.prompt_runtime.service.send_langfuse_trace','app.providers.gmail.service._gmail_api_get','urllib.request.urlopen']
         with ExitStack() as stack:
+            # Production runs with RBAC enabled; CI does not set the env var.
+            stack.enter_context(patch.object(rbac,'RBAC_ENFORCEMENT','enabled'))
             mocks=[stack.enter_context(patch(t,side_effect=AssertionError('Forbidden side effect'))) for t in targets]
             response=send('POST','/channels/intake/file',content=b'invalid',headers={'Content-Length':str(p.MAX_MULTIPART_BODY_BYTES+1)})
             self.assertEqual(response.status_code,401)

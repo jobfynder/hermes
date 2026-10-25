@@ -57,7 +57,9 @@ def extract_probable_title(text: str) -> str | None:
         r"immediate\s+(?:interview|hiring)\s+for|"
         r"(?:urgent|immediate)\s+(?:need|requirement|opening)\s*(?:for)?|"
         r"(?:(?:urgent|immediate)\s+)?(?:need|hiring|looking\s+for|seeking)"
-        r")(?:\s*[:|\-]+\s*|\s+)(?:for\s+)?",
+        # Articles belong to the recruiting prefix only; literal titles
+        # without that prefix retain their first word.
+        r")(?:\s*[:|\-]+\s*|\s+)(?:for\s+)?(?:(?:a|an|the)\s+)?",
         "",
         clean_text,
         flags=re.IGNORECASE,
