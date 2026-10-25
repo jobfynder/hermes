@@ -187,6 +187,21 @@ def reconcile_ready_reviews(
     return reconcile_review_status(dry_run=dry_run, limit=limit)
 
 
+@router.get('/review/expiry')
+def review_expiry_status(_user: dict = Depends(require_permission('drafts:read'))):
+    from app.drafts.expiry import get_expiry_status
+    return get_expiry_status()
+
+
+@router.post('/review/expiry/restore/{draft_id}')
+def restore_expired_review_draft(draft_id: UUID, _user: dict = Depends(require_permission('drafts:publish'))):
+    from app.drafts.expiry import restore_expired_draft
+    result = restore_expired_draft(str(draft_id))
+    if not result['restored']:
+        raise HTTPException(status_code=409, detail=result['reason'])
+    return result
+
+
 @router.get('/page')
 def list_drafts_page(
     page: int = Query(default=1, ge=1),

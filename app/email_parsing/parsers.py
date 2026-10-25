@@ -2,6 +2,7 @@ import re
 from typing import Any
 
 from app.email_parsing.signature import SIGNOFF_RE
+from app.email_parsing.subject_title import extract_subject_title
 from app.services.consultant_service import parse_consultant_text
 from app.understanding.models import RawDocument
 from app.understanding.parsers.basic import extract_probable_title
@@ -783,8 +784,14 @@ def parse_requirement_email(
         }
 
     subject_line = _extract_subject_line(text)
+    # extract_subject_title is consulted ONLY when the original extractor
+    # found nothing, so a draft that already had a subject-derived title
+    # keeps exactly that title -- the new fallback can fill gaps, never
+    # change an existing answer (see app/email_parsing/subject_title.py).
     subject_probable_title = (
-        extract_probable_title(subject_line) if subject_line else None
+        (extract_probable_title(subject_line) or extract_subject_title(subject_line))
+        if subject_line
+        else None
     )
 
     sections = _split_requirement_sections(clean_text)
@@ -834,7 +841,16 @@ def parse_requirement_email(
         # times over. labeled_title is only trusted if it's plausibly a
         # real title; otherwise "Title:" is tried as its own explicit
         # fallback before giving up on labels entirely.
-        labeled_title = _extract_labeled_value(section, ["Job Title", "Position", "Role", "Role Name"])
+        labeled_title = _extract_labeled_value(
+            section,
+            [
+                "Job Title", "Position", "Role", "Role Name",
+                # Seen in real production emails ("Role Title: Python
+                # Developer", "Position Title: Data Scientist") and
+                # previously unrecognised.
+                "Role Title", "Position Title", "Job Role", "Job Position", "Designation",
+            ],
+        )
         if not _is_plausible_job_title(labeled_title):
             labeled_title = _extract_labeled_value(section, ["Title"])
         if not _is_plausible_job_title(labeled_title):

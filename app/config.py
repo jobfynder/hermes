@@ -100,3 +100,23 @@ HERMES_COMM_SIGNATURE_MAX_AGE_SECONDS = int(
     os.getenv("HERMES_COMM_SIGNATURE_MAX_AGE_SECONDS", "300")
 )
 
+
+
+def env_int(name: str, default: int) -> int:
+    """Integer env var that falls back to the default on a missing/garbled
+    value rather than crashing the process at import time."""
+    try:
+        return int(os.getenv(name, "").strip())
+    except ValueError:
+        return default
+
+
+# Automatic expiry of stale needs_review drafts (app/drafts/expiry.py), run
+# by the in-app backfill worker -- no external scheduler involved. A draft
+# still in needs_review this many days after it arrived is removed from the
+# working table (a full snapshot is archived first). 0 or negative disables.
+HERMES_REVIEW_EXPIRY_DAYS = env_int("HERMES_REVIEW_EXPIRY_DAYS", 7)
+HERMES_REVIEW_EXPIRY_INTERVAL_SECONDS = max(60, env_int("HERMES_REVIEW_EXPIRY_INTERVAL_SECONDS", 900))
+HERMES_REVIEW_EXPIRY_BATCH = min(1000, max(1, env_int("HERMES_REVIEW_EXPIRY_BATCH", 200)))
+# How long an expired draft's snapshot stays restorable before it is purged.
+HERMES_REVIEW_EXPIRY_ARCHIVE_DAYS = max(1, env_int("HERMES_REVIEW_EXPIRY_ARCHIVE_DAYS", 30))

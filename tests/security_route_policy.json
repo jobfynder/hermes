@@ -85,6 +85,10 @@
     "policy": "BEARER_USER",
     "permission": "drafts:read"
   },
+  "GET /drafts/review/expiry": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
   "GET /drafts/backfill/jobs": {
     "policy": "BEARER_USER",
     "permission": "drafts:read"
@@ -490,6 +494,10 @@
     "permission": "drafts:publish"
   },
   "POST /drafts/bulk-status": {
+    "policy": "BEARER_ADMIN",
+    "permission": "drafts:publish"
+  },
+  "POST /drafts/review/expiry/restore/{draft_id}": {
     "policy": "BEARER_ADMIN",
     "permission": "drafts:publish"
   },
