@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client'
 import { PaginationControls, usePagination } from '../components/Pagination'
-import type { BlocklistEntry, TaxonomyCandidateEntry } from '../types'
+import type { BlocklistEntry, TaxonomyCandidateEntry, TaxonomyEnrichmentRequest } from '../types'
 
 type SortKey = 'occurrence_count' | 'distinct_senders' | 'last_seen_at' | 'term'
 type TypeFilter = 'all' | 'skill' | 'job_title'
@@ -334,6 +334,7 @@ function CandidateSection({
 export function ModerationPage({ onBack }: { onBack: () => void }) {
   const [blocklist, setBlocklist] = useState<BlocklistEntry[] | null>(null)
   const [candidates, setCandidates] = useState<TaxonomyCandidateEntry[] | null>(null)
+  const [enrichmentRequests, setEnrichmentRequests] = useState<TaxonomyEnrichmentRequest[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [actionMessage, setActionMessage] = useState<string | null>(null)
   const [newValue, setNewValue] = useState('')
@@ -343,23 +344,38 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editValue, setEditValue] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   function load() {
     setError(null)
-    api.listBlocklist().then(setBlocklist).catch((err) => setError(err.message))
-    api
-      .listTaxonomyCandidates('pending')
-      .then((list) => {
+    setRefreshing(true)
+    Promise.all([
+      api.listBlocklist(),
+      api.listTaxonomyCandidates('pending'),
+      api.listTaxonomyEnrichmentRequests('pending'),
+    ])
+      .then(([blocks, list, enrichment]) => {
+        setBlocklist(blocks)
         setCandidates(list)
+        setEnrichmentRequests(enrichment)
         setSelectedIds((prev) => {
           const stillPending = new Set(list.map((c) => c.id))
           return new Set([...prev].filter((id) => stillPending.has(id)))
         })
+        setLastUpdated(new Date())
       })
       .catch((err) => setError(err.message))
+      .finally(() => setRefreshing(false))
   }
 
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+    const timer = window.setInterval(() => {
+      if (!document.hidden) load()
+    }, 15_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const taxonomyCandidates = useMemo(
     () => candidates?.filter((c) => c.signal_type === 'skill' || c.signal_type === 'job_title') ?? [],
@@ -416,6 +432,19 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
       load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reject candidate')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleEnrichmentReview(id: number, decision: 'approved' | 'rejected') {
+    setBusy(true)
+    try {
+      await api.reviewTaxonomyEnrichmentRequest(id, decision)
+      setActionMessage(decision === 'approved' ? 'Skill enrichment approved.' : 'Skill enrichment rejected.')
+      load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to review enrichment request')
     } finally {
       setBusy(false)
     }
@@ -515,19 +544,29 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <header className="mb-6 flex items-baseline justify-between">
+      <header className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-ink">Blocklist &amp; taxonomy</h1>
           <p className="mt-1 text-sm text-ink-soft">
             Control which senders reach the review queue, and approve new skills before they affect matching.
           </p>
         </div>
-        <button
-          onClick={onBack}
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
-        >
-          Back to drafts
-        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-ink-soft">{lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Loading queues…'}</span>
+          <button
+            onClick={load}
+            disabled={refreshing}
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink disabled:opacity-40"
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh queues'}
+          </button>
+          <button
+            onClick={onBack}
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-sm font-medium text-ink-soft transition hover:text-ink"
+          >
+            Back to drafts
+          </button>
+        </div>
       </header>
 
       {error && <div className="mb-4 rounded-lg bg-fail-soft px-4 py-3 text-sm text-fail">{error}</div>}
@@ -626,6 +665,45 @@ export function ModerationPage({ onBack }: { onBack: () => void }) {
         candidates={taxonomyCandidates}
         {...sharedSectionProps}
       />
+
+      <section className="mb-8 rounded-xl border border-line bg-surface p-5">
+        <h2 className="text-sm font-semibold text-ink">Skill enrichment requests</h2>
+        <p className="mt-1 text-xs text-ink-soft">
+          Existing skills reported by extension users as incomplete. Repeated requests are consolidated automatically. Complete the requested fields in the taxonomy, then approve the request.
+        </p>
+        <div className="mt-4 overflow-x-auto rounded-lg border border-line">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-line text-xs uppercase tracking-wide text-ink-soft">
+                <th className="px-3 py-2 font-medium">Skill</th>
+                <th className="px-3 py-2 font-medium">Missing fields</th>
+                <th className="px-3 py-2 font-medium">Source</th>
+                <th className="px-3 py-2 font-medium">Requests</th>
+                <th className="px-3 py-2 font-medium">Last requested</th>
+                <th className="px-3 py-2 font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {enrichmentRequests?.map((item) => (
+                <tr key={item.id} className="border-b border-line last:border-0 align-top">
+                  <td className="px-3 py-3 font-medium text-ink">{item.canonical_name}</td>
+                  <td className="px-3 py-3 text-ink-soft">{item.requested_fields.map((field) => field.replaceAll('_', ' ')).join(', ')}</td>
+                  <td className="px-3 py-3 text-ink-soft">{item.source_domain ?? 'Extension'}</td>
+                  <td className="px-3 py-3 text-ink-soft">{item.occurrence_count}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-ink-soft">{new Date(item.last_seen_at).toLocaleString()}</td>
+                  <td className="whitespace-nowrap px-3 py-3 text-right">
+                    <button disabled={busy} onClick={() => handleEnrichmentReview(item.id, 'approved')} className="mr-3 text-xs font-medium text-accent hover:underline disabled:opacity-40">Approve</button>
+                    <button disabled={busy} onClick={() => handleEnrichmentReview(item.id, 'rejected')} className="text-xs font-medium text-fail hover:underline disabled:opacity-40">Reject</button>
+                  </td>
+                </tr>
+              ))}
+              {enrichmentRequests && enrichmentRequests.length === 0 && (
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-ink-soft">No skill enrichment requests waiting for review.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <CandidateSection
         title="Boilerplate patterns"

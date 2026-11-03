@@ -56,6 +56,13 @@ class ResolveTests(unittest.TestCase):
 
 
 class ClassificationTests(unittest.TestCase):
+    def test_page_extraction_includes_the_governed_alias_taxonomy(self):
+        # python3 lives in skill_aliases.json rather than the canonical
+        # entry. Page extraction must use the same governed aliases as
+        # selected-text resolution.
+        result = extract_requirement_intelligence("Must have python3 experience.")
+        self.assertIn("Python", _names(result, "required"))
+
     def test_requirement_classification_and_stack_are_deterministic(self):
         text = "Must have Java, Spring Boot and AWS. Kubernetes preferred. Kafka nice to have."
         result = extract_requirement_intelligence(text)
