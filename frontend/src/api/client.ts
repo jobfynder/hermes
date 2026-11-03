@@ -17,6 +17,7 @@ import type {
   FilteredReportAnalysis,
   JobTitleEntry,
   TaxonomyCandidateEntry,
+  TaxonomyEnrichmentRequest,
 } from '../types'
 
 const TOKEN_STORAGE_KEY = 'hermes_review_token'
@@ -123,6 +124,13 @@ export const api = {
   removeBlock: (id: number) => request<{ removed: boolean }>(`/blocklist/${id}`, { method: 'DELETE' }),
   listTaxonomyCandidates: (status = 'pending') =>
     request<TaxonomyCandidateEntry[]>(`/taxonomy-candidates?status=${status}`),
+  listTaxonomyEnrichmentRequests: (status = 'pending') =>
+    request<TaxonomyEnrichmentRequest[]>(`/taxonomy-enrichment-requests?status=${status}`),
+  reviewTaxonomyEnrichmentRequest: (id: number, decision: 'approved' | 'rejected') =>
+    request<{ id: number; skill_id: string; canonical_name: string; status: string }>(
+      `/taxonomy-enrichment-requests/${id}/review`,
+      { method: 'POST', body: JSON.stringify({ decision }) },
+    ),
   approveTaxonomyCandidate: (id: number, category?: string, skillType?: string) =>
     request<{ ok: boolean; term?: string; reason?: string }>(`/taxonomy-candidates/${id}/approve`, {
       method: 'POST',

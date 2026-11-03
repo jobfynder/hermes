@@ -6,8 +6,10 @@ from rapidfuzz import fuzz
 import spacy
 
 from app.understanding.taxonomy.loader import (
+    get_canonical_skill_entries,
     get_skill_alias_entries,
     get_skill_entries,
+    get_taxonomy_cache_revision,
     get_taxonomy_version,
     normalize_taxonomy_key,
 )
@@ -70,12 +72,76 @@ def fuzzy_match_terms(skill_entry: dict[str, Any], external_aliases: list[str] |
     ]
 
 
+@lru_cache(maxsize=8)
+def _governed_exact_matcher(_revision: tuple) -> tuple[re.Pattern[str] | None, dict[str, tuple[dict[str, Any], str]]]:
+    """Compile the full governed taxonomy once per on-disk revision.
+
+    Page extraction used to walk every skill and then fuzzy-compare every
+    term with the complete page.  Besides being quadratic on large job-board
+    DOMs, that path ignored aliases stored in skill_aliases.json.  The
+    extension needs exact, explainable highlighting, so one deterministic
+    pattern covers canonical names, embedded aliases, and governed aliases.
+    """
+    entries = get_canonical_skill_entries()
+    by_name = {
+        normalize_taxonomy_key(str(entry.get("name") or "")): entry
+        for entry in entries
+        if entry.get("name") and entry.get("status", "active") == "active"
+    }
+    terms: dict[str, tuple[dict[str, Any], str]] = {}
+    for entry in entries:
+        if entry.get("status", "active") != "active":
+            continue
+        for value in skill_match_terms(entry):
+            normalized = normalize_text(value)
+            if normalized:
+                terms[normalized] = (entry, value.strip())
+    for alias in get_skill_alias_entries():
+        value = str(alias.get("alias") or "").strip()
+        entry = by_name.get(normalize_taxonomy_key(str(alias.get("canonical_skill") or "")))
+        normalized = normalize_text(value)
+        if normalized and entry:
+            terms[normalized] = (entry, value)
+    if not terms:
+        return None, terms
+    alternatives = sorted((re.escape(term) for term in terms), key=lambda value: (-len(value), value))
+    pattern = re.compile(r"(?<![a-z0-9])(?:" + "|".join(alternatives) + r")(?![a-z0-9])")
+    return pattern, terms
+
+
+def _extract_governed_exact(text: str) -> list[dict[str, Any]]:
+    pattern, terms = _governed_exact_matcher(get_taxonomy_cache_revision())
+    normalized_text = normalize_text(text)
+    if pattern is None or not normalized_text:
+        return []
+    found: dict[str, dict[str, Any]] = {}
+    for match in pattern.finditer(normalized_text):
+        entry, display_term = terms[match.group(0)]
+        skill_name = str(entry["name"])
+        key = skill_name.casefold()
+        if key in found:
+            continue
+        found[key] = {
+            "name": skill_name,
+            "confidence": 1.0,
+            "method": "exact_phrase" if normalize_text(display_term) == normalize_text(skill_name) else "alias_exact_phrase",
+            "matched_term": display_term,
+            "taxonomy_version": get_taxonomy_version(),
+        }
+    return sorted(found.values(), key=lambda item: item["name"].casefold())
+
+
 def extract_skills(
     text: str,
     taxonomy: list[dict[str, Any]] | None = None,
     fuzzy_threshold: int = 94,
     allow_fuzzy: bool = True,
 ) -> list[dict[str, Any]]:
+    # The production taxonomy has a cached deterministic matcher that also
+    # includes the separately governed alias file.  Custom taxonomies remain
+    # supported for parser tests and one-off callers below.
+    if taxonomy is None:
+        return _extract_governed_exact(text)
     skill_entries = taxonomy or get_skill_entries()
     nlp = get_blank_english_pipeline()
     doc = nlp(text or "")

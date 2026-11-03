@@ -212,6 +212,21 @@ export interface TaxonomyCandidateEntry {
   last_seen_at: string
 }
 
+export interface TaxonomyEnrichmentRequest {
+  id: number
+  skill_id: string
+  canonical_name: string
+  requested_fields: string[]
+  notes: string | null
+  source_domain: string | null
+  occurrence_count: number
+  status: 'pending' | 'approved' | 'rejected'
+  first_seen_at: string
+  last_seen_at: string
+  reviewed_at: string | null
+  reviewed_by: string | null
+}
+
 export interface FieldAccuracyStat {
   field: string
   total_drafts: number
