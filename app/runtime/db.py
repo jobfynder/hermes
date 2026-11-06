@@ -425,6 +425,12 @@ CREATE TABLE IF NOT EXISTS review_expiry_runs (
     purged_archive      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_review_expiry_runs_ran_at ON review_expiry_runs (ran_at DESC);
+CREATE TABLE IF NOT EXISTS review_automation_runs (
+    id                  BIGSERIAL PRIMARY KEY,
+    ran_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+    summary             JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_review_automation_runs_ran_at ON review_automation_runs (ran_at DESC);
 """
 
 

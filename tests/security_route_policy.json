@@ -85,6 +85,10 @@
     "policy": "BEARER_USER",
     "permission": "drafts:read"
   },
+  "GET /drafts/review/automation": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
   "GET /drafts/pipeline/stats": {
     "policy": "BEARER_USER",
     "permission": "drafts:read"

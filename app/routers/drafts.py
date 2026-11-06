@@ -194,6 +194,12 @@ def pipeline_stats(days: int = Query(default=14, ge=1, le=90), _user: dict = Dep
     return get_pipeline_stats(days)
 
 
+@router.get('/review/automation')
+def review_automation_status(_user: dict = Depends(require_permission('drafts:read'))):
+    from app.understanding.taxonomy.automation import get_automation_status
+    return get_automation_status()
+
+
 @router.get('/review/expiry')
 def review_expiry_status(_user: dict = Depends(require_permission('drafts:read'))):
     from app.drafts.expiry import get_expiry_status
