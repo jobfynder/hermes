@@ -66,6 +66,8 @@ _RATE_UNIT_MAP = {
     "yr": "ANNUAL", "year": "ANNUAL", "annual": "ANNUAL", "k": "ANNUAL",
 }
 
+_STRUCTURED_RATE_UNIT = {"hour": "PER_HOUR", "day": "PER_DAY", "month": "PER_MONTH", "year": "ANNUAL"}
+
 _WORK_MODE_RE = re.compile(r"\b(remote|onsite|on-site|hybrid)\b", re.IGNORECASE)
 
 
@@ -191,6 +193,20 @@ def map_draft_to_core_job_payload(draft: DraftObject) -> dict[str, Any]:
         **_parse_location(fields.get("location")),
         **_parse_rate(fields.get("rate_or_salary")),
     }
+
+    # Structured values from app/email_parsing/job_fields.py outrank the
+    # best-effort text re-parse above: work mode is stated evidence where
+    # _parse_location can only default to ONSITE, and the rate already has
+    # a validated unit.
+    work_mode = fields.get("work_mode")
+    if work_mode in ("REMOTE", "HYBRID", "ONSITE"):
+        payload["workLocation"] = work_mode
+    rate_unit = _STRUCTURED_RATE_UNIT.get(fields.get("rate_unit") or "")
+    if fields.get("rate_min") is not None and rate_unit:
+        payload["minRate"] = fields["rate_min"]
+        payload["rateType"] = rate_unit
+        if fields.get("rate_max") is not None:
+            payload["maxRate"] = fields["rate_max"]
 
     if required_skills:
         payload["primarySkills"] = required_skills
