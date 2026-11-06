@@ -26,12 +26,14 @@ def get_job(job_id):
         return cur.fetchone()
 
 
-def create_job(job_id, kind, dry_run=True, batch_size=10, limit=None):
+def create_job(job_id, kind, dry_run=True, batch_size=10, limit=None, since_days=None):
     job_id = UUID(str(job_id))
     if kind not in ('full-reparse', 'review-reparse', 'signature-company-fill') or not 1 <= batch_size <= 100:
         raise ValueError('Invalid backfill kind or batch size')
     if limit is not None and limit < 1:
         raise ValueError('limit must be positive')
+    if since_days is not None and since_days < 1:
+        raise ValueError('since_days must be positive')
     with cursor() as cur:
         # Serializes creation so overlapping requests cannot create competing
         # mutation jobs. Repeating the same UUID returns the existing job.
@@ -56,8 +58,10 @@ def create_job(job_id, kind, dry_run=True, batch_size=10, limit=None):
             AND (%s <> 'review-reparse' OR COALESCE(d.metadata->>'review_reparse_version','') <> %s)
             AND NOT EXISTS (SELECT 1 FROM field_provenance fp
                 WHERE fp.parse_run_id=d.draft_id::text AND fp.extractor=ANY(%s))
+            AND (%s::int IS NULL OR d.created_at > now() - make_interval(days => %s::int))
             ORDER BY d.created_at,d.draft_id LIMIT %s''',
-            (job_id, kind, kind, kind, kind, REVIEW_REPARSE_VERSION, list(CORRECTION_EXTRACTORS), limit))
+            (job_id, kind, kind, kind, kind, REVIEW_REPARSE_VERSION, list(CORRECTION_EXTRACTORS),
+             since_days, since_days, limit))
         total = cur.rowcount
         cur.execute("UPDATE draft_backfill_jobs SET total_count=%s,status=%s WHERE job_id=%s RETURNING *",
                     (total, 'queued' if total else 'completed', job_id))

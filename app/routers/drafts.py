@@ -137,6 +137,7 @@ class BackfillJobRequest(BaseModel):
     dry_run: bool = True
     batch_size: int = Field(default=10, ge=1, le=100)
     limit: int | None = Field(default=None, ge=1)
+    since_days: int | None = Field(default=None, ge=1, le=365)
 
 
 @router.post('/backfill/jobs', status_code=202)
