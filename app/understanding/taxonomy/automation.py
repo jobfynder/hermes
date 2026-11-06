@@ -2,12 +2,14 @@
 
 Why: pending taxonomy candidates had grown to ~36k skills, ~18k job titles
 and ~517k boilerplate lines. Nearly all were one-off noise (recruiter and
-company names, single-vendor template sentences, one-sighting terms), and the
-deterministic triage script that already existed only ran when someone ran it,
-500 rows at a time. This module runs the same deterministic rules on a daily
-schedule from the existing backfill worker -- no external automation, no model
-calls -- adds three evidence rules, and automates the blocklist for the
-clear-cut cases.
+company names, single-vendor template sentences, one-sighting terms). The
+host timer hermes-taxonomy-triage.timer already reviews NEW evidence every 15
+minutes, but it never retires terms that stay ambiguous, so the backlog just
+sat there. This module, run daily from the existing backfill worker (no model
+calls), adds the bulk evidence rules that runner lacks and automates the
+blocklist for the clear-cut cases. Running the triage stages from here as
+well is optional (HERMES_REVIEW_AUTOMATION_RUN_TRIAGE=1) and shares the
+runner's advisory lock.
 
 Safety:
 * Rejections here are retire-not-delete. A row rejected by an automatic
@@ -118,39 +120,30 @@ def revive_recovered_candidates() -> int:
         return cur.rowcount
 
 
-def run_taxonomy_automation(rounds: int | None = None, batch: int | None = None) -> dict[str, Any]:
-    rounds = rounds if rounds is not None else _env_int("HERMES_TAXONOMY_AUTOMATION_ROUNDS", 3, 1, 50)
-    batch = batch if batch is not None else _env_int("HERMES_TAXONOMY_AUTOMATION_BATCH", 500, 50, 5000)
+def _run_triage_under_lock() -> dict[str, Any]:
+    """Optional: also run the deterministic triage stages from inside Hermes.
+    Off by default because the host timer hermes-taxonomy-triage.timer already
+    runs them every 15 minutes; when enabled it takes the same advisory lock
+    as that runner, so the two can never overlap."""
     triage = _triage()
-    triage.MAX_PER_RUN = batch
+    with triage.singleton() as acquired:
+        if not acquired:
+            return {"skipped": "another triage run is active"}
+        results, failed = triage.run_stages(max_seconds=300)
+        return {"failed": failed, **results}
 
+
+def run_taxonomy_automation() -> dict[str, Any]:
+    """The bulk rules the 15-minute triage runner does not have (it only
+    reviews new evidence, so one-off noise never leaves the queue)."""
     summary: dict[str, Any] = {
-        "known_retired": triage.retire_known_taxonomy_candidates()["retired_count"],
         "templates_rejected": reject_single_sender_templates(),
         "stale_retired": retire_stale_observations(),
         "revived": revive_recovered_candidates(),
     }
-    for label, signal in (("skills", "skill"), ("titles", "job_title")):
-        totals = {"processed": 0, "approved": 0, "rejected": 0}
-        for _ in range(rounds):
-            _beat()
-            result = triage.triage(signal, "deterministic")
-            for key in totals:
-                totals[key] += result[key]
-            if result["processed"] < batch:
-                break
-        summary[label] = totals
-
-    boiler = {"processed": 0, "approved": 0, "rejected": 0}
-    for _ in range(rounds):
-        _beat()
-        result = triage.triage_boilerplate_deterministically()
-        for key in boiler:
-            boiler[key] += result[key]
-        if result["processed"] < batch:
-            break
-    summary["boilerplate"] = boiler
-    summary["boilerplate_stale_retired"] = triage.prune_stale_boilerplate_observations()
+    _beat()
+    if os.getenv("HERMES_REVIEW_AUTOMATION_RUN_TRIAGE", "0").strip().lower() in {"1", "true", "yes", "on"}:
+        summary["triage"] = _run_triage_under_lock()
     return summary
 
 
