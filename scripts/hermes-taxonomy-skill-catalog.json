@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": [
+    {"name":"Nagios","category":"DevOps","description":"A monitoring system that checks IT infrastructure and alerts operators when services or hosts have problems.","reference":"https://www.nagios.org/projects/nagios-core/"},
+    {"name":"RSpec","category":"Testing","description":"A Ruby testing framework for describing and checking how application code should behave.","reference":"https://rspec.info/"},
+    {"name":"Minitest","category":"Testing","description":"A Ruby library providing automated tests, behavior specifications, mocks, and benchmarks.","reference":"https://github.com/minitest/minitest"},
+    {"name":"CUDA","category":"AI","description":"NVIDIA's programming platform for running parallel computations on graphics processors.","reference":"https://docs.nvidia.com/cuda/cuda-programming-guide/"},
+    {"name":"Apache FOP","category":"Tool/Technology","description":"A formatter that converts XSL formatting objects into documents such as PDF files.","reference":"https://xmlgraphics.apache.org/fop/"},
+    {"name":"SNOMED CT","category":"Healthcare","description":"A standardized clinical terminology used to represent healthcare information consistently in electronic records.","reference":"https://www.snomed.org/what-is-snomed-ct"},
+    {"name":"HCPCS","category":"Healthcare","description":"A standardized healthcare coding system used to identify medical services, supplies, and equipment.","reference":"https://www.cms.gov/medicare/coding-billing/healthcare-common-procedure-system"},
+    {"name":"Appian","category":"Tool/Technology","description":"A platform for building business applications, interfaces, and automated workflows.","reference":"https://docs.appian.com/"},
+    {"name":"TShark","category":"Networking","description":"Wireshark's command-line tool for capturing and analyzing network traffic.","reference":"https://www.wireshark.org/docs/man-pages/tshark.html"},
+    {"name":"NTLM","category":"Security","description":"Microsoft's challenge-response authentication protocol used by Windows applications and network services.","reference":"https://learn.microsoft.com/en-us/windows/win32/secauthn/microsoft-ntlm"},
+    {"name":"DFSR","category":"Tool/Technology","description":"Windows DFS Replication synchronizes folder contents across multiple servers.","reference":"https://learn.microsoft.com/en-us/previous-versions/windows/desktop/dfsr/dfsr-overview"},
+    {"name":"X12 EDI","category":"Integration","description":"Standards for exchanging structured business transactions electronically between organizations.","reference":"https://x12.org/"}
+  ]
+}

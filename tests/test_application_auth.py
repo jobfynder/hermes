@@ -263,6 +263,11 @@ class ApplicationAuthenticationTests(unittest.TestCase):
             exchange.assert_called_once_with("test-code")
 
     def test_review_static_files_remain_accessible(self):
+        # The review UI is built from frontend/ into app/static/review only in
+        # the Docker image; a plain source checkout (CI) has no build output.
+        from app.routers.draft_review import _REVIEW_DIST
+        if not (_REVIEW_DIST / "index.html").exists():
+            self.skipTest("frontend not built in this checkout")
         self.assertEqual(send("GET", "/review/").status_code, 200)
 
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Hermes Microsoft Graph subscription renewal
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+OnFailure=hermes-graph-renew-alert@hermes-graph-renew.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker exec --env-file /etc/hermes/graph-renew.env hermes-api python scripts/hermes-850-graph-subscription-renew.py
+TimeoutStartSec=180

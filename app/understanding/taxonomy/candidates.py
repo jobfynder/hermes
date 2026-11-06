@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from functools import lru_cache
 
 from app.runtime.db import cursor
@@ -667,7 +668,7 @@ def approve_boilerplate_line_candidate(candidate_id: int, reviewed_by: str | Non
 
 
 @lru_cache(maxsize=1)
-def get_approved_boilerplate_lines() -> frozenset[str]:
+def _approved_boilerplate_lines_for_window(_window: int) -> frozenset[str]:
     """Cached for the same reason canonical taxonomy reads are (this runs
     on every single job-requirement email parsed) -- cleared the instant
     a new pattern is approved (approve_boilerplate_line_candidate above),
@@ -676,6 +677,19 @@ def get_approved_boilerplate_lines() -> frozenset[str]:
     with cursor() as cur:
         cur.execute("SELECT normalized_line FROM approved_boilerplate_lines")
         return frozenset(row["normalized_line"] for row in cur.fetchall())
+
+
+def get_approved_boilerplate_lines() -> frozenset[str]:
+    """Refresh every 60 seconds in every executor, including other processes.
+
+    A scheduled approval cannot clear another worker's in-memory cache.
+    Bounded windows preserve inexpensive reads without requiring restarts.
+    """
+    return _approved_boilerplate_lines_for_window(int(time.monotonic() // 60))
+
+
+# Preserve the existing local invalidation contract used by approval paths.
+get_approved_boilerplate_lines.cache_clear = _approved_boilerplate_lines_for_window.cache_clear
 
 
 def list_taxonomy_candidates(
@@ -957,7 +971,7 @@ def suggest_job_title_family(title: str) -> dict:
     return {"family": family, "method": method}
 
 
-def auto_classify_unclassified_job_titles() -> dict:
+def auto_classify_unclassified_job_titles(*, allow_llm: bool = True) -> dict:
     """Runs every currently family="Unclassified" canonical title through
     classify_job_title_family and applies whatever it could place in one
     write -- the Job titles page's "Auto-classify unclassified" bulk
@@ -983,7 +997,7 @@ def auto_classify_unclassified_job_titles() -> dict:
             family_by_title[title] = family
 
     remaining = [title for title in unclassified_titles if title not in family_by_title]
-    llm_enabled = os.getenv("HERMES_JOB_TITLE_LLM_FALLBACK_ENABLED", "false").lower() in {"1", "true", "yes"}
+    llm_enabled = allow_llm and os.getenv("HERMES_JOB_TITLE_LLM_FALLBACK_ENABLED", "false").lower() in {"1", "true", "yes"}
     threshold = max(0, int(os.getenv("HERMES_JOB_TITLE_LLM_THRESHOLD", "100")))
     llm_limit = max(0, int(os.getenv("HERMES_JOB_TITLE_LLM_MAX_PER_RUN", "100")))
     llm_attempted = 0

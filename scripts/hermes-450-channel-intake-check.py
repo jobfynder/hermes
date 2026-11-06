@@ -137,9 +137,14 @@ def test_telegram_webhook_intake() -> None:
         },
     }
 
+    # The webhook rejects requests without the shared secret (HERMES-900);
+    # configure one for this check and send it like Telegram does.
+    from app.routers import channels as channels_router
+    channels_router.HERMES_TELEGRAM_WEBHOOK_SECRET = "intake-check-secret"
     response = client.post(
         "/channels/telegram/webhook",
         json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "intake-check-secret"},
     )
 
     assert_ok(

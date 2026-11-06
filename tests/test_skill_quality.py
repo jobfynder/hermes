@@ -45,17 +45,19 @@ class SkillQualityTests(unittest.TestCase):
             {'id':2,'signal_type':'skill','term':'Stakeholder Management','occurrence_count':8,
              'distinct_senders':['a.com','b.com','c.com'],'first_seen_at':'2026-01-01'},
         ]
-        with patch.object(module,'list_taxonomy_candidates',return_value=candidates) as listing, \
+        # The runner reviews each candidate once per policy version through
+        # pending_batch (not list_taxonomy_candidates) and approves under the
+        # policy version as reviewer; the curated-catalog shortcut is off here
+        # so the bulk path under test is the one exercised.
+        with patch.object(module,'pending_batch',return_value=candidates) as listing, \
+             patch.object(module,'catalog_entry',return_value=None), \
+             patch.object(module,'defer_candidates'), \
              patch.object(module,'bulk_approve_taxonomy_candidates',return_value={'approved_count':1,'failed':[]}) as approve, \
              patch.object(module,'bulk_reject_taxonomy_candidates',return_value={'rejected_count':1,'failed':[]}):
             result=module.triage('skill','ignored')
             self.assertEqual(result['approved'],1)
             self.assertEqual(result['rejected'],1)
-            listing.assert_called_once_with(
-                status='pending', include_low_evidence_observations=True,
-                signal_type='skill', least_recently_reviewed_first=True,
-                limit=module.MAX_PER_RUN,
-            )
+            listing.assert_called_once_with('skill')
             approve.assert_called_once_with(
-                [1], reviewed_by='hermes-daily-triage', allow_llm=False
+                [1], reviewed_by=module.POLICY_VERSION, allow_llm=False
             )

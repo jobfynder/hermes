@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Hermes Microsoft Graph subscription renewal every 12 hours
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=12h
+Persistent=true
+RandomizedDelaySec=5min
+Unit=hermes-graph-renew.service
+
+[Install]
+WantedBy=timers.target

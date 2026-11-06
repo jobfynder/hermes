@@ -1,0 +1,10 @@
+[Unit]
+Description=Telegram alert for failed Hermes Graph renewal
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/hermes/graph-renew.env
+ExecStart=/opt/hermes/scripts/telegram_alert.sh hermes-graph-renew.service
+TimeoutStartSec=30
