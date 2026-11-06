@@ -64,6 +64,42 @@ def _format_digest(data: dict) -> str:
     )
 
 
+def _pipeline_section() -> str:
+    """Job-posting pipeline health (best effort: never breaks the digest)."""
+    try:
+        from app.drafts.pipeline import get_pipeline_stats
+        from app.understanding.taxonomy.automation import get_automation_status
+
+        stats = get_pipeline_stats(14)
+        fill = stats["fill_rates_pct"]
+        outbox = stats["outbox"]
+        clusters = stats["clusters"]
+        auto = get_automation_status()
+        last = (auto.get("last_run") or {}).get("ran_at", "never")[:16]
+        lines = [
+            "\n\n🧭 Job pipeline (14d)",
+            f"{stats['considered']} live posts | {stats['ready_pct']}% ready for Core "
+            f"({stats['only_employment_type_missing']} missing only employment type)",
+            f"Fill: title {fill['job_title']}% | location {fill['location']}% | employment {fill['employment_type']}% | "
+            f"work mode {fill['work_mode']}% | rate {fill['rate']}%",
+            f"Distinct roles: {clusters['clusters']} ({clusters['clusters_with_duplicates']} with duplicates)",
+            f"Core outbox: {outbox['states'] or 'empty'} | push {'ON' if outbox['dispatch_enabled'] else 'OFF'} "
+            f"| Core pushes so far: {stats['core_pushes'] or 'none'}",
+            f"Review automation last run: {last} | auto-blocks active: {auto['auto_blocks_active']}",
+        ]
+        try:
+            from app.drafts.expiry import get_expiry_status
+
+            expiry = get_expiry_status()
+            lines.append(f"Expiry: {expiry['due_now']} due, {expiry['expired_last_24h']} removed in 24h, "
+                         f"{expiry['archived_restorable']} restorable")
+        except Exception:  # noqa: BLE001
+            pass
+        return "\n".join(lines)
+    except Exception as exc:  # noqa: BLE001
+        return f"\n\n🧭 Job pipeline: unavailable ({type(exc).__name__})"
+
+
 def send_telegram_message(text: str) -> None:
     bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
@@ -81,7 +117,7 @@ def send_telegram_message(text: str) -> None:
 
 def main() -> int:
     data = get_dashboard_overview()
-    text = _format_digest(data)
+    text = _format_digest(data) + _pipeline_section()
     print(text)
 
     if not (os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID")):

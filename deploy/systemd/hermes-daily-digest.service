@@ -1,0 +1,12 @@
+[Unit]
+Description=Hermes daily Telegram digest (taxonomy, review queue, job pipeline)
+Requires=docker.service
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+# Same Telegram credentials file the other Hermes alert units use; docker exec -e NAME
+# forwards the value from this unit's environment without it appearing on a command line.
+EnvironmentFile=/etc/hermes/graph-renew.env
+ExecStart=/usr/bin/docker exec -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID hermes-api python scripts/hermes-950-daily-telegram-digest.py
+TimeoutStartSec=2min
