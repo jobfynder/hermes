@@ -431,6 +431,42 @@ CREATE TABLE IF NOT EXISTS review_automation_runs (
     summary             JSONB NOT NULL DEFAULT '{}'
 );
 CREATE INDEX IF NOT EXISTS idx_review_automation_runs_ran_at ON review_automation_runs (ran_at DESC);
+-- Cross-vendor de-duplication (app/drafts/job_dedup.py) and the durable outbox
+-- to Jobfynder Core (app/integrations/core_outbox.py).
+CREATE TABLE IF NOT EXISTS job_clusters (
+    cluster_id          BIGSERIAL PRIMARY KEY,
+    cluster_key         TEXT NOT NULL,
+    canonical_draft_id  UUID NOT NULL,
+    skills              JSONB NOT NULL DEFAULT '[]',
+    member_count        INTEGER NOT NULL DEFAULT 1,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_job_clusters_key ON job_clusters (cluster_key);
+CREATE TABLE IF NOT EXISTS job_cluster_members (
+    draft_id            UUID PRIMARY KEY,
+    cluster_id          BIGINT NOT NULL REFERENCES job_clusters (cluster_id) ON DELETE CASCADE,
+    similarity          REAL,
+    added_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_job_cluster_members_cluster ON job_cluster_members (cluster_id);
+CREATE TABLE IF NOT EXISTS job_unclusterable (
+    draft_id            UUID PRIMARY KEY
+);
+CREATE TABLE IF NOT EXISTS core_job_outbox (
+    draft_id            UUID PRIMARY KEY,
+    cluster_id          BIGINT,
+    state               TEXT NOT NULL DEFAULT 'ready' CHECK (state IN ('ready','pushed','failed','held')),
+    attempts            INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_attempt_at     TIMESTAMPTZ,
+    last_error          TEXT,
+    core_job_id         TEXT,
+    enqueued_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_core_job_outbox_state ON core_job_outbox (state, next_attempt_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_core_job_outbox_cluster ON core_job_outbox (cluster_id) WHERE cluster_id IS NOT NULL;
 """
 
 

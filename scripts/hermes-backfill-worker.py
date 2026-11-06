@@ -10,6 +10,7 @@ from app.drafts.backfill import run_batch
 from app.companies.service import sync_company_batch
 from app.drafts.expiry import ReviewExpiryScheduler
 from app.understanding.taxonomy.automation import ReviewAutomationScheduler
+from app.integrations.core_outbox import PipelineScheduler
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 stopping = False
@@ -31,6 +32,7 @@ def main():
             raise RuntimeError('Another backfill worker owns the processing lock')
         expiry = ReviewExpiryScheduler()
         automation = ReviewAutomationScheduler()
+        pipeline = PipelineScheduler()
         try:
             while not stopping:
                 Path('/tmp/hermes-backfill-heartbeat').touch()
@@ -42,6 +44,7 @@ def main():
                     # never competes with a reparse; it is a no-op until due.
                     expiry.tick()
                     automation.tick()
+                    pipeline.tick()
                     try:
                         processed = sync_company_batch(100)
                         if processed:

@@ -48,6 +48,12 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.drafts.models import DraftObject
+from app.integrations.core_vocabulary import (
+    core_employment_types,
+    core_experience_level,
+    core_visa_types,
+    split_location,
+)
 from app.runtime.db import cursor
 
 CORE_API_BASE_URL = os.getenv("CORE_API_BASE_URL", "").rstrip("/")
@@ -112,33 +118,18 @@ def _parse_rate(rate_raw: str | None) -> dict[str, Any]:
 
 
 def _parse_location(location_raw: str | None) -> dict[str, Any]:
-    """Best-effort: 'Burlington, MA (100% Onsite)' -> city, state,
-    workLocation. workLocation defaults to ONSITE (Core requires some
-    value and this is the historically dominant case for staffing
-    emails) only when the text gives no work-mode signal at all --
-    when it does, that signal always wins.
+    """'Burlington, MA (100% Onsite)' -> city, state (Core's FULL state name,
+    e.g. 'Massachusetts' -- Core matches states by name, not code), and
+    workLocation. workLocation defaults to ONSITE (Core requires some value and
+    this is the historically dominant case for staffing emails) only when the
+    text gives no work-mode signal at all -- when it does, that signal wins.
     """
-    result: dict[str, Any] = {}
-    text = location_raw or ""
-
-    mode_match = _WORK_MODE_RE.search(text)
-    if mode_match:
-        mode = mode_match.group(1).lower().replace("-", "")
-        result["workLocation"] = {"remote": "REMOTE", "onsite": "ONSITE", "hybrid": "HYBRID"}[mode]
-    else:
-        result["workLocation"] = "ONSITE"
-
-    city_state = re.sub(r"\([^)]*\)", "", text).strip()
-    parts = [p.strip() for p in city_state.split(",") if p.strip()]
-    if parts:
-        result["city"] = parts[0]
-    if len(parts) > 1:
-        # Drop a trailing work-mode word that sometimes rides along with
-        # the state ("MA Onsite") without parentheses.
-        state = _WORK_MODE_RE.sub("", parts[1]).strip()
-        if state:
-            result["state"] = state
-
+    parts = split_location(location_raw)
+    result: dict[str, Any] = {"workLocation": parts.get("work_mode", "ONSITE")}
+    if parts.get("city"):
+        result["city"] = parts["city"]
+    if parts.get("state"):
+        result["state"] = parts["state"]
     return result
 
 
@@ -213,17 +204,20 @@ def map_draft_to_core_job_payload(draft: DraftObject) -> dict[str, Any]:
     if all_skills:
         payload["skills"] = all_skills
 
-    employment_type = fields.get("employment_type")
-    if employment_type:
-        payload["employmentTypes"] = [employment_type]
+    # Core resolves these by exact name against its reference tables, so they
+    # are mapped to Core's vocabulary (app/integrations/core_vocabulary.py);
+    # a value with no Core equivalent is omitted, never guessed.
+    employment_types, _ = core_employment_types(fields.get("employment_type"), basis=fields.get("rate_basis"))
+    if employment_types:
+        payload["employmentTypes"] = employment_types
 
-    work_authorization = fields.get("work_authorization")
-    if work_authorization:
-        payload["workAuthorizations"] = [work_authorization]
+    visa_types, _ = core_visa_types(fields.get("work_authorization"))
+    if visa_types:
+        payload["workAuthorizations"] = visa_types
 
-    years = fields.get("years_of_experience")
-    if years is not None:
-        payload["experienceLevel"] = f"{years}+ years"
+    experience_level = core_experience_level(fields.get("years_of_experience"))
+    if experience_level:
+        payload["experienceLevel"] = experience_level
 
     if contact["email"] or contact["name"] or contact["company"]:
         payload["externalSource"] = {
