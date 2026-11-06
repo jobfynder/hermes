@@ -1,11 +1,11 @@
 [Unit]
-Description=Run deterministic Hermes taxonomy triage every six hours
+Description=Run deterministic Hermes taxonomy and boilerplate triage every fifteen minutes
 
 [Timer]
-OnCalendar=*-*-* 00,06,12,18:00:00
-OnBootSec=15min
+OnCalendar=*-*-* *:00/15:00
+OnBootSec=5min
 Persistent=true
-RandomizedDelaySec=5min
+RandomizedDelaySec=1min
 Unit=hermes-taxonomy-triage.service
 
 [Install]

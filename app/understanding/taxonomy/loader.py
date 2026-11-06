@@ -282,7 +282,7 @@ def set_skill_description(
 
         for entry in data["skills"]:
             if normalize_taxonomy_key(entry.get("name")) == key:
-                if source == "ai_generated" and entry.get("description_source") == "human_edited":
+                if source != "human_edited" and entry.get("description_source") == "human_edited":
                     raise SkillDescriptionLocked(name)
 
                 entry["description"] = description

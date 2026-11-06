@@ -10,11 +10,20 @@ from __future__ import annotations
 import os
 import re
 import sys
+import argparse
+import json
+import time
+import signal
+from contextlib import contextmanager
+from datetime import datetime, UTC
+from pathlib import Path
 from app.understanding.taxonomy.candidates import (
     _MIN_SKILL_REVIEW_OCCURRENCES,
     _MIN_SKILL_REVIEW_SENDERS,
     _MIN_TITLE_REVIEW_OCCURRENCES,
     _MIN_TITLE_REVIEW_SENDERS,
+    _MIN_BOILERPLATE_DISTINCT_SENDERS,
+    approve_taxonomy_candidate,
     _is_noise_job_title,
     _is_noise_skill_term,
     auto_classify_unclassified_job_titles,
@@ -26,10 +35,40 @@ from app.understanding.taxonomy.candidates import (
 from app.understanding.taxonomy.skill_quality import skill_noise_reason
 from app.understanding.taxonomy.title_family_classifier import classify_family_deterministically
 from app.understanding.taxonomy.descriptions import generate_skill_description
-from app.understanding.taxonomy.loader import get_canonical_skill_entries, set_skill_description
-from app.runtime.db import cursor
+from app.understanding.taxonomy.loader import get_canonical_skill_entries, set_skill_description, normalize_taxonomy_key
+from app.runtime.db import cursor, get_pool
 
-MAX_PER_RUN = int(os.getenv("HERMES_TAXONOMY_TRIAGE_MAX_PER_RUN", "500"))
+MAX_PER_RUN = min(max(int(os.getenv("HERMES_TAXONOMY_TRIAGE_MAX_PER_RUN", "5000")), 1), 20000)
+MAX_SKILL_APPROVALS = 100
+MAX_TITLE_APPROVALS = 25
+POLICY_VERSION = 'hermes-auto-v2'
+RUNNER_VERSION = 'taxonomy-automation-2.1'
+DRY_RUN = False
+
+
+class RunDeadlineExceeded(BaseException):
+    """Must escape best-effort helpers that catch ordinary Exception."""
+
+
+class TriageBatchError(RuntimeError):
+    def __init__(self, failures):
+        self.reason_counts = {}
+        for item in failures:
+            reason = item.get('reason') or 'unspecified'
+            self.reason_counts[reason] = self.reason_counts.get(reason, 0) + 1
+
+
+def check_batch_result(result):
+    """A concurrent reviewer winning the race is success, not an outage."""
+    failures = [f for f in result.get('failed', [])
+                if f.get('reason') != 'candidate_not_found_or_already_reviewed']
+    if failures:
+        raise TriageBatchError(failures)
+    return len(result.get('failed', []))
+
+
+_CATALOG_PATH = Path(__file__).with_name('hermes-taxonomy-skill-catalog.json')
+SKILL_CATALOG = {normalize_taxonomy_key(e['name']): e for e in json.loads(_CATALOG_PATH.read_text())['skills']}
 SKILL_SYSTEM_PROMPT = "deterministic"
 TITLE_SYSTEM_PROMPT = "deterministic"
 
@@ -51,6 +90,45 @@ _TITLE_ROLE_RE = re.compile(
 _BLOCKED_TECH_ACRONYMS = {"USA", "US", "GC", "H1B", "C2C", "W2", "F2F", "ASAP"}
 
 
+def pending_batch(signal_type):
+    """Review new evidence once per policy version; prioritize credible terms.
+
+    The old queue repeatedly spent its quota on unchanged ambiguous terms.
+    These existing columns provide a durable cursor across process restarts.
+    No table migration or Codex automation is needed.
+    """
+    with cursor() as cur:
+        cur.execute(
+            "SELECT id,term,signal_type,occurrence_count,distinct_senders FROM taxonomy_candidates "
+            "WHERE status='pending' AND signal_type=%s "
+            "AND (reviewed_by IS DISTINCT FROM %s OR reviewed_at IS NULL OR last_seen_at>reviewed_at) "
+            "AND (%s <> 'boilerplate_line' OR jsonb_array_length(distinct_senders)>=%s) "
+            "ORDER BY CASE WHEN occurrence_count>=%s AND jsonb_array_length(distinct_senders)>=%s THEN 0 ELSE 1 END, "
+            "reviewed_at ASC NULLS FIRST,id ASC LIMIT %s",
+            (signal_type, POLICY_VERSION, signal_type, _MIN_BOILERPLATE_DISTINCT_SENDERS,
+             _MIN_SKILL_REVIEW_OCCURRENCES if signal_type == 'skill' else _MIN_TITLE_REVIEW_OCCURRENCES,
+             _MIN_SKILL_REVIEW_SENDERS if signal_type == 'skill' else _MIN_TITLE_REVIEW_SENDERS,
+             MAX_PER_RUN),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def defer_candidates(candidate_ids):
+    if candidate_ids and not DRY_RUN:
+        with cursor() as cur:
+            cur.execute("UPDATE taxonomy_candidates SET reviewed_at=now(),reviewed_by=%s "
+                        "WHERE id=ANY(%s) AND status='pending'", (POLICY_VERSION, candidate_ids))
+
+
+def catalog_entry(term):
+    return SKILL_CATALOG.get(normalize_taxonomy_key(term))
+
+
+def deterministic_description(term, category=None):
+    entry = catalog_entry(term)
+    return entry['description'] if entry else generate_skill_description(term, category=category, allow_llm=False)
+
+
 def deterministic_taxonomy_decision(candidate: dict) -> str:
     """Resolve only evidence-backed cases; ambiguous terms remain pending."""
     term = re.sub(r"\s+", " ", candidate.get("term") or "").strip()
@@ -59,11 +137,16 @@ def deterministic_taxonomy_decision(candidate: dict) -> str:
     signal_type = candidate.get("signal_type")
 
     if signal_type == "skill":
+        if re.match(r'(?i)^(?:along with|practical understanding of|technical fluency across|participate in|role descriptions:)\b', term):
+            return 'reject'
+        if re.search(r'(?i)^(?:desk\s*(?:no|number)|telephone|phone)\s*[:.]|\b\d{3}[- .]\d{3}[- .]\d{4}\b', term):
+            return 'reject'
         if skill_noise_reason(term) or _is_noise_skill_term(term):
             return "reject"
         # An uppercase shape alone is not evidence of a technology: company
         # names, recruiter names and staffing acronyms have the same shape.
-        technical_shape = bool(_TECHNICAL_SKILL_RE.search(term))
+        technical_shape = bool(_TECHNICAL_SKILL_RE.search(term) or catalog_entry(term)
+                               or deterministic_description(term))
         return "approve" if (
             technical_shape
             and occurrences >= _MIN_SKILL_REVIEW_OCCURRENCES
@@ -84,10 +167,7 @@ def deterministic_taxonomy_decision(candidate: dict) -> str:
 
 
 def triage(signal_type: str, _system_prompt: str) -> dict:
-    candidates = list_taxonomy_candidates(
-        status="pending", include_low_evidence_observations=True,
-        signal_type=signal_type, least_recently_reviewed_first=True, limit=MAX_PER_RUN,
-    )
+    candidates = pending_batch(signal_type)
 
     if not candidates:
         return {"processed": 0, "approved": 0, "rejected": 0, "left_for_review": 0}
@@ -96,40 +176,55 @@ def triage(signal_type: str, _system_prompt: str) -> dict:
     reject_ids: list[int] = []
     decisions = {c["id"]: deterministic_taxonomy_decision(c) for c in candidates}
     approve_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "approve"]
+    approval_limit = MAX_SKILL_APPROVALS if signal_type == 'skill' else MAX_TITLE_APPROVALS
+    approval_budget_deferred = max(0, len(approve_ids) - approval_limit)
+    approve_ids = approve_ids[:approval_limit]
     reject_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "reject"]
     review_count = len(candidates) - len(approve_ids) - len(reject_ids)
     review_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "review"]
 
     approved = 0
     rejected = 0
+    concurrent_reviews = 0
+    if DRY_RUN:
+        return {'processed': len(candidates), 'approved': 0, 'rejected': 0,
+                'would_approve': len(approve_ids), 'would_reject': len(reject_ids), 'left_for_review': review_count,
+                'approval_budget_deferred': approval_budget_deferred}
     if approve_ids:
+        curated = [c for c in candidates if c['id'] in approve_ids and signal_type == 'skill' and catalog_entry(c['term'])]
+        for candidate in curated:
+            entry = catalog_entry(candidate['term'])
+            result = approve_taxonomy_candidate(candidate['id'], category=entry['category'],
+                                               reviewed_by=POLICY_VERSION, allow_llm=False)
+            if not result.get('approved'):
+                if result.get('reason') == 'candidate_not_found_or_already_reviewed':
+                    concurrent_reviews += 1
+                    continue
+                raise TriageBatchError([result])
+            existing = next((e for e in get_canonical_skill_entries()
+                             if normalize_taxonomy_key(e['name']) == normalize_taxonomy_key(candidate['term'])), None)
+            if existing and not existing.get('description') and existing.get('description_source') != 'human_edited':
+                set_skill_description(candidate['term'], entry['description'], source='deterministic_catalog')
+            approved += 1
+        approve_ids = [i for i in approve_ids if i not in {c['id'] for c in curated}]
         result = bulk_approve_taxonomy_candidates(
-            approve_ids, reviewed_by="hermes-daily-triage", allow_llm=False
+            approve_ids, reviewed_by=POLICY_VERSION, allow_llm=False
         )
-        approved = result["approved_count"]
-        if result["failed"]:
-            print(f"  {signal_type} approve failures: {result['failed'][:5]}")
+        approved += result["approved_count"]
+        concurrent_reviews += check_batch_result(result)
     if reject_ids:
         result = bulk_reject_taxonomy_candidates(reject_ids, reviewed_by="hermes-daily-triage")
         rejected = result["rejected_count"]
-        if result["failed"]:
-            print(f"  {signal_type} reject failures: {result['failed'][:5]}")
-    if review_ids:
-        # A pending row remains eligible if future sightings strengthen its
-        # evidence. Recording the pass lets the next run examine a different
-        # page instead of reconsidering the same ambiguous rows forever.
-        with cursor() as cur:
-            cur.execute(
-                "UPDATE taxonomy_candidates SET reviewed_at=now(), reviewed_by='hermes-deferred-observation' "
-                "WHERE id=ANY(%s) AND status='pending'",
-                (review_ids,),
-            )
+        concurrent_reviews += check_batch_result(result)
+    defer_candidates(review_ids)
 
     return {
         "processed": len(candidates),
         "approved": approved,
         "rejected": rejected,
         "left_for_review": review_count,
+        "concurrent_reviews": concurrent_reviews,
+        "approval_budget_deferred": approval_budget_deferred,
     }
 
 
@@ -172,6 +267,9 @@ def deterministic_boilerplate_decision(term: str) -> str:
     normalized = cleaned.casefold().strip(" :-–—.!")
     if normalized in _SAFE_BOILERPLATE_EXACT:
         return "approve"
+    # A footer-shaped sentence can still carry a real requirement.
+    if any(pattern.search(cleaned) for pattern in _SPECIFIC_REQUIREMENT_PATTERNS):
+        return 'reject'
     if any(pattern.search(cleaned) for pattern in _SAFE_BOILERPLATE_PATTERNS):
         return "approve"
     # Rejecting here is conservative: it only keeps genuine requirement
@@ -185,38 +283,38 @@ def deterministic_boilerplate_decision(term: str) -> str:
 
 
 def triage_boilerplate_deterministically() -> dict:
-    candidates = list_taxonomy_candidates(
-        status="pending", include_boilerplate_observations=False,
-        include_low_evidence_observations=False, signal_type="boilerplate_line",
-        least_recently_reviewed_first=True, limit=MAX_PER_RUN,
-    )
+    candidates = pending_batch('boilerplate_line')
     decisions = {c["id"]: deterministic_boilerplate_decision(c["term"]) for c in candidates}
     approve_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "approve"]
     reject_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "reject"]
     approved = 0
+    concurrent_reviews = 0
+    if DRY_RUN:
+        return {'processed': len(candidates), 'approved': 0, 'rejected': 0,
+                'would_approve': len(approve_ids), 'would_reject': len(reject_ids),
+                'left_for_review': len(candidates)-len(approve_ids)-len(reject_ids)}
     if approve_ids:
         result = bulk_approve_taxonomy_candidates(
             approve_ids, reviewed_by="hermes-daily-deterministic", allow_llm=False
         )
         approved = result["approved_count"]
+        concurrent_reviews += check_batch_result(result)
     rejected = 0
     if reject_ids:
         result = bulk_reject_taxonomy_candidates(reject_ids, reviewed_by="hermes-daily-deterministic")
         rejected = result["rejected_count"]
+        concurrent_reviews += check_batch_result(result)
     review_ids = [candidate_id for candidate_id, decision in decisions.items() if decision == "review"]
-    if review_ids:
-        with cursor() as cur:
-            cur.execute(
-                "UPDATE taxonomy_candidates SET reviewed_at=now(), reviewed_by='hermes-deferred-observation' "
-                "WHERE id=ANY(%s) AND status='pending'",
-                (review_ids,),
-            )
+    defer_candidates(review_ids)
     return {"processed": len(candidates), "approved": approved, "rejected": rejected,
-            "left_for_review": len(candidates) - len(approve_ids) - len(reject_ids)}
+            "left_for_review": len(candidates) - len(approve_ids) - len(reject_ids),
+            "concurrent_reviews": concurrent_reviews}
 
 
 def prune_stale_boilerplate_observations(limit: int = 20000) -> int:
     """Retire one-off lines after 14 days so observation storage stays bounded."""
+    if DRY_RUN:
+        return 0
     with cursor() as cur:
         cur.execute(
             "WITH stale AS (SELECT id FROM taxonomy_candidates "
@@ -232,12 +330,13 @@ def prune_stale_boilerplate_observations(limit: int = 20000) -> int:
 
 def backfill_missing_descriptions() -> dict:
     """Retry descriptions from the curated glossary without any model call."""
-    missing = [entry for entry in get_canonical_skill_entries() if not (entry.get("description") or "").strip()]
+    missing = [entry for entry in get_canonical_skill_entries()
+               if not (entry.get("description") or "").strip() and entry.get('description_source') != 'human_edited']
     deterministic_filled = 0
     still_missing = []
     for entry in missing:
-        description = generate_skill_description(entry["name"], category=entry.get("category"), allow_llm=False)
-        if description and set_skill_description(entry["name"], description, source="ai_generated"):
+        description = deterministic_description(entry["name"], category=entry.get("category"))
+        if description and (DRY_RUN or set_skill_description(entry["name"], description, source="deterministic_catalog")):
             deterministic_filled += 1
         else:
             still_missing.append(entry)
@@ -245,46 +344,101 @@ def backfill_missing_descriptions() -> dict:
     llm_enabled = False
     llm_filled = 0
     llm_failed = 0
-    return {"missing_before": len(missing), "deterministic_filled": deterministic_filled,
-            "llm_enabled": llm_enabled and litellm_configured(), "llm_filled": llm_filled,
+    return {"missing_before": len(missing), "deterministic_filled": 0 if DRY_RUN else deterministic_filled,
+            "would_fill": deterministic_filled if DRY_RUN else 0,
+            "llm_enabled": False, "llm_filled": llm_filled,
             "llm_failed": llm_failed, "remaining": len(missing) - deterministic_filled - llm_filled}
 
 
-def main() -> int:
-    print("=== HERMES-900 daily taxonomy triage ===")
+@contextmanager
+def singleton():
+    # Reuse the same session advisory-lock pattern as the Backfill worker.
+    with get_pool().connection() as conn:
+        conn.autocommit = True
+        acquired = conn.execute('SELECT pg_try_advisory_lock(892310485)').fetchone()[0]
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                conn.execute('SELECT pg_advisory_unlock(892310485)')
 
-    dedup_summary = retire_known_taxonomy_candidates()
-    print(f"KNOWN_TAXONOMY_DUPLICATES_RETIRED: {dedup_summary['retired_count']}")
 
-    skill_summary = triage("skill", SKILL_SYSTEM_PROMPT)
-    print(f"SKILLS: processed={skill_summary['processed']} "
-          f"approved={skill_summary['approved']} rejected={skill_summary['rejected']} "
-          f"left_for_review={skill_summary['left_for_review']}")
+def run_stages(max_seconds=600):
+    started = time.monotonic()
+    stages = [
+        ('known_duplicates', lambda: {'dry_run': True} if DRY_RUN else
+         {'retired_count': retire_known_taxonomy_candidates()['retired_count']}),
+        ('skills', lambda: triage('skill', SKILL_SYSTEM_PROMPT)),
+        ('boilerplate', triage_boilerplate_deterministically),
+        ('stale_boilerplate', lambda: {'retired_count': prune_stale_boilerplate_observations()}),
+        ('descriptions', backfill_missing_descriptions),
+        ('titles', lambda: triage('job_title', TITLE_SYSTEM_PROMPT)),
+        ('title_families', lambda: {'dry_run': True} if DRY_RUN else
+         {k: v for k, v in auto_classify_unclassified_job_titles(allow_llm=False).items() if k != 'results'}),
+    ]
+    results = {}
+    failed = False
+    for name, execute in stages:
+        if time.monotonic() - started >= max_seconds:
+            results[name] = {'error': 'run_budget_exceeded'}
+            failed = True
+            continue
+        try:
+            results[name] = execute()
+        except (Exception, RunDeadlineExceeded) as exc:
+            # One failure must not prevent independent queue maintenance.
+            # Do not put terms, signatures or credentials in scheduler logs.
+            results[name] = {'error': type(exc).__name__}
+            if isinstance(exc, TriageBatchError):
+                results[name]['failure_reasons'] = exc.reason_counts
+            failed = True
+        print(json.dumps({'stage': name, **results[name]}), flush=True)
+    return results, failed
 
-    title_summary = triage("job_title", TITLE_SYSTEM_PROMPT)
-    print(f"TITLES: processed={title_summary['processed']} "
-          f"approved={title_summary['approved']} rejected={title_summary['rejected']} "
-          f"left_for_review={title_summary['left_for_review']}")
 
-    family_summary = auto_classify_unclassified_job_titles()
-    print(f"TITLE FAMILIES: checked={family_summary['checked_count']} "
-          f"classified={family_summary['classified_count']} "
-          f"still_unclassified={family_summary['still_unclassified_count']} method=deterministic")
-
-    boilerplate_summary = triage_boilerplate_deterministically()
-    print(f"BOILERPLATE: processed={boilerplate_summary['processed']} "
-          f"approved={boilerplate_summary['approved']} rejected={boilerplate_summary['rejected']} "
-          f"left_for_review={boilerplate_summary['left_for_review']}")
-    print(f"BOILERPLATE_STALE_RETIRED: {prune_stale_boilerplate_observations()}")
-
-    description_summary = backfill_missing_descriptions()
-    print(f"DESCRIPTIONS: missing_before={description_summary['missing_before']} "
-          f"deterministic_filled={description_summary['deterministic_filled']} "
-          f"llm_enabled={description_summary['llm_enabled']} llm_filled={description_summary['llm_filled']} "
-          f"llm_failed={description_summary['llm_failed']} remaining={description_summary['remaining']}")
-
-    print("=== done ===")
-    return 0
+def main(argv=None) -> int:
+    global DRY_RUN, MAX_PER_RUN
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--max-per-run', type=int, default=MAX_PER_RUN)
+    parser.add_argument('--max-seconds', type=int, default=600)
+    parser.add_argument('--status-file', default=os.getenv('HERMES_TAXONOMY_TRIAGE_STATUS_FILE'))
+    args = parser.parse_args(argv)
+    if not 1 <= args.max_per_run <= 20000 or not 1 <= args.max_seconds <= 900:
+        parser.error('max-per-run must be 1..20000 and max-seconds 1..900')
+    DRY_RUN, MAX_PER_RUN = args.dry_run, args.max_per_run
+    started_at = datetime.now(UTC).isoformat()
+    def timeout(_signum, _frame):
+        raise RunDeadlineExceeded()
+    previous = signal.signal(signal.SIGALRM, timeout)
+    signal.alarm(args.max_seconds)
+    try:
+        with singleton() as acquired:
+            if not acquired:
+                print(json.dumps({'status': 'already_running', 'policy': POLICY_VERSION}))
+                return 0
+            results, failed = run_stages(args.max_seconds)
+    except RunDeadlineExceeded:
+        results, failed = {'run': {'error': 'run_budget_exceeded'}}, True
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    summary = {'policy': POLICY_VERSION, 'runner_version': RUNNER_VERSION, 'started_at': started_at,
+               'finished_at': datetime.now(UTC).isoformat(), 'dry_run': DRY_RUN,
+               'status': 'failed' if failed else 'success', 'results': results}
+    if args.status_file and not DRY_RUN:
+        path = Path(args.status_file)
+        try:
+            last = json.loads(path.read_text())
+        except (OSError, ValueError):
+            last = {}
+        summary['last_success_at'] = last.get('last_success_at') if failed else summary['finished_at']
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix('.tmp')
+        temporary.write_text(json.dumps(summary, indent=2))
+        os.replace(temporary, path)
+    print(json.dumps(summary), flush=True)
+    return int(failed)
 
 
 if __name__ == "__main__":

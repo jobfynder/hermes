@@ -270,7 +270,7 @@ def test_taxonomy_candidate_queue_and_approve() -> None:
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="vendor-a.com")
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="vendor-b.com")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next((c for c in pending if c["term"] == "ZzzBrandNewFramework"), None)
 
     require(match is not None, "The repeated candidate must appear in the pending queue")
@@ -295,7 +295,7 @@ def test_taxonomy_candidate_queue_and_approve() -> None:
         "Approving a candidate must make it immediately matchable (cache busted, no redeploy)",
     )
 
-    still_pending = list_taxonomy_candidates(status="pending")
+    still_pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     require(
         all(c["term"] != "ZzzBrandNewFramework" for c in still_pending),
         "An approved candidate must leave the pending queue",
@@ -310,14 +310,14 @@ def test_edit_taxonomy_candidate_corrects_a_parser_artifact() -> None:
     text = "Job Title: X\nRequired Skills: ZzzCloudTool!!, Java\n"
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="edittest.com")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next(c for c in pending if c["term"] == "ZzzCloudTool!!")
 
     result = edit_taxonomy_candidate(match["id"], "ZzzCloudTool")
     require(result["edited"] is True, "Editing a pending candidate's term must succeed")
     require(result["term"] == "ZzzCloudTool", f"Expected the corrected term back, got {result['term']}")
 
-    pending_after = list_taxonomy_candidates(status="pending")
+    pending_after = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     updated = next(c for c in pending_after if c["id"] == match["id"])
     require(updated["term"] == "ZzzCloudTool", "The stored term must reflect the edit")
     require(
@@ -335,7 +335,7 @@ def test_edit_taxonomy_candidate_rejects_empty_term() -> None:
     text = "Job Title: X\nRequired Skills: SomeEditGuardTerm, Java\n"
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="editguard.com")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next(c for c in pending if c["term"] == "SomeEditGuardTerm")
 
     result = edit_taxonomy_candidate(match["id"], "   ")
@@ -346,7 +346,7 @@ def test_edit_taxonomy_candidate_only_touches_pending_rows() -> None:
     text = "Job Title: X\nRequired Skills: AlreadyReviewedTermXyz, Java\n"
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="reviewed.com")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next(c for c in pending if c["term"] == "AlreadyReviewedTermXyz")
     reject_taxonomy_candidate(match["id"])
 
@@ -372,7 +372,7 @@ def test_taxonomy_candidate_reject() -> None:
     text = "Job Title: X\nRequired Skills: SomeTypoTermXyz123, Java\n"
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="onevendor.com")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next(c for c in pending if c["term"] == "SomeTypoTermXyz123")
 
     result = reject_taxonomy_candidate(match["id"])
@@ -389,7 +389,7 @@ def test_bulk_approve_taxonomy_candidates() -> None:
     text = "Job Title: X\nRequired Skills: ZzzBulkApproveOne, ZzzBulkApproveTwo, Java\n"
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="bulkapprove.com")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     ids = [c["id"] for c in pending if c["term"] in {"ZzzBulkApproveOne", "ZzzBulkApproveTwo"}]
     require(len(ids) == 2, f"Expected both candidates queued, got {pending}")
 
@@ -401,7 +401,7 @@ def test_bulk_approve_taxonomy_candidates() -> None:
     require("zzzbulkapproveone" in alias_index, "First candidate must be live in the taxonomy immediately")
     require("zzzbulkapprovetwo" in alias_index, "Second candidate must be live in the taxonomy immediately")
 
-    still_pending = list_taxonomy_candidates(status="pending")
+    still_pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     require(
         all(c["id"] not in ids for c in still_pending),
         "Bulk-approved candidates must leave the pending queue",
@@ -412,7 +412,7 @@ def test_bulk_reject_taxonomy_candidates() -> None:
     text = "Job Title: X\nRequired Skills: ZzzBulkRejectOne, ZzzBulkRejectTwo, Java\n"
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="bulkreject.com")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     ids = [c["id"] for c in pending if c["term"] in {"ZzzBulkRejectOne", "ZzzBulkRejectTwo"}]
 
     result = bulk_reject_taxonomy_candidates(ids)
@@ -427,7 +427,7 @@ def test_bulk_approve_reports_partial_failure_without_stopping() -> None:
     text = "Job Title: X\nRequired Skills: ZzzBulkPartialOne, Java\n"
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="bulkpartial.com")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     real_id = next(c["id"] for c in pending if c["term"] == "ZzzBulkPartialOne")
     already_reviewed_id = 999999999  # doesn't exist -- stands in for "someone else already reviewed it"
 
@@ -908,7 +908,7 @@ def test_approve_job_title_candidate_auto_classifies_when_family_not_given() -> 
     text = "Job Title: X\n"
     record_taxonomy_candidates(text=text, draft_id=None, sender_domain="autoclassify.com", job_titles=["ZAutoClassifySeniorJavaDeveloperXyz"])
 
-    pending = list_taxonomy_candidates("pending")
+    pending = list_taxonomy_candidates("pending", include_low_evidence_observations=True, include_boilerplate_observations=True)
     match = next(c for c in pending if c["term"] == "ZAutoClassifySeniorJavaDeveloperXyz")
 
     result = approve_taxonomy_candidate(match["id"])
@@ -928,7 +928,7 @@ def test_approve_job_title_candidate_explicit_family_overrides_auto_classify() -
         text=text, draft_id=None, sender_domain="explicitfamily.com", job_titles=["ZExplicitFamilyDeveloperXyz"]
     )
 
-    pending = list_taxonomy_candidates("pending")
+    pending = list_taxonomy_candidates("pending", include_low_evidence_observations=True, include_boilerplate_observations=True)
     match = next(c for c in pending if c["term"] == "ZExplicitFamilyDeveloperXyz")
 
     approve_taxonomy_candidate(match["id"], family="Design")
@@ -1029,7 +1029,7 @@ def test_record_taxonomy_candidates_queues_job_titles() -> None:
         job_titles=["ZUnknownTitleForQueueTest"],
     )
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next((c for c in pending if c["term"] == "ZUnknownTitleForQueueTest"), None)
 
     require(match is not None, "The unrecognized job title must appear in the pending queue")
@@ -1044,7 +1044,7 @@ def test_approve_job_title_candidate_adds_it_live() -> None:
         job_titles=["ZApprovedJobTitleTest"],
     )
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next(c for c in pending if c["term"] == "ZApprovedJobTitleTest")
 
     title_index_before = build_title_alias_index()
@@ -1081,7 +1081,7 @@ def test_intake_pipeline_queues_a_real_unrecognized_job_title() -> None:
     response = process_channel_intake(request)
     require(response.draft_object_type == "draft_job_requirement", "Must still parse as a normal job requirement")
 
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next((c for c in pending if c["term"] == "ZBrandNewRoleNameForIntakeTest"), None)
     require(match is not None, "A real intake with an unrecognized job title must queue it for review")
 
@@ -1130,7 +1130,7 @@ def test_approve_skill_candidate_does_not_fail_without_litellm() -> None:
         draft_id=None,
         sender_domain="nodesctest.com",
     )
-    pending = list_taxonomy_candidates(status="pending")
+    pending = list_taxonomy_candidates(status="pending", include_low_evidence_observations=True)
     match = next(c for c in pending if c["term"] == "ZApproveWithoutDescriptionTestSkill")
 
     result = approve_taxonomy_candidate(match["id"])
@@ -1150,11 +1150,14 @@ def test_taxonomy_candidates_endpoint_serializes_timestamps() -> None:
     # validation rejects a datetime there instead of stringifying it.
     # Exercises the actual HTTP response path, not just the DB function,
     # since that's the layer the bug was actually in.
-    record_taxonomy_candidates(
-        text="Required Skills: ZTimestampSerializationTestSkill, Java\n",
-        draft_id=None,
-        sender_domain="tstest.com",
-    )
+    # The review endpoint only lists terms with enough evidence (several
+    # sightings across several sender domains), so give it that evidence.
+    for sender in ("tstest1.com", "tstest2.com", "tstest3.com", "tstest4.com", "tstest5.com"):
+        record_taxonomy_candidates(
+            text="Required Skills: ZTimestampSerializationTestSkill, Java\n",
+            draft_id=None,
+            sender_domain=sender,
+        )
 
     response = client.get("/taxonomy-candidates")
     require(response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}")
@@ -1411,7 +1414,7 @@ def test_boilerplate_signal_type_never_mixed_into_skill_or_job_title_queue() -> 
     for i, domain in enumerate([f"bpmix{i}.com" for i in range(8)]):
         record_boilerplate_line_candidates(f"Body {i}.\n{line}", f"bp-mix-draft-{i}", domain)
 
-    pending = list_taxonomy_candidates("pending")
+    pending = list_taxonomy_candidates("pending", include_low_evidence_observations=True, include_boilerplate_observations=True)
     match = next(c for c in pending if c["term"] == line)
     require(match["signal_type"] == "boilerplate_line", f"Wrong signal_type: {match}")
 

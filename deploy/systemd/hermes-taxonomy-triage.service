@@ -2,8 +2,12 @@
 Description=Hermes deterministic taxonomy and boilerplate triage
 Requires=docker.service
 After=docker.service
+StartLimitIntervalSec=10min
+StartLimitBurst=3
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker exec hermes-api python scripts/hermes-900-daily-taxonomy-triage.py
-TimeoutStartSec=20min
+ExecStart=/usr/bin/docker exec -e HERMES_LLM_FALLBACK_ENABLED=false -e HERMES_EMAIL_LLM_FALLBACK_ENABLED=false hermes-api python /hermes-runtime/automation/taxonomy/current/hermes-900-daily-taxonomy-triage.py --max-per-run 5000 --max-seconds 600 --status-file /hermes-runtime/automation/taxonomy/status.json
+TimeoutStartSec=12min
+Restart=on-failure
+RestartSec=5min
