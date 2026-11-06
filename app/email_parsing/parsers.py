@@ -2,6 +2,7 @@ import re
 from typing import Any
 
 from app.email_parsing.signature import SIGNOFF_RE
+from app.email_parsing.job_fields import extract_job_board_fields
 from app.email_parsing.subject_title import extract_subject_title
 from app.services.consultant_service import parse_consultant_text
 from app.understanding.models import RawDocument
@@ -904,8 +905,21 @@ def parse_requirement_email(
         confidence, warnings = _score_requirement_record(has_title, has_requirement_evidence, has_company)
         evidence.append((has_title, has_requirement_evidence))
 
+        # Job-board fields Core needs (employment type, structured rate,
+        # work mode, duration, start date, requisition id). Fill-only: a
+        # value the base parser already found is never replaced.
+        job_board_fields = extract_job_board_fields(
+            section,
+            subject_line if index == 1 else None,
+            {
+                "employment_type": structured.get("employment_type"),
+                "rate_or_salary": structured.get("rate_or_salary"),
+            },
+        )
+
         records.append(
             {
+                **job_board_fields,
                 "record_type": "job_requirement",
                 "job_title": job_title,
                 "job_description": _clean_job_description(section, extra_boilerplate_lines),
@@ -920,12 +934,10 @@ def parse_requirement_email(
                 "work_authorization": structured.get(
                     "work_authorization"
                 ),
-                "employment_type": structured.get(
-                    "employment_type"
-                ),
-                "rate_or_salary": structured.get(
-                    "rate_or_salary"
-                ),
+                "employment_type": structured.get("employment_type")
+                or job_board_fields.get("employment_type"),
+                "rate_or_salary": structured.get("rate_or_salary")
+                or job_board_fields.get("rate_or_salary"),
                 "source_section": index,
                 "parse_confidence": confidence,
                 "requires_review": confidence < 0.70,

@@ -187,6 +187,12 @@ def reconcile_ready_reviews(
     return reconcile_review_status(dry_run=dry_run, limit=limit)
 
 
+@router.get('/pipeline/stats')
+def pipeline_stats(days: int = Query(default=14, ge=1, le=90), _user: dict = Depends(require_permission('drafts:read'))):
+    from app.drafts.pipeline import get_pipeline_stats
+    return get_pipeline_stats(days)
+
+
 @router.get('/review/expiry')
 def review_expiry_status(_user: dict = Depends(require_permission('drafts:read'))):
     from app.drafts.expiry import get_expiry_status
