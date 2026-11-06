@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Hermes Telegram digest (08:30 US Eastern)
+
+[Timer]
+OnCalendar=*-*-* 13:30:00 UTC
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
