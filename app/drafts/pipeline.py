@@ -98,4 +98,12 @@ def get_pipeline_stats(days: int = 14) -> dict[str, Any]:
         "published_in_hermes": published,
         "core_pushes": pushes,
         "core_push_top_errors": push_errors,
+        **_dedup_and_outbox(),
     }
+
+
+def _dedup_and_outbox() -> dict[str, Any]:
+    from app.drafts.job_dedup import get_cluster_stats
+    from app.integrations.core_outbox import get_outbox_stats
+
+    return {"clusters": get_cluster_stats(), "outbox": get_outbox_stats()}

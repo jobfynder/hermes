@@ -52,7 +52,7 @@ def test_parse_rate_unparseable_returns_empty() -> None:
 def test_parse_location_with_work_mode() -> None:
     result = _parse_location("Burlington, MA (100% Onsite)")
     require(result["city"] == "Burlington", f"Wrong city: {result}")
-    require(result["state"] == "MA", f"Wrong state: {result}")
+    require(result["state"] == "Massachusetts", f"Core matches states by full name: {result}")
     require(result["workLocation"] == "ONSITE", f"Wrong workLocation: {result}")
 
 
@@ -110,7 +110,7 @@ def test_map_draft_basic_fields() -> None:
     require(payload["workLocation"] == "ONSITE", f"Wrong workLocation: {payload}")
     require(payload["minRate"] == 70.0, f"Wrong minRate: {payload}")
     require(payload["employmentTypes"] == ["Contract"], f"Wrong employmentTypes: {payload}")
-    require(payload["workAuthorizations"] == ["H1B"], f"Wrong workAuthorizations: {payload}")
+    require(payload["workAuthorizations"] == ["H-1B"], f"Core visa type is H-1B: {payload}")
     require(set(payload["primarySkills"]) == {"Java", "Spring Boot"}, f"Wrong primarySkills: {payload}")
     require(set(payload["skills"]) == {"Java", "Spring Boot", "AWS"}, f"Wrong skills: {payload}")
     require(payload["externalSource"]["recruiterEmail"] == "recruiter@staffingco.com", f"Wrong externalSource: {payload}")
