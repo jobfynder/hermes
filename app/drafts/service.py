@@ -942,7 +942,8 @@ def delete_draft_object(draft_id: str) -> dict:
 # field row, and editing prose isn't what this correction-tracking loop
 # is for.
 _EDITABLE_FIELDS: dict[str, set[str]] = {
-    "job_requirement": set(JOB_REQUIREMENT_FIELDS) - {"job_description"},
+    "job_requirement": (set(JOB_REQUIREMENT_FIELDS) - {"job_description"})
+    | {"work_mode", "duration", "start_date", "requisition_id", "rate_min", "rate_max", "rate_unit"},
     "hotlist": set(HOTLIST_CONSULTANT_FIELDS),
 }
 
@@ -978,7 +979,12 @@ def apply_field_corrections(
         raise ValueError(f"unsupported record_type {record_type!r}")
 
     allowed = _EDITABLE_FIELDS[record_type]
-    corrections = {field: value for field, value in corrections.items() if field in allowed}
+    requested = dict(corrections)
+    corrections = {field: value for field, value in requested.items() if field in allowed}
+    if requested and not corrections:
+        # Never answer "success" for an edit that changed nothing: the UI
+        # showed "Saved." for fields the server silently discarded.
+        raise ValueError(f"These fields cannot be edited: {', '.join(sorted(requested))}")
 
     draft = get_draft_object(draft_id)
     if not draft:

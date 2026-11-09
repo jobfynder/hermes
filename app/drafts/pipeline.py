@@ -14,7 +14,9 @@ from typing import Any
 
 from app.runtime.db import cursor
 
-_REC = "d.payload->'structured_data'->'email_parsing'->'records'->0"
+_REC = "r.rec"  # the first parsed record, extracted ONCE per row by the LATERAL below
+_LATERAL = "CROSS JOIN LATERAL (SELECT d.payload->'structured_data'->'email_parsing'->'records'->0 AS rec OFFSET 0) r"
+_FROM = f"drafts d {_LATERAL}"
 
 # field -> SQL predicate "has a usable value"
 _FIELDS: dict[str, str] = {
@@ -62,7 +64,7 @@ def get_pipeline_stats(days: int = 14) -> dict[str, Any]:
                        count(*) FILTER (WHERE {only_et}) AS only_et,
                        {blocker_fields},
                        {select_fields}
-                FROM drafts d WHERE {base}""",
+                FROM {_FROM} WHERE {base}""",
             {"days": days},
         )
         row = cur.fetchone()

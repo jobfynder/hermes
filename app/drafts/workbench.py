@@ -123,13 +123,12 @@ def _pipeline() -> dict[str, Any]:
 
 
 def _automation() -> dict[str, Any]:
-    from app.drafts.expiry import get_expiry_status
     from app.understanding.taxonomy.automation import get_automation_status
 
     triage = _status_file()
     results = triage.get("results", {})
     auto = get_automation_status()
-    expiry = get_expiry_status()
+    expiry = _drafts_queue_cached()
     return {
         "triage": {
             "last_run_at": triage.get("finished_at"), "minutes_ago": _age_minutes(triage.get("finished_at")),
@@ -139,8 +138,8 @@ def _automation() -> dict[str, Any]:
         },
         "daily_cleanup": {"enabled": auto["enabled"], "last_run": auto.get("last_run"),
                           "auto_blocks_active": auto["auto_blocks_active"]},
-        "expiry": {"enabled": expiry["enabled"], "removed_last_24h": expiry["expired_last_24h"],
-                   "ttl_days": expiry["ttl_days"]},
+        "expiry": {"enabled": expiry["expiry_enabled"], "removed_last_24h": expiry["removed_last_24h"],
+                   "ttl_days": expiry["expires_after_days"]},
     }
 
 
@@ -208,10 +207,48 @@ def _health(sections: dict[str, Any]) -> list[dict[str, str]]:
     return checks
 
 
+_swr_values: dict[str, tuple[float, Any]] = {}
+_swr_running: set[str] = set()
+
+
+def _swr(key: str, fn: Callable[[], Any], ttl: float) -> Callable[[], Any]:
+    """Stale-while-revalidate for the heavy sections: a page load returns the
+    last good value immediately and, if it is older than `ttl`, refreshes it
+    in a background thread. Only the very first call after a restart waits."""
+
+    def refresh() -> Any:
+        try:
+            value = fn()
+            with _lock:
+                _swr_values[key] = (time.monotonic(), value)
+            return value
+        finally:
+            with _lock:
+                _swr_running.discard(key)
+
+    def get() -> Any:
+        with _lock:
+            hit = _swr_values.get(key)
+            start = bool(hit) and time.monotonic() - hit[0] >= ttl and key not in _swr_running
+            if start:
+                _swr_running.add(key)
+        if hit is None:
+            return refresh()
+        if start:
+            threading.Thread(target=lambda: _safe(refresh), daemon=True, name=f"hermes-swr-{key}").start()
+        return hit[1]
+
+    return get
+
+
+_pipeline_cached = _swr("pipeline", _pipeline, 300.0)
+_drafts_queue_cached = _swr("drafts_queue", _drafts_queue, 120.0)
+
+
 def build_today() -> dict[str, Any]:
     builders: dict[str, Callable[[], Any]] = {
         "intake": _intake, "jobs": _jobs, "taxonomy_queue": _taxonomy_queue,
-        "drafts_queue": _drafts_queue, "pipeline": _pipeline, "automation": _automation,
+        "drafts_queue": _drafts_queue_cached, "pipeline": _pipeline_cached, "automation": _automation,
     }
     with ThreadPoolExecutor(max_workers=4, thread_name_prefix="hermes-today") as pool:
         futures = {key: pool.submit(_safe, fn) for key, fn in builders.items()}

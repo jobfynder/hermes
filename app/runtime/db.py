@@ -453,6 +453,13 @@ CREATE INDEX IF NOT EXISTS idx_job_cluster_members_cluster ON job_cluster_member
 CREATE TABLE IF NOT EXISTS job_unclusterable (
     draft_id            UUID PRIMARY KEY
 );
+CREATE TABLE IF NOT EXISTS sender_employment_priors (
+    sender_key          TEXT PRIMARY KEY,
+    employment_type     TEXT NOT NULL,
+    stated_count        INTEGER NOT NULL,
+    share               REAL NOT NULL,
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS core_job_outbox (
     draft_id            UUID PRIMARY KEY,
     cluster_id          BIGINT,
