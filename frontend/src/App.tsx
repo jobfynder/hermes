@@ -1,20 +1,23 @@
-import { useState } from 'react'
-import { clearToken } from './api/client'
+import { useCallback, useEffect, useState } from 'react'
+import { api, clearToken } from './api/client'
 import { TokenGate } from './components/TokenGate'
 import { AccuracyPage } from './pages/AccuracyPage'
 import { AssistantPage } from './pages/AssistantPage'
+import { CompaniesPage } from './pages/CompaniesPage'
 import { DraftDetailPage } from './pages/DraftDetailPage'
 import { DraftListPage } from './pages/DraftListPage'
 import { JobTitlesTaxonomyPage } from './pages/JobTitlesTaxonomyPage'
-import { ModerationPage } from './pages/ModerationPage'
-import { CompaniesPage } from './pages/CompaniesPage'
 import { ReportsPage } from './pages/ReportsPage'
+import { ReviewQueuePage } from './pages/ReviewQueuePage'
 import { SkillsTaxonomyPage } from './pages/SkillsTaxonomyPage'
+import { TodayPage, type TodayTarget } from './pages/TodayPage'
+import type { TodayOverview } from './types'
 
 type View =
+  | { name: 'today' }
   | { name: 'list' }
   | { name: 'detail'; draftId: string; returnToCompanies?: boolean }
-  | { name: 'moderation' }
+  | { name: 'review' }
   | { name: 'accuracy' }
   | { name: 'skills' }
   | { name: 'job-titles' }
@@ -22,90 +25,147 @@ type View =
   | { name: 'companies' }
   | { name: 'assistant' }
 
+type NavItem = { id: View['name']; label: string; badge?: number | null }
+
+function NavButton({ item, active, onClick }: { item: NavItem; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center justify-between gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-left text-sm transition ${
+        active ? 'bg-accent-soft font-semibold text-accent' : 'text-ink-soft hover:bg-paper hover:text-ink'
+      }`}
+    >
+      <span>{item.label}</span>
+      {item.badge ? (
+        <span className="rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-semibold text-warn">
+          {item.badge > 9999 ? '9999+' : item.badge.toLocaleString()}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
 function AppShell() {
-  const [view, setView] = useState<View>(() => ({ name: new URLSearchParams(window.location.search).get('view') === 'companies' ? 'companies' : 'list' }))
+  const [view, setView] = useState<View>(() => ({
+    name: new URLSearchParams(window.location.search).get('view') === 'companies' ? 'companies' : 'today',
+  }))
+  const [today, setToday] = useState<TodayOverview | null>(null)
+  const [todayError, setTodayError] = useState<string | null>(null)
+  const [todayLoading, setTodayLoading] = useState(false)
+
+  const loadToday = useCallback((refresh = false) => {
+    setTodayLoading(true)
+    api
+      .getToday(refresh)
+      .then((d) => {
+        setToday(d)
+        setTodayError(null)
+      })
+      .catch((e) => setTodayError(e instanceof Error ? e.message : 'Could not load the summary.'))
+      .finally(() => setTodayLoading(false))
+  }, [])
+
+  useEffect(() => {
+    loadToday()
+    const timer = window.setInterval(() => loadToday(), 120000)
+    return () => window.clearInterval(timer)
+  }, [loadToday])
+
+  const reviewBadge = (today?.inbox.skills ?? 0) + (today?.inbox.job_titles ?? 0) + (today?.inbox.boilerplate ?? 0)
+  const attention = today?.health.filter((c) => c.status !== 'ok').length ?? 0
+
+  const groups: { title: string | null; items: NavItem[] }[] = [
+    { title: null, items: [{ id: 'today', label: 'Today', badge: attention || null }] },
+    {
+      title: 'Work queue',
+      items: [
+        { id: 'list', label: 'Job emails', badge: today?.inbox.drafts?.needs_review },
+        { id: 'review', label: 'Review queue', badge: reviewBadge },
+      ],
+    },
+    {
+      title: 'Library',
+      items: [
+        { id: 'skills', label: 'Skills' },
+        { id: 'job-titles', label: 'Job titles' },
+        { id: 'companies', label: 'Companies' },
+      ],
+    },
+    {
+      title: 'Insights',
+      items: [
+        { id: 'reports', label: 'Reports' },
+        { id: 'accuracy', label: 'Accuracy' },
+        { id: 'assistant', label: 'Ask Hermes' },
+      ],
+    },
+  ]
+
+  const activeId = view.name === 'detail' ? (view.returnToCompanies ? 'companies' : 'list') : view.name
+  const go = (name: View['name']) => setView({ name } as View)
+
+  const goFromToday = (target: TodayTarget) => {
+    if (target === 'drafts') go('list')
+    else if (target === 'taxonomy') go('review')
+    else if (target === 'reports') go('reports')
+    else go('skills')
+  }
 
   return (
-    <div className="min-h-screen bg-paper">
-      <nav className="border-b border-line bg-surface">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <button onClick={() => setView({ name: 'list' })} className="text-sm font-semibold text-ink">
-            Hermes Email Review
+    <div className="min-h-screen bg-paper md:flex">
+      <aside className="border-b border-line bg-surface md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:overflow-y-auto md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between px-5 py-4 md:block">
+          <button onClick={() => go('today')} className="text-left">
+            <div className="text-base font-semibold text-ink">Hermes</div>
+            <div className="text-[11px] text-ink-soft">Job email intelligence</div>
           </button>
-          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-            <button onClick={() => setView({ name: 'companies' })} className={`text-xs font-medium ${view.name === 'companies' ? 'text-accent' : 'text-ink-soft hover:text-ink'}`}>Companies</button>
-            <button
-              onClick={() => setView({ name: 'accuracy' })}
-              className={`text-xs font-medium transition ${
-                view.name === 'accuracy' ? 'text-accent' : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Accuracy
-            </button>
-            <button
-              onClick={() => setView({ name: 'skills' })}
-              className={`text-xs font-medium transition ${
-                view.name === 'skills' ? 'text-accent' : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Skills taxonomy
-            </button>
-            <button
-              onClick={() => setView({ name: 'job-titles' })}
-              className={`text-xs font-medium transition ${
-                view.name === 'job-titles' ? 'text-accent' : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Job titles taxonomy
-            </button>
-            <button
-              onClick={() => setView({ name: 'moderation' })}
-              className={`text-xs font-medium transition ${
-                view.name === 'moderation' ? 'text-accent' : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Blocklist &amp; taxonomy
-            </button>
-            <button
-              onClick={() => setView({ name: 'reports' })}
-              className={`text-xs font-medium transition ${
-                view.name === 'reports' ? 'text-accent' : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Reports
-            </button>
-            <button
-              onClick={() => setView({ name: 'assistant' })}
-              className={`text-xs font-medium transition ${
-                view.name === 'assistant' ? 'text-accent' : 'text-ink-soft hover:text-ink'
-              }`}
-            >
-              Assistant
-            </button>
-            <button
-              onClick={() => {
-                clearToken()
-                window.location.reload()
-              }}
-              className="text-xs text-ink-soft hover:text-ink"
-            >
-              Sign out
-            </button>
-          </div>
         </div>
-      </nav>
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:block md:space-y-5 md:overflow-visible md:pb-6">
+          {groups.map((g) => (
+            <div key={g.title ?? 'top'} className="flex gap-1 md:block md:space-y-0.5">
+              {g.title && (
+                <div className="hidden px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-ink-soft md:block">
+                  {g.title}
+                </div>
+              )}
+              {g.items.map((item) => (
+                <NavButton key={item.id} item={item} active={activeId === item.id} onClick={() => go(item.id)} />
+              ))}
+            </div>
+          ))}
+          <button
+            onClick={() => {
+              clearToken()
+              window.location.reload()
+            }}
+            className="rounded-lg px-3 py-2 text-left text-sm text-ink-soft hover:bg-paper hover:text-ink md:mt-4 md:block md:w-full"
+          >
+            Sign out
+          </button>
+        </nav>
+      </aside>
 
-      {view.name === 'detail' && (
-        <DraftDetailPage draftId={view.draftId} onBack={() => setView(view.returnToCompanies ? { name: 'companies' } : { name: 'list' })} />
-      )}
-      {view.name === 'moderation' && <ModerationPage onBack={() => setView({ name: 'list' })} />}
-      {view.name === 'accuracy' && <AccuracyPage onBack={() => setView({ name: 'list' })} />}
-      {view.name === 'skills' && <SkillsTaxonomyPage onBack={() => setView({ name: 'list' })} />}
-      {view.name === 'job-titles' && <JobTitlesTaxonomyPage onBack={() => setView({ name: 'list' })} />}
-      {view.name === 'companies' && <CompaniesPage onSelectDraft={(id) => setView({ name: 'detail', draftId: id, returnToCompanies: true })} />}
-      {view.name === 'reports' && <ReportsPage onBack={() => setView({ name: 'list' })} />}
-      {view.name === 'assistant' && <AssistantPage onBack={() => setView({ name: 'list' })} />}
-      {view.name === 'list' && <DraftListPage onSelect={(id) => setView({ name: 'detail', draftId: id })} />}
+      <main className="min-w-0 flex-1">
+        {view.name === 'today' && (
+          <TodayPage data={today} error={todayError} loading={todayLoading} onRefresh={() => loadToday(true)} onGo={goFromToday} />
+        )}
+        {view.name === 'detail' && (
+          <DraftDetailPage
+            draftId={view.draftId}
+            onBack={() => setView(view.returnToCompanies ? { name: 'companies' } : { name: 'list' })}
+          />
+        )}
+        {view.name === 'review' && <ReviewQueuePage />}
+        {view.name === 'accuracy' && <AccuracyPage onBack={() => go('today')} />}
+        {view.name === 'skills' && <SkillsTaxonomyPage onBack={() => go('today')} />}
+        {view.name === 'job-titles' && <JobTitlesTaxonomyPage onBack={() => go('today')} />}
+        {view.name === 'companies' && (
+          <CompaniesPage onSelectDraft={(id) => setView({ name: 'detail', draftId: id, returnToCompanies: true })} />
+        )}
+        {view.name === 'reports' && <ReportsPage onBack={() => go('today')} />}
+        {view.name === 'assistant' && <AssistantPage onBack={() => go('today')} />}
+        {view.name === 'list' && <DraftListPage onSelect={(id) => setView({ name: 'detail', draftId: id })} />}
+      </main>
     </div>
   )
 }

@@ -210,6 +210,8 @@ export interface TaxonomyCandidateEntry {
   status: 'pending' | 'approved' | 'rejected'
   first_seen_at: string
   last_seen_at: string
+  suggestion?: "approve" | "reject" | "review" | null
+  suggestion_reason?: string | null
 }
 
 export interface FieldAccuracyStat {
@@ -449,4 +451,61 @@ export interface AssistantQueryResult {
   answer: string
   tool_used: string | null
   data: Record<string, unknown> | null
+}
+
+export interface TodayHealthCheck {
+  id: string
+  label: string
+  status: 'ok' | 'warn' | 'fail'
+  detail: string
+}
+
+export interface TodayOverview {
+  generated_at: string
+  health: TodayHealthCheck[]
+  inbox: {
+    drafts?: {
+      needs_review?: number
+      oldest_needs_review_at?: string | null
+      expires_after_days?: number
+      due_to_expire_now?: number
+      removed_last_24h?: number
+      restorable?: number
+      expiry_enabled?: boolean
+    }
+    skills: number | null | undefined
+    job_titles: number | null | undefined
+    boilerplate: number | null | undefined
+  }
+  pipeline: {
+    error?: string
+    window_days?: number
+    live_posts?: number
+    ready?: number
+    ready_pct?: number
+    only_employment_type_missing?: number
+    fill_rates_pct?: Record<string, number>
+    missing_by_blocker?: Record<string, number>
+    distinct_roles?: number
+    roles_with_duplicates?: number
+    outbox?: { states?: Record<string, number>; dispatch_enabled?: boolean }
+    core_pushes?: Record<string, number>
+  }
+  automation: {
+    error?: string
+    triage?: {
+      last_run_at?: string | null
+      minutes_ago?: number | null
+      status?: string
+      skills?: { processed?: number; approved?: number; rejected?: number; left_for_review?: number }
+      titles?: { processed?: number; approved?: number; rejected?: number; left_for_review?: number }
+      boilerplate?: { processed?: number; approved?: number; rejected?: number; left_for_review?: number }
+    }
+    daily_cleanup?: { enabled?: boolean; auto_blocks_active?: number; last_run?: { ran_at?: string; summary?: Record<string, unknown> } | null }
+    expiry?: { enabled?: boolean; removed_last_24h?: number; ttl_days?: number }
+  }
+  jobs: {
+    active?: { kind: string; status: string; processed: number; total: number; percent: number; failed: number } | null
+  }
+  intake: { last_email_minutes_ago?: number | null; emails_last_24h?: number; error?: string }
 }

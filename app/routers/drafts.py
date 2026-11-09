@@ -194,6 +194,13 @@ def pipeline_stats(days: int = Query(default=14, ge=1, le=90), _user: dict = Dep
     return get_pipeline_stats(days)
 
 
+@router.get('/review/today')
+def review_today(refresh: bool = False, _user: dict = Depends(require_permission('drafts:read'))):
+    """Home-page payload: health checks, what needs a human, what Hermes did."""
+    from app.drafts.workbench import get_today
+    return get_today(force=refresh)
+
+
 @router.get('/review/automation')
 def review_automation_status(_user: dict = Depends(require_permission('drafts:read'))):
     from app.understanding.taxonomy.automation import get_automation_status
