@@ -138,7 +138,15 @@ def deterministic_taxonomy_decision(candidate: dict) -> str:
     if decision != 'review' or candidate.get('signal_type') != 'skill':
         return decision
     term = candidate.get('term') or ''
-    return triage_rules.skill_decision(term, catalogued=bool(catalog_entry(term)))[0]
+    verdict = triage_rules.skill_decision(term, catalogued=bool(catalog_entry(term)))[0]
+    # Rejecting is always safe. Approving needs the same evidence bar as the
+    # first tier: a distinctive spelling alone is not enough for a one-off term.
+    if verdict == 'approve' and not (
+        int(candidate.get('occurrence_count') or 0) >= _MIN_SKILL_REVIEW_OCCURRENCES
+        and len(candidate.get('distinct_senders') or []) >= _MIN_SKILL_REVIEW_SENDERS
+    ):
+        return 'review'
+    return verdict
 
 
 def _first_tier_taxonomy_decision(candidate: dict) -> str:
