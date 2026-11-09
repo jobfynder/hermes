@@ -67,6 +67,10 @@ class TaxonomyCandidateEntry(BaseModel):
     status: str
     first_seen_at: str
     last_seen_at: str
+    # Hermes's own recommendation and plain-English reason, shown to the
+    # reviewer ('approve' | 'reject' | 'review' | None when no rule applies).
+    suggestion: str | None = None
+    suggestion_reason: str | None = None
 
 
 class ApproveCandidateRequest(BaseModel):
@@ -124,9 +128,19 @@ def delete_block(
 @router.get("/taxonomy-candidates", response_model=list[TaxonomyCandidateEntry])
 def get_taxonomy_candidates(
     status: str = "pending",
+    signal_type: str | None = None,
     _user: dict = Depends(require_permission("drafts:read")),
 ) -> list[dict]:
-    return list_taxonomy_candidates(status=status)
+    from app.understanding.taxonomy import triage_rules
+
+    rows = list_taxonomy_candidates(status=status, signal_type=signal_type)
+    if status == "pending":
+        for row in rows:
+            if row["signal_type"] == "skill":
+                row["suggestion"], row["suggestion_reason"] = triage_rules.skill_decision(row["term"])
+            elif row["signal_type"] == "boilerplate_line":
+                row["suggestion"], row["suggestion_reason"] = triage_rules.boilerplate_decision(row["term"])
+    return rows
 
 
 @router.get("/taxonomy-enrichment-requests")

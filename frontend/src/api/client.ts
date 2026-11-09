@@ -17,6 +17,7 @@ import type {
   FilteredReportAnalysis,
   JobTitleEntry,
   TaxonomyCandidateEntry,
+  TodayOverview,
 } from '../types'
 
 const TOKEN_STORAGE_KEY = 'hermes_review_token'
@@ -125,6 +126,7 @@ export const api = {
       body: JSON.stringify({ match_type: matchType, value, reason }),
     }),
   removeBlock: (id: number) => request<{ removed: boolean }>(`/blocklist/${id}`, { method: 'DELETE' }),
+  getToday: (refresh = false) => request<TodayOverview>(`/drafts/review/today?refresh=${refresh}`),
   listTaxonomyCandidates: (status = 'pending') =>
     request<TaxonomyCandidateEntry[]>(`/taxonomy-candidates?status=${status}`),
   approveTaxonomyCandidate: (id: number, category?: string, skillType?: string) =>

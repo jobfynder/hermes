@@ -32,6 +32,7 @@ from app.understanding.taxonomy.candidates import (
     list_taxonomy_candidates,
     retire_known_taxonomy_candidates,
 )
+from app.understanding.taxonomy import triage_rules
 from app.understanding.taxonomy.skill_quality import skill_noise_reason
 from app.understanding.taxonomy.title_family_classifier import classify_family_deterministically
 from app.understanding.taxonomy.descriptions import generate_skill_description
@@ -41,8 +42,8 @@ from app.runtime.db import cursor, get_pool
 MAX_PER_RUN = min(max(int(os.getenv("HERMES_TAXONOMY_TRIAGE_MAX_PER_RUN", "5000")), 1), 20000)
 MAX_SKILL_APPROVALS = 100
 MAX_TITLE_APPROVALS = 25
-POLICY_VERSION = 'hermes-auto-v2'
-RUNNER_VERSION = 'taxonomy-automation-2.1'
+POLICY_VERSION = 'hermes-auto-v3'
+RUNNER_VERSION = 'taxonomy-automation-2.2'
 DRY_RUN = False
 
 
@@ -130,6 +131,17 @@ def deterministic_description(term, category=None):
 
 
 def deterministic_taxonomy_decision(candidate: dict) -> str:
+    """First tier (certain cases) then second tier (shared rules in
+    app.understanding.taxonomy.triage_rules, also used by the dashboard to
+    explain its suggestion). Only genuinely ambiguous terms stay 'review'."""
+    decision = _first_tier_taxonomy_decision(candidate)
+    if decision != 'review' or candidate.get('signal_type') != 'skill':
+        return decision
+    term = candidate.get('term') or ''
+    return triage_rules.skill_decision(term, catalogued=bool(catalog_entry(term)))[0]
+
+
+def _first_tier_taxonomy_decision(candidate: dict) -> str:
     """Resolve only evidence-backed cases; ambiguous terms remain pending."""
     term = re.sub(r"\s+", " ", candidate.get("term") or "").strip()
     occurrences = int(candidate.get("occurrence_count") or 0)
@@ -262,6 +274,11 @@ _SPECIFIC_REQUIREMENT_PATTERNS = tuple(re.compile(pattern, re.IGNORECASE) for pa
 
 
 def deterministic_boilerplate_decision(term: str) -> str:
+    decision = _first_tier_boilerplate_decision(term)
+    return decision if decision != 'review' else triage_rules.boilerplate_decision(term)[0]
+
+
+def _first_tier_boilerplate_decision(term: str) -> str:
     """Approve only high-precision template lines. Ambiguous lines stay pending."""
     cleaned = re.sub(r"\s+", " ", term or "").strip()
     normalized = cleaned.casefold().strip(" :-–—.!")

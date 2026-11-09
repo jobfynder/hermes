@@ -47,7 +47,7 @@ class DbCase(unittest.TestCase):
 
 class DedupTests(DbCase):
     def test_same_role_from_two_vendors_is_one_cluster(self):
-        a = post()
+        a = post(age_days=2)
         post(location='Dallas TX', skills=('Python', 'SQL', 'Azure'))
         stats = job_dedup.cluster_new_drafts()
         self.assertEqual((stats['new_clusters'], stats['joined']), (1, 1))

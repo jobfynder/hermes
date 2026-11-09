@@ -44,33 +44,31 @@ def get_pipeline_stats(days: int = 14) -> dict[str, Any]:
     select_fields = ", ".join(
         f"count(*) FILTER (WHERE {pred}) AS f_{name}" for name, pred in _FIELDS.items()
     )
+    blocker_names = ("job_title", "employment_type", "location", "required_skills", "recruiter_email")
+    # One table scan for everything (this used to be seven, which timed out
+    # under load and made the dashboard unreliable).
+    blocker_fields = ", ".join(
+        f"count(*) FILTER (WHERE NOT ({_FIELDS[n]})) AS b_{n}" for n in blocker_names
+    )
+    only_et = (
+        f"NOT ({_FIELDS['employment_type']}) AND ({_FIELDS['job_title']}) AND ({_FIELDS['location']}) "
+        f"AND ({_FIELDS['required_skills']}) AND ({_FIELDS['recruiter_email']})"
+    )
     with cursor() as cur:
-        cur.execute("SET LOCAL statement_timeout = '30s'")
+        cur.execute("SET LOCAL statement_timeout = '60s'")
         cur.execute(
             f"""SELECT count(*) AS total,
                        count(*) FILTER (WHERE {_READY}) AS ready,
+                       count(*) FILTER (WHERE {only_et}) AS only_et,
+                       {blocker_fields},
                        {select_fields}
                 FROM drafts d WHERE {base}""",
             {"days": days},
         )
         row = cur.fetchone()
         # What is the single most common missing piece among not-ready posts?
-        blockers: dict[str, int] = {}
-        for name in ("job_title", "employment_type", "location", "required_skills", "recruiter_email"):
-            cur.execute(
-                f"""SELECT count(*) AS n FROM drafts d
-                    WHERE {base} AND NOT ({_FIELDS[name]})""",
-                {"days": days},
-            )
-            blockers[name] = cur.fetchone()["n"]
-        cur.execute(
-            f"""SELECT count(*) AS n FROM drafts d WHERE {base}
-                AND NOT ({_FIELDS['employment_type']})
-                AND ({_FIELDS['job_title']}) AND ({_FIELDS['location']})
-                AND ({_FIELDS['required_skills']}) AND ({_FIELDS['recruiter_email']})""",
-            {"days": days},
-        )
-        only_employment_type_missing = cur.fetchone()["n"]
+        blockers: dict[str, int] = {name: row[f"b_{name}"] for name in blocker_names}
+        only_employment_type_missing = row["only_et"]
         cur.execute("SELECT status, count(*) AS n FROM core_pushes GROUP BY status")
         pushes = {r["status"]: r["n"] for r in cur.fetchall()}
         cur.execute(
