@@ -21,7 +21,7 @@ import os
 import time
 from typing import Any, Callable
 
-from app.drafts.pipeline import _FIELDS
+from app.drafts.pipeline import _FIELDS, _LATERAL
 from app.runtime.db import cursor
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ def enqueue_ready(limit: int = 500, days: int = 7) -> int:
             f"""INSERT INTO core_job_outbox(draft_id, cluster_id)
                 SELECT x.draft_id, x.cluster_id FROM (
                     SELECT DISTINCT ON (m.cluster_id) d.draft_id, m.cluster_id, d.created_at
-                    FROM job_cluster_members m JOIN drafts d ON d.draft_id = m.draft_id
+                    FROM job_cluster_members m JOIN drafts d ON d.draft_id = m.draft_id {_LATERAL}
                     WHERE d.status = 'draft' AND d.draft_type='draft_job_requirement'
                       AND d.created_at > now() - make_interval(days => %s)
                       AND ({_READY})
@@ -160,7 +160,14 @@ class PipelineScheduler:
     def _default_steps() -> dict[str, Any]:
         from app.drafts.job_dedup import cluster_new_drafts
 
-        out: dict[str, Any] = {"clustering": cluster_new_drafts(_int("HERMES_CLUSTER_BATCH", 500, 10, 5000))}
+        out: dict[str, Any] = {}
+        try:  # fill missing employment types first so they can be clustered/queued this tick
+            from app.drafts.employment_priors import run_step
+
+            out["employment_priors"] = run_step(_int("HERMES_EMPLOYMENT_PRIORS_BATCH", 300, 10, 2000))
+        except Exception as exc:  # noqa: BLE001 - never block clustering/outbox
+            logger.error("Employment priors step failed error=%s", type(exc).__name__)
+        out["clustering"] = cluster_new_drafts(_int("HERMES_CLUSTER_BATCH", 500, 10, 5000))
         if _flag("HERMES_CORE_OUTBOX_ENABLED", "1"):
             out["enqueued"] = enqueue_ready()
             out["dispatch"] = dispatch()

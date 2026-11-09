@@ -88,6 +88,11 @@ export interface JobRequirementRecord {
   work_authorization: string | null
   employment_type: string | null
   rate_or_salary: string | null
+  work_mode?: string | null
+  duration?: string | null
+  start_date?: string | null
+  requisition_id?: string | null
+  employment_type_basis?: string | null
   parse_confidence: number
   requires_review: boolean
   warnings: string[]
