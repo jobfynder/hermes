@@ -10,6 +10,7 @@ import { JobTitlesTaxonomyPage } from './pages/JobTitlesTaxonomyPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { ReviewQueuePage } from './pages/ReviewQueuePage'
 import { SkillsTaxonomyPage } from './pages/SkillsTaxonomyPage'
+import { SyncStatusPage } from './pages/SyncStatusPage'
 import { TodayPage, type TodayTarget } from './pages/TodayPage'
 import type { TodayOverview } from './types'
 
@@ -24,6 +25,7 @@ type View =
   | { name: 'reports' }
   | { name: 'companies' }
   | { name: 'assistant' }
+  | { name: 'sync' }
 
 type NavItem = { id: View['name']; label: string; badge?: number | null }
 
@@ -94,6 +96,7 @@ function AppShell() {
     {
       title: 'Insights',
       items: [
+        { id: 'sync', label: 'Sync status' },
         { id: 'reports', label: 'Reports' },
         { id: 'accuracy', label: 'Accuracy' },
         { id: 'assistant', label: 'Ask Hermes' },
@@ -162,6 +165,7 @@ function AppShell() {
         {view.name === 'companies' && (
           <CompaniesPage onSelectDraft={(id) => setView({ name: 'detail', draftId: id, returnToCompanies: true })} />
         )}
+        {view.name === 'sync' && <SyncStatusPage />}
         {view.name === 'reports' && <ReportsPage onBack={() => go('today')} />}
         {view.name === 'assistant' && <AssistantPage onBack={() => go('today')} />}
         {view.name === 'list' && <DraftListPage onSelect={(id) => setView({ name: 'detail', draftId: id })} />}
