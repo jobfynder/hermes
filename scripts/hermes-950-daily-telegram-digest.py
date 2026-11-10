@@ -100,6 +100,23 @@ def _pipeline_section() -> str:
         return f"\n\n🧭 Job pipeline: unavailable ({type(exc).__name__})"
 
 
+def _sync_section() -> str:
+    """Twenty CRM sync + parsing health (best effort: never breaks the digest)."""
+    try:
+        from app.integrations.twenty_sync_monitor import build_status
+
+        status = build_status()
+        icon = {"ok": "🟢", "warn": "🟡", "fail": "🔴"}
+        lines = ["\n\n🔄 Sync status",
+                 f"{icon[status['overall']['parsing']]} Parsing   {icon[status['overall']['twenty']]} Twenty CRM"]
+        for c in status["checks"]:
+            if c["status"] != "ok":
+                lines.append(f"{icon[c['status']]} {c['label']}: {c['detail']}")
+        return "\n".join(lines)
+    except Exception as exc:  # noqa: BLE001
+        return f"\n\n🔄 Sync status: unavailable ({type(exc).__name__})"
+
+
 def send_telegram_message(text: str) -> None:
     bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
@@ -117,7 +134,7 @@ def send_telegram_message(text: str) -> None:
 
 def main() -> int:
     data = get_dashboard_overview()
-    text = _format_digest(data) + _pipeline_section()
+    text = _format_digest(data) + _pipeline_section() + _sync_section()
     print(text)
 
     if not (os.getenv("TELEGRAM_BOT_TOKEN") and os.getenv("TELEGRAM_CHAT_ID")):

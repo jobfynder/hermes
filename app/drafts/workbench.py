@@ -204,6 +204,18 @@ def _health(sections: dict[str, Any]) -> list[dict[str, str]]:
             add("core", "Sending jobs to Jobfynder Core", "fail", f"{failed} jobs failed to send.")
         else:
             add("core", "Sending jobs to Jobfynder Core", "ok", "Sending normally.")
+
+    try:  # Twenty CRM sync summary (own 45s cache; read-only)
+        from app.integrations.twenty_sync_monitor import get_status
+
+        tw = [c for c in get_status()["checks"] if c["group"] == "twenty"]
+        bad = [c for c in tw if c["status"] != "ok"]
+        if tw:
+            worst = "fail" if any(c["status"] == "fail" for c in bad) else "warn" if bad else "ok"
+            add("twenty", "Twenty CRM sync", worst,
+                f"{len(bad)} thing(s) to look at. Open Sync status." if bad else "Delivering normally.")
+    except Exception:  # noqa: BLE001 - never let the monitor break the home page
+        pass
     return checks
 
 

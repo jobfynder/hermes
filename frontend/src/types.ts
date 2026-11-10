@@ -514,3 +514,54 @@ export interface TodayOverview {
   }
   intake: { last_email_minutes_ago?: number | null; emails_last_24h?: number; error?: string }
 }
+
+export interface SyncCheck {
+  group: 'parsing' | 'twenty'
+  id: string
+  label: string
+  status: 'ok' | 'warn' | 'fail'
+  detail: string
+  action?: string
+}
+
+export interface SyncStatus {
+  generated_at: string
+  checks: SyncCheck[]
+  overall: { parsing: 'ok' | 'warn' | 'fail'; twenty: 'ok' | 'warn' | 'fail' }
+  parsing: {
+    error?: string
+    last_email_minutes_ago?: number | null
+    parsed_1h?: number
+    parsed_24h?: number
+    ready_24h?: number
+    needs_review_24h?: number
+    spam_24h?: number
+    intake_24h?: Record<string, number>
+    latest_job?: { kind: string; status: string; processed: number; total: number; failed: number } | null
+  }
+  service: {
+    error?: string
+    last_success_minutes_ago?: number | null
+    reconciliation?: { day?: string; status?: string; checked?: number; verified?: number; exceptions?: number; started_hours_ago?: number | null }
+    worker_restarts?: { incidents: number; last_minutes_ago: number | null }
+    source_poll?: { status?: string; completed_minutes_ago?: number | null }
+  }
+  capture: { error?: string; captured_24h?: number }
+  outbox: {
+    error?: string
+    backlog?: number
+    oldest_backlog_minutes?: number | null
+    published_1h?: number
+    published_24h?: number
+    created_24h?: number
+    retrying?: number
+  }
+  inbox_quarantine: {
+    error?: string
+    inbox?: Record<string, number>
+    processing?: { count: number; older_than_24h: number }
+    quarantine_open?: number
+    quarantine_by_reason?: { reason: string; count: number; oldest_days: number }[]
+  }
+  alerts: { error?: string; active?: { code: string; label: string; count: number; last_seen_minutes_ago: number | null; since_days: number }[] }
+}

@@ -93,6 +93,10 @@
     "policy": "BEARER_USER",
     "permission": "drafts:read"
   },
+  "GET /sync/status": {
+    "policy": "BEARER_USER",
+    "permission": "drafts:read"
+  },
   "GET /drafts/review/today": {
     "policy": "BEARER_USER",
     "permission": "drafts:read"
