@@ -58,6 +58,7 @@ ACTIONS = {
     "poll": "Developer: the sync is deliberately slowing down. Check the send rate to Twenty.",
     "outbox": "Developer: check the send rate and any errors calling Twenty.",
     "heartbeat": "Developer: the sync is not delivering. Check the jfcrm-sync service on the server.",
+    "credential": "Developer: renew it, e.g. ALTER ROLE jfcrm_sync_runtime VALID UNTIL '<date>' (password unchanged), then check the sync restarted cleanly.",
     "intake": "Check the email connection (Gmail/Graph) and the Hermes worker.",
     "job": "Check the re-processing job on the Today page.",
 }
@@ -107,7 +108,12 @@ def _service() -> dict[str, Any]:
             "WHERE code = 'WORKER_UNAVAILABLE' ORDER BY last_seen_at DESC LIMIT 1"
         )
         crash = cur.fetchone()
+        cur.execute("SELECT rolvaliduntil FROM pg_roles WHERE rolname = 'jfcrm_sync_runtime'")
+        role = cur.fetchone()
     return {
+        "db_login_expires_at": _iso(role["rolvaliduntil"]) if role and role["rolvaliduntil"] else None,
+        "db_login_days_left": round(-(_minutes(role["rolvaliduntil"]) or 0) / 1440, 1)
+        if role and role["rolvaliduntil"] else None,
         "last_success_at": last.get("at"), "last_success_minutes_ago": _minutes(last.get("at")),
         "source_poll": {"status": poll.get("status"), "next_at": poll.get("nextAt"),
                         "completed_minutes_ago": _minutes(poll.get("completedAt"))},
@@ -266,6 +272,15 @@ def _checks(s: dict[str, Any]) -> list[dict[str, str]]:
             add("twenty", "heartbeat", "Sync is delivering to Twenty", "warn", f"Last successful delivery was {round(m)} minutes ago.")
         else:
             add("twenty", "heartbeat", "Sync is delivering to Twenty", "ok", f"Last successful delivery {round(m)} minutes ago.")
+        left = svc.get("db_login_days_left")
+        if left is not None:
+            if left <= 2:
+                add("twenty", "credential", "Sync database login expiry", "fail",
+                    "Expires in under 2 days." if left > 0 else "Has expired; the sync cannot start.")
+            elif left < 7:
+                add("twenty", "credential", "Sync database login expiry", "warn", f"Expires in {left:.0f} days.")
+            else:
+                add("twenty", "credential", "Sync database login expiry", "ok", f"Valid for another {left:.0f} days.")
         rec = svc["reconciliation"]
         hrs = rec.get("started_hours_ago")
         if rec.get("status") == "RUNNING" and hrs is not None and hrs > 36:
