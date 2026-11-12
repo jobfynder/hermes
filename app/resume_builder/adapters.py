@@ -20,8 +20,8 @@ def _build_response(
         decision=prompt_result.decision,
         prompt_id=prompt_result.prompt_id,
         prompt_version=prompt_result.prompt_version,
-        mode_requested="dry_run",
-        mode_effective="dry_run",
+        mode_requested=prompt_result.mode_requested,
+        mode_effective=prompt_result.mode_effective,
         provider=prompt_result.provider,
         output_text=prompt_result.output_text,
         human_review_required=True,
@@ -41,9 +41,9 @@ def _build_response(
         metadata={
             **request.metadata,
             "prompt_run_id": prompt_result.run_id,
-            "external_ai_used": False,
+            "external_ai_used": prompt_result.mode_effective == "live",
             "prompt_runtime_used": True,
-            "prompt_runtime_mode": "dry_run",
+            "prompt_runtime_mode": prompt_result.mode_effective,
             "source_reference_count": len(
                 request.source_references
             ),
@@ -69,7 +69,7 @@ def suggest_summary(
         PromptRunRequest(
             prompt_id="jf.resume.summary.generate",
             variables=variables,
-            mode="dry_run",
+            mode="live",
             correlation_id=request.correlation_id,
             actor_id=request.actor_id,
             source="hermes-800-resume-builder",
@@ -79,7 +79,6 @@ def suggest_summary(
                 "source_reference_count": len(
                     request.source_references
                 ),
-                "forced_dry_run": True,
                 "candidate_card_confidence": candidate_card.source_confidence,
             },
         )
@@ -105,7 +104,7 @@ def suggest_bullet(
         PromptRunRequest(
             prompt_id="jf.resume.experience.rewrite",
             variables=variables,
-            mode="dry_run",
+            mode="live",
             correlation_id=request.correlation_id,
             actor_id=request.actor_id,
             source="hermes-800-resume-builder",
@@ -115,7 +114,6 @@ def suggest_bullet(
                 "source_reference_count": len(
                     request.source_references
                 ),
-                "forced_dry_run": True,
             },
         )
     )
