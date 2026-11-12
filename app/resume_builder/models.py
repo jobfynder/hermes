@@ -42,7 +42,7 @@ class ResumeBuilderSafetyPolicy(BaseModel):
     human_review_required: bool = True
     automatic_publish_allowed: bool = False
     external_ai_enabled: bool = False
-    prompt_runtime_mode: Literal["dry_run"] = "dry_run"
+    prompt_runtime_mode: Literal["dry_run", "live"] = "dry_run"
     source_traceability_required: bool = True
 
 
@@ -53,7 +53,7 @@ class ResumeBuilderHealthResponse(BaseModel):
     foundation_version: str = "hermes_resume_builder_v1"
     deterministic_analysis_enabled: bool = True
     prompt_runtime_available: bool = True
-    prompt_runtime_default_mode: Literal["dry_run"] = "dry_run"
+    prompt_runtime_default_mode: Literal["dry_run", "live"] = "dry_run"
     external_ai_enabled: bool = False
     human_review_required: bool = True
     automatic_publish_allowed: bool = False
@@ -130,8 +130,8 @@ class ResumeSuggestionResponse(BaseModel):
     decision: ResumeBuilderDecision
     prompt_id: str
     prompt_version: str
-    mode_requested: Literal["dry_run"] = "dry_run"
-    mode_effective: Literal["dry_run"] = "dry_run"
+    mode_requested: Literal["dry_run", "live"] = "dry_run"
+    mode_effective: Literal["dry_run", "live"] = "dry_run"
     provider: str
     output_text: str | None = None
     human_review_required: bool = True
