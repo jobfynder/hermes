@@ -31,7 +31,21 @@ repeats, so about 60 to 66% fewer Twenty calls.
 | Newest snapshot | processed | processed |
 | Older snapshot whose newer ones are all quarantined | processed | processed |
 
-Not tested: the full production stack end to end (RabbitMQ, real Twenty). Roll out and watch (step 4).
+**End to end** (`./run-e2e.sh`, 12 Nov 2026): throwaway Postgres 16 + RabbitMQ 3, the real `OutboxPublisher`,
+`RabbitBroker` (provisioned topology, confirm channel, prefetch 1), `SyncWorker` (outbox proof on) and `PgStore`,
+with 9 real queued recalculation events of one contact and an in-memory Twenty:
+
+| | Current code | Patched |
+|---|---|---|
+| Inbox result | 9 VERIFIED | 8 STALE, 1 VERIFIED |
+| Twenty reads | 26 | 2 |
+| Twenty writes | 1 | 1 |
+| Checkpoint after the run | newest version (60) | newest version (60) |
+| Final Twenty record equals newest snapshot | yes | yes (identical) |
+| Outbox | 9 PUBLISHED | 9 PUBLISHED |
+
+Real production Twenty was never contacted (writing test data into the live CRM was out of scope), and the
+production service, activation gates and scheduler were not run. Roll out and watch (step 4).
 
 ## Deploy (owner), in this order
 
