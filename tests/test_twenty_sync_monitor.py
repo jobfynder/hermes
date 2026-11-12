@@ -43,6 +43,14 @@ class Rules(unittest.TestCase):
         s = sections(service={**sections()["service"], "last_success_minutes_ago": 200})
         self.assertEqual(by_id(_checks(s))["heartbeat"]["status"], "fail")
 
+    def test_database_login_expiry_warns_under_seven_days(self):
+        for days, expected in ((30, "ok"), (6.5, "warn"), (1, "fail"), (-0.5, "fail")):
+            s = sections(service={**sections()["service"], "db_login_days_left": days})
+            self.assertEqual(by_id(_checks(s))["credential"]["status"], expected, days)
+
+    def test_no_expiry_means_no_credential_check(self):
+        self.assertNotIn("credential", by_id(_checks(sections())))
+
     def test_old_outbox_backlog_escalates(self):
         for minutes, expected in ((20, "ok"), (60, "warn"), (300, "fail")):
             s = sections(outbox={**sections()["outbox"], "backlog": 500, "oldest_backlog_minutes": minutes})
